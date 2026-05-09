@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { PoseLandmarker } from '@mediapipe/tasks-vision';
-import type { NormalizedLandmark } from '@/hooks/usePose';
+import type { NormalizedLandmark } from '@/types/pose';
 import { computeCropOffset, videoToCss } from '@/lib/center-crop';
 
 interface PoseDebugProps {
@@ -68,7 +68,7 @@ export function PoseDebug({
         // Let's manually copy and tint cyan (0, 255, 255).
         if (mask.length === videoWidth * videoHeight) {
           for (let i = 0; i < mask.length; i++) {
-            const alpha = mask[i];
+            const alpha = mask[i] ?? 0;
             const px = i * 4;
             imgData.data[px] = 0; // R
             imgData.data[px + 1] = 255; // G

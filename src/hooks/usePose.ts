@@ -4,12 +4,7 @@ import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { Point3DFilter } from '@/lib/one-euro-filter';
 import { POSE_MODEL_VERSION } from '@/lib/model-version';
 
-export interface NormalizedLandmark {
-  x: number;
-  y: number;
-  z: number;
-  visibility: number;
-}
+import type { NormalizedLandmark } from '@/types/pose';
 
 export interface UsePoseResult {
   landmarks: NormalizedLandmark[] | null;
@@ -188,9 +183,9 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
 
           if (
             'close' in result &&
-            typeof (result as Record<string, unknown>).close === 'function'
+            typeof (result as unknown as Record<string, unknown>).close === 'function'
           ) {
-            ((result as Record<string, unknown>).close as () => void)();
+            ((result as unknown as Record<string, unknown>).close as () => void)();
           }
         } catch (err) {
           console.error('[usePose] Inference error:', err);

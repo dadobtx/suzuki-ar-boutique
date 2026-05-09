@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 
 interface NeonButtonProps {
   /** Glow color */
-  variant?: 'cyan' | 'red' | 'yellow';
+  variant?: 'cyan' | 'red' | 'yellow' | 'muted';
   /** Size preset */
   size?: 'sm' | 'md' | 'lg';
   children?: ReactNode;
@@ -19,6 +19,7 @@ const variantStyles = {
   cyan: 'border-accent-cyan text-accent-cyan hover:bg-accent-cyan/10 glow-cyan',
   red: 'border-brand-red text-brand-red hover:bg-brand-red/10 glow-red',
   yellow: 'border-accent-yellow text-accent-yellow hover:bg-accent-yellow/10',
+  muted: 'border-fg-muted/20 text-fg-muted hover:bg-fg-muted/10',
 } as const;
 
 const sizeStyles = {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import type { NormalizedLandmark } from '@/hooks/usePose';
+import type { NormalizedLandmark } from '@/types/pose';
 
 export type PresenceState = 'absent' | 'arriving' | 'present' | 'leaving';
 
@@ -7,8 +7,8 @@ export function usePresence(landmarks: NormalizedLandmark[] | null): PresenceSta
   const [state, setState] = useState<PresenceState>('absent');
   const stateRef = useRef<PresenceState>('absent');
   const visibilityHistory = useRef<number[]>([]);
-  const stateTimer = useRef<NodeJS.Timeout | null>(null);
-  const absentTimer = useRef<NodeJS.Timeout | null>(null);
+  const stateTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const absentTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const updateState = (newState: PresenceState) => {
     stateRef.current = newState;
