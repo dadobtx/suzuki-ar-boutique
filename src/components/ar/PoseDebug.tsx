@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { PoseLandmarker } from '@mediapipe/tasks-vision';
-import type { NormalizedLandmark } from '@/workers/pose.worker';
+import type { NormalizedLandmark } from '@/hooks/usePose';
 import { computeCropOffset, videoToCss } from '@/lib/center-crop';
 
 interface PoseDebugProps {

@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import type { NormalizedLandmark } from '@/workers/pose.worker';
+import type { NormalizedLandmark } from '@/hooks/usePose';
 
 export type PresenceState = 'absent' | 'arriving' | 'present' | 'leaving';
 

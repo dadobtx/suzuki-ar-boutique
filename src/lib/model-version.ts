@@ -1,7 +1,7 @@
 /**
  * Source of truth for the pose model version.
  * Imported by both:
- *   - pose.worker.ts (browser, must NOT pull Node modules)
+ *   - usePose.ts (browser, must NOT pull Node modules)
  *   - scripts/download-models.ts (Node script, OK to import)
  *
  * Keep this file pure TS with zero dependencies.

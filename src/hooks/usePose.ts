@@ -1,15 +1,15 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RefObject } from 'react';
+import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
 import { Point3DFilter } from '@/lib/one-euro-filter';
-import type {
-  PoseWorkerMessage,
-  PoseWorkerResponse,
-  NormalizedLandmark,
-} from '@/workers/pose.worker';
-// Vite ?worker import: bundlea como classic worker (IIFE).
-// Necesario para MediaPipe Tasks Vision (usa importScripts internamente
-// que no está disponible en module workers).
-import PoseWorker from '@/workers/pose.worker?worker';
+import { POSE_MODEL_VERSION } from '@/lib/model-version';
+
+export interface NormalizedLandmark {
+  x: number;
+  y: number;
+  z: number;
+  visibility: number;
+}
 
 export interface UsePoseResult {
   landmarks: NormalizedLandmark[] | null;
@@ -23,27 +23,48 @@ export interface UsePoseResult {
   error: string | null;
 }
 
-// Singleton worker instance to prevent memory leaks across remounts
-let sharedWorker: Worker | null = null;
-let activeSubscribers = 0;
+// Singleton landmarker (initialized once per page lifetime)
+let landmarker: PoseLandmarker | null = null;
+let initPromise: Promise<{
+  landmarker: PoseLandmarker;
+  backend: 'WebGL2' | 'CPU';
+}> | null = null;
 
-function getSharedWorker(): Worker {
-  if (!sharedWorker) {
-    sharedWorker = new PoseWorker();
-    sharedWorker.postMessage({ type: 'init' } as PoseWorkerMessage);
-  }
-  activeSubscribers++;
-  return sharedWorker;
-}
+async function initLandmarker() {
+  if (initPromise) return initPromise;
 
-function releaseSharedWorker() {
-  activeSubscribers--;
-  if (activeSubscribers <= 0 && sharedWorker) {
-    sharedWorker.postMessage({ type: 'terminate' } as PoseWorkerMessage);
-    sharedWorker.terminate();
-    sharedWorker = null;
-    activeSubscribers = 0;
-  }
+  initPromise = (async () => {
+    const resolver = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+
+    let backend: 'WebGL2' | 'CPU' = 'WebGL2';
+    let lm: PoseLandmarker;
+    try {
+      lm = await PoseLandmarker.createFromOptions(resolver, {
+        baseOptions: {
+          modelAssetPath: '/mediapipe/pose_landmarker_full.task',
+          delegate: 'GPU',
+        },
+        runningMode: 'VIDEO',
+        outputSegmentationMasks: true,
+        numPoses: 1,
+      });
+    } catch (e) {
+      console.warn('[usePose] WebGL2 failed, falling back to CPU', e);
+      lm = await PoseLandmarker.createFromOptions(resolver, {
+        baseOptions: {
+          modelAssetPath: '/mediapipe/pose_landmarker_full.task',
+          delegate: 'CPU',
+        },
+        runningMode: 'VIDEO',
+        outputSegmentationMasks: true,
+        numPoses: 1,
+      });
+      backend = 'CPU';
+    }
+    landmarker = lm;
+    return { landmarker: lm, backend };
+  })();
+  return initPromise;
 }
 
 export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseResult {
@@ -57,68 +78,34 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
   const [error, setError] = useState<string | null>(null);
   const [inferring, setInferring] = useState(false);
 
-  const workerRef = useRef<Worker | null>(null);
   const filterRef = useRef<Point3DFilter[]>([]);
   const callbackId = useRef(0);
   const activeRef = useRef(false);
+  const latencyHistory = useRef<number[]>([]);
+  const lastProcessTime = useRef(performance.now());
 
-  // Initialize One-Euro filters (33 for landmarks)
+  // Initialize 33 One-Euro filters
   if (filterRef.current.length === 0) {
     for (let i = 0; i < 33; i++) {
       filterRef.current.push(new Point3DFilter());
     }
   }
 
+  // Initialize MediaPipe once
   useEffect(() => {
-    workerRef.current = getSharedWorker();
-
-    const onMessage = (e: MessageEvent<PoseWorkerResponse>) => {
-      const msg = e.data;
-      if (msg.type === 'init_done') {
-        setBackend(msg.backend);
-        setModelVersion(msg.modelVersion);
-      } else if (msg.type === 'error') {
-        setError(msg.error);
-        setInferring(false);
-      } else if (msg.type === 'result') {
-        setFps(msg.fps);
-        setLatency(msg.latencyMs);
-        setMask(msg.mask);
-        setInferring(true);
-        setError(null);
-
-        // Apply One-Euro filter on main thread
-        if (msg.landmarks) {
-          const filtered = msg.landmarks.map((lm, i) => {
-            const f = filterRef.current[i];
-            if (!f) return lm;
-            // The filter returns {x, y, z, visibility}
-            return f.filterPoint(lm, msg.timestamp) as NormalizedLandmark;
-          });
-          setLandmarks(filtered);
-        } else {
-          setLandmarks(null);
-          // Optional: reset filters when tracking is lost
-          filterRef.current.forEach((f) => f.reset());
-        }
-
-        if (msg.worldLandmarks) {
-          // World landmarks generally don't need UI-level jitter filtering as they are metric
-          setWorldLandmarks(msg.worldLandmarks);
-        } else {
-          setWorldLandmarks(null);
-        }
-      }
-    };
-
-    workerRef.current.addEventListener('message', onMessage);
-
+    let cancelled = false;
+    initLandmarker()
+      .then(({ backend }) => {
+        if (cancelled) return;
+        setBackend(backend);
+        setModelVersion(POSE_MODEL_VERSION);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        setError(err instanceof Error ? err.message : String(err));
+      });
     return () => {
-      if (workerRef.current) {
-        workerRef.current.removeEventListener('message', onMessage);
-      }
-      releaseSharedWorker();
-      workerRef.current = null;
+      cancelled = true;
     };
   }, []);
 
@@ -132,32 +119,85 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
 
     activeRef.current = true;
 
-    const onFrame = async (
-      _now: DOMHighResTimeStamp,
-      metadata: VideoFrameCallbackMetadata,
-    ) => {
-      if (!activeRef.current || !workerRef.current || !video) return;
+    const onFrame = (_now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => {
+      if (!activeRef.current || !video || !landmarker) {
+        if (activeRef.current && video) {
+          callbackId.current = video.requestVideoFrameCallback(onFrame);
+        }
+        return;
+      }
 
-      // Ensure video is playing and has dimensions
-      if (video.readyState >= 2 && video.videoWidth > 0 && video.videoHeight > 0) {
-        try {
-          // createImageBitmap for zero-copy transfer
-          const bitmap = await createImageBitmap(video);
-
-          workerRef.current.postMessage(
-            {
-              type: 'process',
-              frame: bitmap,
-              timestamp: metadata.presentationTime,
-            } as PoseWorkerMessage,
-            [bitmap],
-          );
-        } catch (err) {
-          console.warn('[usePose] Error extracting frame:', err);
+      // Throttle if latency is high
+      const avgLatency =
+        latencyHistory.current.length > 0
+          ? latencyHistory.current.reduce((a, b) => a + b, 0) /
+            latencyHistory.current.length
+          : 0;
+      if (avgLatency > 40) {
+        const skip = Math.ceil(avgLatency / 33) - 1;
+        if (skip > 0) {
+          const minSpacing = (skip + 1) * 33;
+          if (performance.now() - lastProcessTime.current < minSpacing) {
+            callbackId.current = video.requestVideoFrameCallback(onFrame);
+            return;
+          }
         }
       }
 
-      // Schedule next
+      if (video.readyState >= 2 && video.videoWidth > 0) {
+        const start = performance.now();
+        try {
+          const result = landmarker.detectForVideo(video, metadata.presentationTime);
+          const lat = performance.now() - start;
+          latencyHistory.current.push(lat);
+          if (latencyHistory.current.length > 30) {
+            latencyHistory.current.shift();
+          }
+          lastProcessTime.current = performance.now();
+
+          setFps(Math.round(1000 / lat));
+          setLatency(lat);
+          setInferring(true);
+          setError(null);
+
+          const pose = (result.landmarks[0] as NormalizedLandmark[] | undefined) ?? null;
+          const worldPose =
+            (result.worldLandmarks[0] as NormalizedLandmark[] | undefined) ?? null;
+
+          if (pose) {
+            const filtered = pose.map((lm, i) => {
+              const f = filterRef.current[i];
+              if (!f) return lm;
+              return f.filterPoint(lm, metadata.presentationTime) as NormalizedLandmark;
+            });
+            setLandmarks(filtered);
+          } else {
+            setLandmarks(null);
+            filterRef.current.forEach((f) => f.reset());
+          }
+          setWorldLandmarks(worldPose);
+
+          const maskInfo = result.segmentationMasks?.[0] ?? null;
+          if (maskInfo) {
+            const raw = maskInfo.getAsUint8Array();
+            setMask(new Uint8ClampedArray(raw));
+            maskInfo.close();
+          } else {
+            setMask(null);
+          }
+
+          if (
+            'close' in result &&
+            typeof (result as Record<string, unknown>).close === 'function'
+          ) {
+            ((result as Record<string, unknown>).close as () => void)();
+          }
+        } catch (err) {
+          console.error('[usePose] Inference error:', err);
+          setError(err instanceof Error ? err.message : String(err));
+        }
+      }
+
       if (activeRef.current) {
         callbackId.current = video.requestVideoFrameCallback(onFrame);
       }
