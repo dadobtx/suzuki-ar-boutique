@@ -10,9 +10,12 @@ export function useLayout() {
   const { mode, source, setMode, toggle } = useLayoutStore();
 
   useEffect(() => {
-    // If there's already a manual override from sessionStorage, keep it
-    const stored = useLayoutStore.getState();
-    if (stored.source === 'manual') return;
+    // 1. Direct sessionStorage read (absolute highest priority across remounts)
+    const sessionVal = sessionStorage.getItem('suzuki-layout-override');
+    if (sessionVal === 'portrait' || sessionVal === 'landscape') {
+      setMode(sessionVal as LayoutMode, 'manual');
+      return;
+    }
 
     // Check URL flag: ?layout=portrait (from location.search, before the hash)
     const params = new URLSearchParams(window.location.search);

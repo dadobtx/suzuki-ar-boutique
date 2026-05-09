@@ -170,7 +170,10 @@ export function useCamera() {
   // Start on mount
   useEffect(() => {
     start();
-    return () => stopTracks();
+    return () => {
+      stopTracks();
+      useCameraStore.getState().setStatus('idle');
+    };
   }, [start, stopTracks]);
 
   // Pause/resume on visibility change
