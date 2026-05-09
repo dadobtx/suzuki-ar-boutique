@@ -1,0 +1,72 @@
+{
+  "app": {
+    "title": "Suzuki AR Boutique",
+    "subtitle": "Probador Virtual"
+  },
+  "nav": {
+    "home": "Inicio",
+    "diag": "Diagnóstico",
+    "catalog": "Catálogo"
+  },
+  "camera": {
+    "requesting": "Activando cámara…",
+    "denied": "Acceso a cámara denegado. Necesitamos tu cámara para el probador virtual.",
+    "error": "Error al acceder a la cámara",
+    "retry": "Reintentar"
+  },
+  "catalog": {
+    "title": "CATÁLOGO",
+    "filter": "Filtrar",
+    "all": "Todo",
+    "jackets": "Chaquetas",
+    "hoodies": "Hoodies",
+    "polos": "Polos",
+    "caps": "Gorras",
+    "tshirts": "Camisetas",
+    "accessories": "Accesorios",
+    "size": "Talla",
+    "color": "Color",
+    "addWishlist": "Agregar a favoritos",
+    "removeWishlist": "Quitar de favoritos"
+  },
+  "tryon": {
+    "ready": "Listo para rodar",
+    "tryThis": "Probá esta",
+    "takePhoto": "Disparar foto",
+    "turboMode": "Modo turbo",
+    "countdown": "{{count}}",
+    "flash": "¡Captura!"
+  },
+  "kiosk": {
+    "attract": "Acércate para probarte prendas Suzuki",
+    "awakening": "¡Te vemos!",
+    "calibrating": "Calibrando…",
+    "cooldown": "¿Sigues ahí?",
+    "stayButton": "Quedate",
+    "resetIn": "Reset en {{seconds}}s",
+    "restarting": "REINICIANDO…"
+  },
+  "share": {
+    "title": "Tu look Suzuki",
+    "download": "Descargar foto",
+    "wishlistCode": "Código de wishlist",
+    "continue": "Seguir probando",
+    "finish": "Finalizar"
+  },
+  "diag": {
+    "title": "DIAGNÓSTICO",
+    "fps": "FPS",
+    "camera": "Cámara",
+    "mediapipe": "MediaPipe",
+    "build": "Build",
+    "layout": "Layout",
+    "toggleLayout": "Alternar layout",
+    "copyReport": "Copiar reporte JSON",
+    "copied": "¡Copiado!"
+  },
+  "a11y": {
+    "cameraFeed": "Vista de cámara en vivo",
+    "garmentOverlay": "Superposición de prenda",
+    "catalogGrid": "Grilla de catálogo de prendas"
+  }
+}

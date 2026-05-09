@@ -1,0 +1,118 @@
+@import '@fontsource-variable/inter';
+@import '@fontsource/bebas-neue';
+@import '@fontsource-variable/jetbrains-mono';
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --color-bg: 7 8 15;
+    --color-surface: 17 20 28;
+    --color-surface-2: 26 31 46;
+    --color-fg: 245 247 250;
+    --color-fg-muted: 156 163 175;
+    --color-brand-red: 230 0 18;
+    --color-accent-cyan: 0 229 255;
+    --color-accent-yellow: 255 212 0;
+    --color-success: 0 255 135;
+    --color-danger: 255 59 48;
+  }
+
+  *,
+  *::before,
+  *::after {
+    box-sizing: border-box;
+  }
+
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  body {
+    margin: 0;
+    background-color: #07080f;
+    color: #f5f7fa;
+    overflow-x: hidden;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+
+  body.kiosk-mode {
+    cursor: none;
+    user-select: none;
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    touch-action: manipulation;
+    overflow: hidden;
+  }
+
+  :focus-visible {
+    outline: 2px solid #00e5ff;
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: #11141c;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #1a1f2e;
+    border-radius: 3px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+}
+
+@layer components {
+  .clip-hud {
+    clip-path: polygon(
+      0 8px,
+      8px 0,
+      calc(100% - 8px) 0,
+      100% 8px,
+      100% calc(100% - 8px),
+      calc(100% - 8px) 100%,
+      8px 100%,
+      0 calc(100% - 8px)
+    );
+  }
+
+  .glow-cyan {
+    box-shadow:
+      0 0 12px rgba(0, 229, 255, 0.3),
+      0 0 24px rgba(0, 229, 255, 0.1);
+  }
+
+  .glow-red {
+    box-shadow:
+      0 0 12px rgba(230, 0, 18, 0.3),
+      0 0 24px rgba(230, 0, 18, 0.1);
+  }
+
+  @keyframes ripple {
+    from {
+      transform: scale(0);
+      opacity: 0.5;
+    }
+    to {
+      transform: scale(4);
+      opacity: 0;
+    }
+  }
+
+  .ripple-effect {
+    position: relative;
+    overflow: hidden;
+  }
+}
