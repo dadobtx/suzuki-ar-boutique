@@ -43,6 +43,9 @@ export function useCamera() {
     streamRef.current = stream;
     if (videoRef.current) {
       videoRef.current.srcObject = stream;
+      videoRef.current.play().catch((e) => {
+        console.warn('[useCamera] video.play() rejected:', e);
+      });
     }
   }, []);
 
@@ -175,6 +178,21 @@ export function useCamera() {
       useCameraStore.getState().setStatus('idle');
     };
   }, [start, stopTracks]);
+
+  // Protective attach: ensure video gets the stream if it was rendered late
+  useEffect(() => {
+    if (
+      status === 'granted' &&
+      videoRef.current &&
+      streamRef.current &&
+      videoRef.current.srcObject !== streamRef.current
+    ) {
+      videoRef.current.srcObject = streamRef.current;
+      videoRef.current.play().catch((e) => {
+        console.warn('[useCamera] delayed video.play() rejected:', e);
+      });
+    }
+  }, [status]);
 
   // Pause/resume on visibility change
   useEffect(() => {

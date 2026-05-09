@@ -28,9 +28,8 @@ export function CameraView({
 }: CameraViewProps) {
   const { t } = useTranslation();
 
-  // ── Granted: show video ──
-  if (status === 'granted') {
-    return (
+  return (
+    <div className={`relative w-full h-full ${className}`}>
       <video
         ref={(el) => {
           // Assign to the mutable ref from useCamera
@@ -39,70 +38,75 @@ export function CameraView({
         autoPlay
         muted
         playsInline
-        className={`w-full h-full ${className}`}
+        className="w-full h-full"
         style={{
           transform: 'scaleX(-1)',
           objectFit,
+          visibility: status === 'granted' ? 'visible' : 'hidden',
         }}
         aria-label={t('a11y.cameraFeed')}
       />
-    );
-  }
 
-  // ── Overlays for other states ──
-  return (
-    <div
-      className={`flex items-center justify-center w-full h-full bg-surface ${className}`}
-    >
-      {status === 'idle' && (
-        <StateMessage
-          icon={<Camera className="w-12 h-12 text-fg-muted" />}
-          message={t('camera.initializing')}
-        />
-      )}
+      {/* Overlays absolute para estados no-granted */}
+      {status !== 'granted' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-surface">
+          {status === 'idle' && (
+            <StateMessage
+              icon={<Camera className="w-12 h-12 text-fg-muted" />}
+              message={t('camera.initializing')}
+            />
+          )}
 
-      {status === 'requesting' && (
-        <StateMessage
-          icon={<Loader className="w-12 h-12 text-accent-cyan animate-spin" />}
-          message={t('camera.requesting')}
-        />
-      )}
+          {status === 'requesting' && (
+            <StateMessage
+              icon={<Loader className="w-12 h-12 text-accent-cyan animate-spin" />}
+              message={t('camera.requesting')}
+            />
+          )}
 
-      {status === 'denied' && (
-        <HudFrame variant="red" className="max-w-md p-6 m-4" id="camera-denied">
-          <div className="text-center space-y-4">
-            <ShieldOff className="w-16 h-16 text-brand-red mx-auto" />
-            <p className="font-mono text-sm text-fg">{t('camera.denied')}</p>
-            <p className="font-mono text-hud-xs text-fg-muted">{t('camera.grantHint')}</p>
-            <NeonButton variant="red" size="md" onClick={retry}>
-              {t('camera.retry')}
-            </NeonButton>
-          </div>
-        </HudFrame>
-      )}
+          {status === 'denied' && (
+            <HudFrame variant="red" className="max-w-md p-6 m-4" id="camera-denied">
+              <div className="text-center space-y-4">
+                <ShieldOff className="w-16 h-16 text-brand-red mx-auto" />
+                <p className="font-mono text-sm text-fg">{t('camera.denied')}</p>
+                <p className="font-mono text-hud-xs text-fg-muted">
+                  {t('camera.grantHint')}
+                </p>
+                <NeonButton variant="red" size="md" onClick={retry}>
+                  {t('camera.retry')}
+                </NeonButton>
+              </div>
+            </HudFrame>
+          )}
 
-      {status === 'unsupported' && (
-        <HudFrame variant="muted" className="max-w-md p-6 m-4" id="camera-unsupported">
-          <div className="text-center space-y-4">
-            <AlertTriangle className="w-16 h-16 text-accent-yellow mx-auto" />
-            <p className="font-mono text-sm text-fg">{t('camera.unsupported')}</p>
-          </div>
-        </HudFrame>
-      )}
+          {status === 'unsupported' && (
+            <HudFrame
+              variant="muted"
+              className="max-w-md p-6 m-4"
+              id="camera-unsupported"
+            >
+              <div className="text-center space-y-4">
+                <AlertTriangle className="w-16 h-16 text-accent-yellow mx-auto" />
+                <p className="font-mono text-sm text-fg">{t('camera.unsupported')}</p>
+              </div>
+            </HudFrame>
+          )}
 
-      {status === 'error' && (
-        <HudFrame variant="red" className="max-w-md p-6 m-4" id="camera-error">
-          <div className="text-center space-y-4">
-            <AlertTriangle className="w-16 h-16 text-danger mx-auto" />
-            <p className="font-mono text-sm text-fg">{t('camera.error')}</p>
-            {error && (
-              <p className="font-mono text-hud-xs text-fg-muted break-all">{error}</p>
-            )}
-            <NeonButton variant="cyan" size="md" onClick={retry}>
-              {t('camera.retry')}
-            </NeonButton>
-          </div>
-        </HudFrame>
+          {status === 'error' && (
+            <HudFrame variant="red" className="max-w-md p-6 m-4" id="camera-error">
+              <div className="text-center space-y-4">
+                <AlertTriangle className="w-16 h-16 text-danger mx-auto" />
+                <p className="font-mono text-sm text-fg">{t('camera.error')}</p>
+                {error && (
+                  <p className="font-mono text-hud-xs text-fg-muted break-all">{error}</p>
+                )}
+                <NeonButton variant="cyan" size="md" onClick={retry}>
+                  {t('camera.retry')}
+                </NeonButton>
+              </div>
+            </HudFrame>
+          )}
+        </div>
       )}
     </div>
   );
