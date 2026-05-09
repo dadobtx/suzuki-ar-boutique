@@ -5,15 +5,11 @@ import { HomePage } from './pages/HomePage';
 import { DiagPage } from './pages/DiagPage';
 
 export default function App() {
-  const { setLayout, setKiosk, setPro } = useAppStore();
+  const { setKiosk, setPro } = useAppStore();
 
   // Read URL flags on mount
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-
-    if (params.get('layout') === 'portrait') {
-      setLayout('portrait');
-    }
 
     if (params.get('kiosk') === '1') {
       setKiosk(true);
@@ -51,7 +47,7 @@ export default function App() {
     if (params.get('pro') === '1') {
       setPro(true);
     }
-  }, [setLayout, setKiosk, setPro]);
+  }, [setKiosk, setPro]);
 
   return (
     <HashRouter>

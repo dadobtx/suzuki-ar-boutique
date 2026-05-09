@@ -10,12 +10,18 @@
   },
   "camera": {
     "requesting": "Activating camera…",
+    "initializing": "Preparing camera…",
     "denied": "Camera access denied. We need your camera for the virtual try-on.",
+    "grantHint": "Open your browser settings and enable camera access for this site.",
+    "unsupported": "Your browser does not support camera access",
     "error": "Error accessing camera",
-    "retry": "Retry"
+    "retry": "Retry",
+    "resolution": "Resolution: {{width}}×{{height}}"
   },
   "catalog": {
     "title": "CATALOG",
+    "placeholder": "Catalog (F5)",
+    "comingSoon": "Coming soon",
     "filter": "Filter",
     "all": "All",
     "jackets": "Jackets",
@@ -55,14 +61,23 @@
   },
   "diag": {
     "title": "DIAGNOSTICS",
+    "performance": "Performance",
     "fps": "FPS",
+    "latency": "Latency",
     "camera": "Camera",
+    "deviceId": "Device ID",
+    "deviceLabel": "Device",
+    "capabilities": "Capabilities",
+    "settings": "Active settings",
     "mediapipe": "MediaPipe",
     "build": "Build",
+    "mode": "Mode",
+    "source": "Source",
     "layout": "Layout",
     "toggleLayout": "Toggle layout",
     "copyReport": "Copy JSON report",
-    "copied": "Copied!"
+    "copied": "Copied!",
+    "userAgent": "User Agent"
   },
   "a11y": {
     "cameraFeed": "Live camera feed",
