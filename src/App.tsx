@@ -50,7 +50,12 @@ export default function App() {
   }, [setKiosk, setPro]);
 
   return (
-    <HashRouter>
+    <HashRouter
+      future={{
+        v7_startTransition: true,
+        v7_relativeSplatPath: true,
+      }}
+    >
       <div className="min-h-screen bg-bg text-fg">
         <Routes>
           <Route path="/" element={<HomePage />} />
