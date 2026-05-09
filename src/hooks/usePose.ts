@@ -29,14 +29,16 @@ async function initLandmarker() {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    const resolver = await FilesetResolver.forVisionTasks('/mediapipe/wasm');
+    const resolver = await FilesetResolver.forVisionTasks(
+      `${import.meta.env.BASE_URL}mediapipe/wasm`,
+    );
 
     let backend: 'WebGL2' | 'CPU' = 'WebGL2';
     let lm: PoseLandmarker;
     try {
       lm = await PoseLandmarker.createFromOptions(resolver, {
         baseOptions: {
-          modelAssetPath: '/mediapipe/pose_landmarker_full.task',
+          modelAssetPath: `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`,
           delegate: 'GPU',
         },
         runningMode: 'VIDEO',
@@ -47,7 +49,7 @@ async function initLandmarker() {
       console.warn('[usePose] WebGL2 failed, falling back to CPU', e);
       lm = await PoseLandmarker.createFromOptions(resolver, {
         baseOptions: {
-          modelAssetPath: '/mediapipe/pose_landmarker_full.task',
+          modelAssetPath: `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`,
           delegate: 'CPU',
         },
         runningMode: 'VIDEO',
