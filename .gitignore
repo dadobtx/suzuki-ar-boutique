@@ -28,6 +28,7 @@ Thumbs.db
 
 # MediaPipe models (downloaded by script)
 public/mediapipe/*.task
+public/mediapipe/wasm/
 
 # Storybook build
 storybook-static/

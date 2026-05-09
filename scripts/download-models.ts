@@ -61,6 +61,35 @@ async function main() {
     fs.mkdirSync(MODELS_DIR, { recursive: true });
   }
 
+  // Copy MediaPipe wasm runtime files from node_modules to public
+  const WASM_SRC = path.join(
+    __dirname,
+    '..',
+    'node_modules',
+    '@mediapipe',
+    'tasks-vision',
+    'wasm',
+  );
+  const WASM_DEST = path.join(MODELS_DIR, 'wasm');
+
+  if (!fs.existsSync(WASM_SRC)) {
+    console.error('[download-models] node_modules wasm not found at:', WASM_SRC);
+    console.error('[download-models] Run "npm install" first.');
+    process.exit(1);
+  }
+
+  if (!fs.existsSync(WASM_DEST)) {
+    fs.mkdirSync(WASM_DEST, { recursive: true });
+  }
+
+  const wasmFiles = fs.readdirSync(WASM_SRC);
+  for (const file of wasmFiles) {
+    const src = path.join(WASM_SRC, file);
+    const dest = path.join(WASM_DEST, file);
+    fs.copyFileSync(src, dest);
+  }
+  console.log(`[download-models] Copied ${wasmFiles.length} wasm files to ${WASM_DEST}`);
+
   const destPath = path.join(MODELS_DIR, 'pose_landmarker_full.task');
 
   console.log(`[download-models] Checking ${destPath}...`);
