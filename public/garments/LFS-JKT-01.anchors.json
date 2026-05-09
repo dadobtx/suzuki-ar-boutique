@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/LFS-JKT-01.png",
+  "overlayWidth": 1024,
+  "overlayHeight": 1024,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 256,
+      "overlayY": 240,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 768,
+      "overlayY": 240,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 320,
+      "overlayY": 800,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 704,
+      "overlayY": 800,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

@@ -40,8 +40,11 @@ jobs:
       - run: npm run download-models
         name: Download MediaPipe Models
 
-      - run: npm run build
-        name: Build
+      - name: Generate Garment Placeholders
+        run: npm run generate-placeholders
+
+      - name: Build
+        run: npm run build
         env:
           VITE_TARGET: ghpages
           VITE_GIT_SHA: ${{ github.sha }}
