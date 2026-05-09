@@ -1,5 +1,5 @@
 import { FilesetResolver, PoseLandmarker } from '@mediapipe/tasks-vision';
-import { POSE_MODEL_VERSION } from '../../scripts/download-models';
+import { POSE_MODEL_VERSION } from '../lib/model-version';
 
 export interface NormalizedLandmark {
   x: number;

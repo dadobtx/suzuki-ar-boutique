@@ -11,9 +11,6 @@ const MODELS_DIR = path.join(__dirname, '..', 'public', 'mediapipe');
 const POSE_MODEL_URL =
   'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
 
-// We export this so the worker can report it to DiagPage
-export const POSE_MODEL_VERSION = '0.10.18-full-float16';
-
 // Known SHA-256 for the float16 full model (if it changes, update this or set to null to bypass strict check)
 // Set to null initially to allow the first download to print the actual hash.
 const EXPECTED_HASH: string | null = null;
