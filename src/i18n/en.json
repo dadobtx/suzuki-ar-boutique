@@ -3,6 +3,21 @@
     "title": "Suzuki AR Boutique",
     "subtitle": "Virtual Try-On"
   },
+  "debug": {
+    "skeleton": "Debug Skeleton"
+  },
+  "presence": {
+    "absent": "Absent",
+    "arriving": "Are you there?",
+    "present": "Detected",
+    "leaving": "Leaving..."
+  },
+  "mediapipe": {
+    "backend": "Graphics Backend",
+    "model": "AR Model",
+    "latency": "AR Latency",
+    "modelVersion": "Model Version"
+  },
   "nav": {
     "home": "Home",
     "diag": "Diagnostics",
@@ -75,6 +90,7 @@
     "source": "Source",
     "layout": "Layout",
     "toggleLayout": "Toggle layout",
+    "toggleSkeleton": "Toggle Skeleton",
     "copyReport": "Copy JSON report",
     "copied": "Copied!",
     "userAgent": "User Agent"

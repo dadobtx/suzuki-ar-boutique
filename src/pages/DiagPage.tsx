@@ -4,6 +4,9 @@ import { Link } from 'react-router-dom';
 import { useCameraStore } from '@/store/camera';
 import { useLayout } from '@/hooks/useLayout';
 import { useFps } from '@/hooks/useFps';
+import { usePose } from '@/hooks/usePose';
+import { usePresence } from '@/hooks/usePresence';
+import { useDebugToggle } from '@/hooks/useDebugToggle';
 import { HudFrame, NeonButton } from '@/components/hud';
 
 /**
@@ -14,9 +17,15 @@ import { HudFrame, NeonButton } from '@/components/hud';
 export function DiagPage() {
   const { t } = useTranslation();
   const { layout, source, toggle } = useLayout();
-  // DiagPage doesn't own the camera, so no video ref to pass
+  // DiagPage doesn't own the camera, so no video ref to pass directly,
+  // but we can just call the hooks to get the latest info.
   const { fps, latency } = useFps();
   const camera = useCameraStore();
+
+  const pose = usePose(); // No videoRef, just gets current worker state
+  const presence = usePresence(pose.landmarks);
+  const { showDebug, toggle: toggleDebug } = useDebugToggle();
+
   const [copied, setCopied] = useState(false);
 
   const isDeviceInfoHistorical = camera.status !== 'granted' && camera.deviceId !== null;
@@ -182,12 +191,46 @@ export function DiagPage() {
           </div>
         </HudFrame>
 
-        {/* ── MediaPipe placeholder ── */}
-        <HudFrame className="p-4" variant="muted" id="diag-mediapipe">
-          <h2 className="font-display text-xl text-fg-muted mb-3">
+        {/* ── MediaPipe ── */}
+        <HudFrame
+          className="p-4"
+          variant={pose.backend ? 'cyan' : 'muted'}
+          id="diag-mediapipe"
+        >
+          <h2 className="font-display text-xl text-accent-cyan mb-3">
             {t('diag.mediapipe')}
           </h2>
-          <p className="font-mono text-hud-xs text-fg-muted">F3</p>
+          <div className="space-y-4">
+            <DiagTable
+              rows={[
+                [t('mediapipe.backend'), pose.backend ?? '—'],
+                [t('mediapipe.model'), 'pose_landmarker_full.task'],
+                [t('mediapipe.modelVersion'), pose.modelVersion ?? '—'],
+                [
+                  t('mediapipe.latency'),
+                  pose.latency ? `${Math.round(pose.latency)}ms` : '—',
+                ],
+                ['FPS', pose.fps ? String(pose.fps) : '—'],
+              ]}
+            />
+
+            <div className="flex items-center justify-between border-t border-surface-2 pt-3 mt-3">
+              <span className="font-mono text-hud-sm text-fg-muted">PRESENCE</span>
+              <span className="font-mono text-hud-sm text-accent-cyan">
+                {t(`presence.${presence}`, presence.toUpperCase())}
+              </span>
+            </div>
+
+            <div className="pt-2">
+              <NeonButton
+                variant={showDebug ? 'cyan' : 'muted'}
+                size="sm"
+                onClick={toggleDebug}
+              >
+                {t('diag.toggleSkeleton')}
+              </NeonButton>
+            </div>
+          </div>
         </HudFrame>
       </div>
 

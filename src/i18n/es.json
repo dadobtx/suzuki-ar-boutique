@@ -3,6 +3,21 @@
     "title": "Suzuki AR Boutique",
     "subtitle": "Probador Virtual"
   },
+  "debug": {
+    "skeleton": "Esqueleto Debug"
+  },
+  "presence": {
+    "absent": "Ausente",
+    "arriving": "¿Estás ahí?",
+    "present": "Detectado",
+    "leaving": "Saliendo..."
+  },
+  "mediapipe": {
+    "backend": "Motor Gráfico",
+    "model": "Modelo AR",
+    "latency": "Latencia AR",
+    "modelVersion": "Versión Modelo"
+  },
   "nav": {
     "home": "Inicio",
     "diag": "Diagnóstico",
@@ -75,6 +90,7 @@
     "source": "Fuente",
     "layout": "Layout",
     "toggleLayout": "Alternar layout",
+    "toggleSkeleton": "Mostrar Esqueleto",
     "copyReport": "Copiar reporte JSON",
     "copied": "¡Copiado!",
     "userAgent": "User Agent"

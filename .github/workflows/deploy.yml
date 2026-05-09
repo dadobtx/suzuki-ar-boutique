@@ -37,6 +37,9 @@ jobs:
       - run: npm test
         name: Test
 
+      - run: npm run download-models
+        name: Download MediaPipe Models
+
       - run: npm run build
         name: Build
         env:
