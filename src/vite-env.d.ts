@@ -23,3 +23,25 @@ interface HTMLVideoElement {
   ): number;
   cancelVideoFrameCallback(handle: number): void;
 }
+
+// Vite worker imports
+declare module '*?worker' {
+  const workerConstructor: {
+    new (): Worker;
+  };
+  export default workerConstructor;
+}
+
+declare module '*?worker&inline' {
+  const workerConstructor: {
+    new (): Worker;
+  };
+  export default workerConstructor;
+}
+
+declare module '*?sharedworker' {
+  const workerConstructor: {
+    new (): SharedWorker;
+  };
+  export default workerConstructor;
+}

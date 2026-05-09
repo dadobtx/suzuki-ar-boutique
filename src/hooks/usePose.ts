@@ -6,6 +6,10 @@ import type {
   PoseWorkerResponse,
   NormalizedLandmark,
 } from '@/workers/pose.worker';
+// Vite ?worker import: bundlea como classic worker (IIFE).
+// Necesario para MediaPipe Tasks Vision (usa importScripts internamente
+// que no está disponible en module workers).
+import PoseWorker from '@/workers/pose.worker?worker';
 
 export interface UsePoseResult {
   landmarks: NormalizedLandmark[] | null;
@@ -25,9 +29,7 @@ let activeSubscribers = 0;
 
 function getSharedWorker(): Worker {
   if (!sharedWorker) {
-    sharedWorker = new Worker(new URL('../workers/pose.worker.ts', import.meta.url), {
-      type: 'module',
-    });
+    sharedWorker = new PoseWorker();
     sharedWorker.postMessage({ type: 'init' } as PoseWorkerMessage);
   }
   activeSubscribers++;
