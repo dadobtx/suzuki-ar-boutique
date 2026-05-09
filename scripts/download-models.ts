@@ -13,7 +13,8 @@ const POSE_MODEL_URL =
 
 // Known SHA-256 for the float16 full model (if it changes, update this or set to null to bypass strict check)
 // Set to null initially to allow the first download to print the actual hash.
-const EXPECTED_HASH: string | null = null;
+const EXPECTED_HASH: string | null =
+  '4eaa5eb7a98365221087693fcc286334cf0858e2eb6e15b506aa4a7ecdcec4ad';
 
 async function computeHash(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {

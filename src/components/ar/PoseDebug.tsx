@@ -73,7 +73,7 @@ export function PoseDebug({
             imgData.data[px] = 0; // R
             imgData.data[px + 1] = 255; // G
             imgData.data[px + 2] = 255; // B
-            imgData.data[px + 3] = alpha; // A
+            imgData.data[px + 3] = 255 - alpha; // A (invertir: persona opaca)
           }
           offCtx.putImageData(imgData, 0, 0);
 
