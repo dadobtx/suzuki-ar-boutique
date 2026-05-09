@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export type CameraStatus =
   | 'idle'
@@ -34,33 +35,47 @@ interface CameraState {
   resetAll: () => void;
 }
 
-export const useCameraStore = create<CameraState>((set) => ({
-  // Session state
-  status: 'idle',
-  error: null,
-
-  // Device info
-  deviceId: null,
-  deviceLabel: null,
-  capabilities: null,
-  settings: null,
-
-  // Actions
-  setStatus: (status) => set({ status }),
-  setDevice: (deviceId, deviceLabel) => set({ deviceId, deviceLabel }),
-  setCapabilities: (capabilities) => set({ capabilities }),
-  setSettings: (settings) => set({ settings }),
-  setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
-
-  resetSession: () => set({ status: 'idle', error: null }),
-
-  resetAll: () =>
-    set({
+export const useCameraStore = create<CameraState>()(
+  persist(
+    (set) => ({
+      // Session state
       status: 'idle',
       error: null,
+
+      // Device info
       deviceId: null,
       deviceLabel: null,
       capabilities: null,
       settings: null,
+
+      // Actions
+      setStatus: (status) => set({ status }),
+      setDevice: (deviceId, deviceLabel) => set({ deviceId, deviceLabel }),
+      setCapabilities: (capabilities) => set({ capabilities }),
+      setSettings: (settings) => set({ settings }),
+      setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
+
+      resetSession: () => set({ status: 'idle', error: null }),
+
+      resetAll: () =>
+        set({
+          status: 'idle',
+          error: null,
+          deviceId: null,
+          deviceLabel: null,
+          capabilities: null,
+          settings: null,
+        }),
     }),
-}));
+    {
+      name: 'suzuki-camera-device',
+      storage: createJSONStorage(() => sessionStorage),
+      partialize: (state) => ({
+        deviceId: state.deviceId,
+        deviceLabel: state.deviceLabel,
+        capabilities: state.capabilities,
+        settings: state.settings,
+      }),
+    },
+  ),
+);
