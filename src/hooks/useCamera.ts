@@ -180,19 +180,23 @@ export function useCamera() {
   }, [start, stopTracks]);
 
   // Protective attach: ensure video gets the stream if it was rendered late
+  // and re-trigger play if Chrome silently paused it due to CSS mutations (like objectFit flips).
   useEffect(() => {
-    if (
-      status === 'granted' &&
-      videoRef.current &&
-      streamRef.current &&
-      videoRef.current.srcObject !== streamRef.current
-    ) {
-      videoRef.current.srcObject = streamRef.current;
-      videoRef.current.play().catch((e) => {
-        console.warn('[useCamera] delayed video.play() rejected:', e);
+    const video = videoRef.current;
+    if (!video || status !== 'granted' || !streamRef.current) return;
+
+    // 1. Re-atar stream si se desconectó
+    if (video.srcObject !== streamRef.current) {
+      video.srcObject = streamRef.current;
+    }
+
+    // 2. Re-disparar play si Chrome lo pausó
+    if (video.paused) {
+      video.play().catch((e) => {
+        console.warn('[useCamera] play() retry failed:', e);
       });
     }
-  }, [status]);
+  });
 
   // Pause/resume on visibility change
   useEffect(() => {

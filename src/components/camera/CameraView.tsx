@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Camera, ShieldOff, AlertTriangle, Loader } from 'lucide-react';
 import { HudFrame, NeonButton } from '@/components/hud';
@@ -27,6 +28,16 @@ export function CameraView({
   className = '',
 }: CameraViewProps) {
   const { t } = useTranslation();
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || status !== 'granted') return;
+    if (video.paused && video.srcObject) {
+      video.play().catch(() => {
+        // silently ignored — useCamera also retries
+      });
+    }
+  }); // sin deps → corre después de cada render incluyendo cambios de objectFit
 
   return (
     <div className={`relative w-full h-full ${className}`}>
