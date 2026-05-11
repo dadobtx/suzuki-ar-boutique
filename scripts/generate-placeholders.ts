@@ -210,29 +210,29 @@ async function generateAssets() {
       overlayHeight: 1024,
       anchors: [
         {
-          id: 'shoulderR', // Wearer's right shoulder is on the left side of the front-view image
-          landmarkIndex: 12,
+          id: 'shoulderL',
+          landmarkIndex: 11,
           overlayX: 256,
           overlayY: 240,
           offset: { x: 0, y: -0.02 },
         },
         {
-          id: 'shoulderL', // Wearer's left shoulder is on the right side of the front-view image
-          landmarkIndex: 11,
+          id: 'shoulderR',
+          landmarkIndex: 12,
           overlayX: 768,
           overlayY: 240,
           offset: { x: 0, y: -0.02 },
         },
         {
-          id: 'hipR',
-          landmarkIndex: 24,
+          id: 'hipL',
+          landmarkIndex: 23,
           overlayX: 320,
           overlayY: 800,
           offset: { x: 0, y: 0 },
         },
         {
-          id: 'hipL',
-          landmarkIndex: 23,
+          id: 'hipR',
+          landmarkIndex: 24,
           overlayX: 704,
           overlayY: 800,
           offset: { x: 0, y: 0 },

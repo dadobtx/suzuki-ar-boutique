@@ -3,7 +3,7 @@ import type { RefObject } from 'react';
 import type { NormalizedLandmark } from '@/types/pose';
 import type { Garment, GarmentAnchorsFile } from '@/types/garment';
 import type { Point } from '@/lib/garment-warping';
-import { warpGarment } from '@/lib/garment-warping';
+import { warpGarment, computeAffineTransform } from '@/lib/garment-warping';
 import {
   computeCropOffset,
   videoToCss,
@@ -375,6 +375,39 @@ export function useGarmentRenderer(
       // c. Build anchor arrays
       const anchorsSrc = allCriticals.map((a) => a!.srcPt);
       const anchorsDst = allCriticals.map((a) => a!.dstPt);
+
+      // d. Extrapolate corners to draw the full garment (sleeves, neck) instead of clipping to torso
+      const s0 = criticalsById.shoulderL?.srcPt;
+      const s1 = criticalsById.shoulderR?.srcPt;
+      const s2 = criticalsById.hipL?.srcPt || criticalsById.hipR?.srcPt;
+      const d0 = criticalsById.shoulderL?.dstPt;
+      const d1 = criticalsById.shoulderR?.dstPt;
+      const d2 = criticalsById.hipL?.dstPt || criticalsById.hipR?.dstPt;
+
+      if (s0 && s1 && s2 && d0 && d1 && d2) {
+        const globalTransform = computeAffineTransform([s0, s1, s2], [d0, d1, d2]);
+        if (globalTransform) {
+          const [a, b, c, d, e, f] = globalTransform;
+          // Use intrinsic image size or default 1024x1024
+          const imgW = cached.img.naturalWidth || 1024;
+          const imgH = cached.img.naturalHeight || 1024;
+
+          const corners = [
+            { x: 0, y: 0 },
+            { x: imgW, y: 0 },
+            { x: imgW, y: imgH },
+            { x: 0, y: imgH },
+          ];
+
+          for (const pt of corners) {
+            anchorsSrc.push(pt);
+            anchorsDst.push({
+              x: a * pt.x + c * pt.y + e,
+              y: b * pt.x + d * pt.y + f,
+            });
+          }
+        }
+      }
 
       // e. Apply mirror via canvas transform
       ctx.save();
