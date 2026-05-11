@@ -400,9 +400,9 @@ export function useGarmentRenderer(
             imgData.data[px] = 255;
             imgData.data[px + 1] = 255;
             imgData.data[px + 2] = 255;
-            // Mask is person=opaque(255-alpha from F3 inversion), background=transparent
+            // Mask is person=opaque (alpha), background=transparent
             // We want: keep garment where person is → destination-in with person mask
-            imgData.data[px + 3] = 255 - alpha;
+            imgData.data[px + 3] = alpha;
           }
           offCtx.putImageData(imgData, 0, 0);
 
