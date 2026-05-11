@@ -100,9 +100,12 @@
     "activeGarment": "Prenda activa",
     "noGarment": "Ninguna",
     "catalogSize": "Catálogo",
-    "garmentLoading": "Cargando",
-    "garmentError": "Error",
-    "cycleGarment": "Cambiar prenda"
+    "garmentLoading": "Cargando prenda",
+    "garmentError": "Error de prenda",
+    "cycleGarment": "Siguiente prenda",
+    "validAnchors": "Anchors válidos",
+    "estimatedAnchors": "Anchors estimados",
+    "warpLatency": "Latencia warp"
   },
   "a11y": {
     "cameraFeed": "Vista de cámara en vivo",

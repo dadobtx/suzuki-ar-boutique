@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import { useCameraStore } from '@/store/camera';
@@ -27,11 +27,17 @@ export function DiagPage() {
   const presence = usePresence(pose.landmarks);
   const { showDebug, toggle: toggleDebug } = useDebugToggle();
 
-  // Garment store
   const garmentStore = useGarmentStore();
   const catalog = garmentStore.catalog;
   const activeGarmentId = garmentStore.activeGarmentId;
   const activeGarment = catalog.find((g) => g.id === activeGarmentId);
+  const runtime = garmentStore.runtime;
+
+  // FIX 6: Load catalog on mount in DiagPage
+  const loadCatalog = garmentStore.loadCatalog;
+  useEffect(() => {
+    if (catalog.length === 0) loadCatalog();
+  }, [catalog.length, loadCatalog]);
 
   const handleCycleGarment = useCallback(() => {
     if (catalog.length === 0) return;
@@ -76,6 +82,10 @@ export function DiagPage() {
       garment: {
         activeGarment: activeGarment?.sku ?? null,
         catalogSize: catalog.length,
+        validAnchors: runtime.lastValidAnchors,
+        totalAnchors: runtime.lastTotalAnchors,
+        warpLatencyMs: runtime.lastWarpLatencyMs,
+        estimatedAnchors: runtime.lastEstimatedAnchors,
       },
       system: {
         userAgent: navigator.userAgent,
@@ -270,6 +280,24 @@ export function DiagPage() {
                 [t('diag.catalogSize'), String(catalog.length)],
                 [t('diag.garmentLoading'), garmentStore.loading ? '⏳' : '—'],
                 [t('diag.garmentError'), garmentStore.error ?? '—'],
+                [
+                  t('diag.validAnchors'),
+                  runtime.lastTotalAnchors > 0
+                    ? `${runtime.lastValidAnchors}/${runtime.lastTotalAnchors}`
+                    : '—',
+                ],
+                [
+                  t('diag.estimatedAnchors'),
+                  runtime.lastEstimatedAnchors > 0
+                    ? `${runtime.lastEstimatedAnchors}/4`
+                    : '0/4',
+                ],
+                [
+                  t('diag.warpLatency'),
+                  runtime.lastWarpLatencyMs !== null
+                    ? `${runtime.lastWarpLatencyMs}ms`
+                    : '—',
+                ],
               ]}
             />
             <NeonButton variant="cyan" size="sm" onClick={handleCycleGarment}>

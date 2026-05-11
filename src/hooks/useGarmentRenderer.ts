@@ -76,7 +76,6 @@ export interface GarmentRendererResult {
 // ── Critical anchor IDs that must be present for rendering ──
 const CRITICAL_ANCHORS = new Set(['shoulderL', 'shoulderR', 'hipL', 'hipR']);
 const VISIBILITY_THRESHOLD = 0.3;
-const MIN_CRITICAL = 3;
 
 /**
  * Renders the active garment warped onto the user's body.
@@ -226,6 +225,7 @@ export function useGarmentRenderer(
       const validAnchorsList: Array<{
         srcPt: Point;
         dstPt: Point;
+        anchorId: string;
         isCritical: boolean;
       }> = [];
 
@@ -269,24 +269,106 @@ export function useGarmentRenderer(
         validAnchorsList.push({
           srcPt,
           dstPt: cssPt,
+          anchorId: anchor.id,
           isCritical: CRITICAL_ANCHORS.has(anchor.id),
         });
       }
 
-      setValidAnchors(validAnchorsList.length);
+      // Throttle store updates to 10Hz
+      const updateStore = (latency: number | null, valid: number, estimated: number) => {
+        const timeNow = performance.now();
+        if (timeNow % 100 < 16) {
+          useGarmentStore
+            .getState()
+            .setRuntime(latency, valid, cached.anchors.anchors.length, estimated);
+        }
+      };
 
-      // b. Check minimum critical anchors
-      const criticalCount = validAnchorsList.filter((a) => a.isCritical).length;
-      if (criticalCount < MIN_CRITICAL) {
+      // b. Check minimum critical anchors and apply fallback estimates
+      const criticalsById: Record<string, { srcPt: Point; dstPt: Point } | null> = {
+        shoulderL: null,
+        shoulderR: null,
+        hipL: null,
+        hipR: null,
+      };
+      for (const v of validAnchorsList) {
+        if (v.isCritical && v.anchorId)
+          criticalsById[v.anchorId] = { srcPt: v.srcPt, dstPt: v.dstPt };
+      }
+
+      let estimatedAnchors = 0;
+
+      if (
+        criticalsById.hipL &&
+        criticalsById.hipR === null &&
+        criticalsById.shoulderL &&
+        criticalsById.shoulderR
+      ) {
+        const shoulderMidX_dst =
+          (criticalsById.shoulderL.dstPt.x + criticalsById.shoulderR.dstPt.x) / 2;
+        const hipL_dst = criticalsById.hipL.dstPt;
+        criticalsById.hipR = {
+          srcPt: { x: 704, y: 800 },
+          dstPt: { x: 2 * shoulderMidX_dst - hipL_dst.x, y: hipL_dst.y },
+        };
+        estimatedAnchors++;
+      }
+
+      if (
+        criticalsById.hipR &&
+        criticalsById.hipL === null &&
+        criticalsById.shoulderL &&
+        criticalsById.shoulderR
+      ) {
+        const shoulderMidX_dst =
+          (criticalsById.shoulderL.dstPt.x + criticalsById.shoulderR.dstPt.x) / 2;
+        const hipR_dst = criticalsById.hipR.dstPt;
+        criticalsById.hipL = {
+          srcPt: { x: 320, y: 800 },
+          dstPt: { x: 2 * shoulderMidX_dst - hipR_dst.x, y: hipR_dst.y },
+        };
+        estimatedAnchors++;
+      }
+
+      if (
+        criticalsById.hipL === null &&
+        criticalsById.hipR === null &&
+        criticalsById.shoulderL &&
+        criticalsById.shoulderR
+      ) {
+        const sL = criticalsById.shoulderL.dstPt;
+        const sR = criticalsById.shoulderR.dstPt;
+        const shoulderWidth = Math.hypot(sR.x - sL.x, sR.y - sL.y);
+        const torsoHeight = shoulderWidth * 1.4;
+        const angle = Math.atan2(sR.y - sL.y, sR.x - sL.x) + Math.PI / 2;
+        const dx = Math.cos(angle) * torsoHeight;
+        const dy = Math.sin(angle) * torsoHeight;
+        criticalsById.hipL = {
+          srcPt: { x: 320, y: 800 },
+          dstPt: { x: sL.x + dx, y: sL.y + dy },
+        };
+        criticalsById.hipR = {
+          srcPt: { x: 704, y: 800 },
+          dstPt: { x: sR.x + dx, y: sR.y + dy },
+        };
+        estimatedAnchors += 2;
+      }
+
+      const allCriticals = Object.values(criticalsById).filter((v) => v !== null);
+      if (allCriticals.length < 4) {
+        setValidAnchors(allCriticals.length);
+        updateStore(null, allCriticals.length, estimatedAnchors);
         if (activeRef.current) {
           callbackIdRef.current = v.requestVideoFrameCallback(onFrame);
         }
         return;
       }
 
+      setValidAnchors(validAnchorsList.length + estimatedAnchors);
+
       // c. Build anchor arrays
-      const anchorsSrc = validAnchorsList.map((a) => a.srcPt);
-      const anchorsDst = validAnchorsList.map((a) => a.dstPt);
+      const anchorsSrc = allCriticals.map((a) => a!.srcPt);
+      const anchorsDst = allCriticals.map((a) => a!.dstPt);
 
       // e. Apply mirror via canvas transform
       ctx.save();
@@ -360,8 +442,15 @@ export function useGarmentRenderer(
       }
 
       // h. Measure latency
-      const elapsed = performance.now() - start;
-      setWarpLatencyMs(Math.round(elapsed * 100) / 100);
+      const elapsedTotal = performance.now() - start;
+      const roundedElapsed = Math.round(elapsedTotal * 100) / 100;
+      setWarpLatencyMs(roundedElapsed);
+
+      updateStore(
+        roundedElapsed,
+        validAnchorsList.length + estimatedAnchors,
+        estimatedAnchors,
+      );
 
       if (activeRef.current) {
         callbackIdRef.current = v.requestVideoFrameCallback(onFrame);

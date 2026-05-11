@@ -7,6 +7,18 @@ interface GarmentState {
   catalog: Garment[];
   loading: boolean;
   error: string | null;
+  runtime: {
+    lastWarpLatencyMs: number | null;
+    lastValidAnchors: number;
+    lastTotalAnchors: number;
+    lastEstimatedAnchors: number;
+  };
+  setRuntime: (
+    latency: number | null,
+    valid: number,
+    total: number,
+    estimated: number,
+  ) => void;
   loadCatalog: () => Promise<void>;
   selectGarment: (id: string | null) => void;
   clearGarment: () => void;
@@ -19,6 +31,26 @@ export const useGarmentStore = create<GarmentState>()(
       catalog: [],
       loading: false,
       error: null,
+      runtime: {
+        lastWarpLatencyMs: null,
+        lastValidAnchors: 0,
+        lastTotalAnchors: 0,
+        lastEstimatedAnchors: 0,
+      },
+      setRuntime: (
+        lastWarpLatencyMs,
+        lastValidAnchors,
+        lastTotalAnchors,
+        lastEstimatedAnchors,
+      ) =>
+        set({
+          runtime: {
+            lastWarpLatencyMs,
+            lastValidAnchors,
+            lastTotalAnchors,
+            lastEstimatedAnchors,
+          },
+        }),
 
       loadCatalog: async () => {
         set({ loading: true, error: null });

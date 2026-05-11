@@ -97,12 +97,15 @@
     "cameraInactive": "Camera inactive",
     "lastSession": "Last session",
     "garment": "Garment",
-    "activeGarment": "Active garment",
+    "activeGarment": "Active Garment",
     "noGarment": "None",
     "catalogSize": "Catalog",
-    "garmentLoading": "Loading",
-    "garmentError": "Error",
-    "cycleGarment": "Cycle garment"
+    "garmentLoading": "Loading garment",
+    "garmentError": "Garment error",
+    "cycleGarment": "Next Garment",
+    "validAnchors": "Valid Anchors",
+    "estimatedAnchors": "Estimated Anchors",
+    "warpLatency": "Warp Latency"
   },
   "a11y": {
     "cameraFeed": "Live camera feed",
