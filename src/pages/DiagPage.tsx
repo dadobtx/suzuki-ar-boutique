@@ -7,6 +7,7 @@ import { useFps } from '@/hooks/useFps';
 import { usePose } from '@/hooks/usePose';
 import { usePresence } from '@/hooks/usePresence';
 import { useDebugToggle } from '@/hooks/useDebugToggle';
+import { useGarmentStore } from '@/store/garment';
 import { HudFrame, NeonButton } from '@/components/hud';
 
 /**
@@ -25,6 +26,22 @@ export function DiagPage() {
   const pose = usePose(); // No videoRef, just gets current worker state
   const presence = usePresence(pose.landmarks);
   const { showDebug, toggle: toggleDebug } = useDebugToggle();
+
+  // Garment store
+  const garmentStore = useGarmentStore();
+  const catalog = garmentStore.catalog;
+  const activeGarmentId = garmentStore.activeGarmentId;
+  const activeGarment = catalog.find((g) => g.id === activeGarmentId);
+
+  const handleCycleGarment = useCallback(() => {
+    if (catalog.length === 0) return;
+    const currentIdx = activeGarment ? catalog.indexOf(activeGarment) : -1;
+    const nextIdx = currentIdx >= catalog.length - 1 ? 0 : currentIdx + 1;
+    const next = catalog[nextIdx];
+    if (next) {
+      garmentStore.selectGarment(next.id);
+    }
+  }, [catalog, activeGarment, garmentStore]);
 
   const [copied, setCopied] = useState(false);
 
@@ -56,6 +73,10 @@ export function DiagPage() {
         settings: camera.settings,
         capabilities: camera.capabilities,
       },
+      garment: {
+        activeGarment: activeGarment?.sku ?? null,
+        catalogSize: catalog.length,
+      },
       system: {
         userAgent: navigator.userAgent,
         screen: `${window.screen.width}×${window.screen.height}`,
@@ -67,7 +88,7 @@ export function DiagPage() {
     await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [fps, latency, layout, source, camera]);
+  }, [fps, latency, layout, source, camera, activeGarment, catalog.length]);
 
   return (
     <div className="min-h-screen p-4 md:p-6 space-y-4 overflow-auto">
@@ -230,6 +251,30 @@ export function DiagPage() {
                 {t('diag.toggleSkeleton')}
               </NeonButton>
             </div>
+          </div>
+        </HudFrame>
+
+        {/* ── Garment ── */}
+        <HudFrame
+          className="p-4 md:col-span-2"
+          variant={activeGarment ? 'cyan' : 'muted'}
+          id="diag-garment"
+        >
+          <h2 className="font-display text-xl text-accent-cyan mb-3">
+            {t('diag.garment')}
+          </h2>
+          <div className="space-y-3">
+            <DiagTable
+              rows={[
+                [t('diag.activeGarment'), activeGarment?.sku ?? t('diag.noGarment')],
+                [t('diag.catalogSize'), String(catalog.length)],
+                [t('diag.garmentLoading'), garmentStore.loading ? '⏳' : '—'],
+                [t('diag.garmentError'), garmentStore.error ?? '—'],
+              ]}
+            />
+            <NeonButton variant="cyan" size="sm" onClick={handleCycleGarment}>
+              {t('diag.cycleGarment')}
+            </NeonButton>
           </div>
         </HudFrame>
       </div>

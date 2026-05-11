@@ -93,7 +93,16 @@
     "toggleSkeleton": "Mostrar Esqueleto",
     "copyReport": "Copiar reporte JSON",
     "copied": "¡Copiado!",
-    "userAgent": "User Agent"
+    "userAgent": "User Agent",
+    "cameraInactive": "Cámara inactiva",
+    "lastSession": "Última sesión",
+    "garment": "Prenda",
+    "activeGarment": "Prenda activa",
+    "noGarment": "Ninguna",
+    "catalogSize": "Catálogo",
+    "garmentLoading": "Cargando",
+    "garmentError": "Error",
+    "cycleGarment": "Cambiar prenda"
   },
   "a11y": {
     "cameraFeed": "Vista de cámara en vivo",

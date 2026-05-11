@@ -93,7 +93,16 @@
     "toggleSkeleton": "Toggle Skeleton",
     "copyReport": "Copy JSON report",
     "copied": "Copied!",
-    "userAgent": "User Agent"
+    "userAgent": "User Agent",
+    "cameraInactive": "Camera inactive",
+    "lastSession": "Last session",
+    "garment": "Garment",
+    "activeGarment": "Active garment",
+    "noGarment": "None",
+    "catalogSize": "Catalog",
+    "garmentLoading": "Loading",
+    "garmentError": "Error",
+    "cycleGarment": "Cycle garment"
   },
   "a11y": {
     "cameraFeed": "Live camera feed",

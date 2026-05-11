@@ -66,8 +66,9 @@ export function warpGarment(
   // 1. Generate Delaunay triangulation based on the stable SOURCE coordinates
   const flatSrc = new Float64Array(anchorsSrc.length * 2);
   for (let i = 0; i < anchorsSrc.length; i++) {
-    flatSrc[i * 2] = anchorsSrc[i].x;
-    flatSrc[i * 2 + 1] = anchorsSrc[i].y;
+    const pt = anchorsSrc[i]!;
+    flatSrc[i * 2] = pt.x;
+    flatSrc[i * 2 + 1] = pt.y;
   }
 
   const delaunay = new Delaunator(flatSrc);
@@ -77,20 +78,21 @@ export function warpGarment(
 
   // 2. Iterate through each triangle
   for (let i = 0; i < triangles.length; i += 3) {
-    const i0 = triangles[i];
-    const i1 = triangles[i + 1];
-    const i2 = triangles[i + 2];
+    const i0 = triangles[i]!;
+    const i1 = triangles[i + 1]!;
+    const i2 = triangles[i + 2]!;
 
-    const srcTri: [Point, Point, Point] = [
-      anchorsSrc[i0],
-      anchorsSrc[i1],
-      anchorsSrc[i2],
-    ];
-    const dstTri: [Point, Point, Point] = [
-      anchorsDst[i0],
-      anchorsDst[i1],
-      anchorsDst[i2],
-    ];
+    const s0 = anchorsSrc[i0];
+    const s1 = anchorsSrc[i1];
+    const s2 = anchorsSrc[i2];
+    const d0 = anchorsDst[i0];
+    const d1 = anchorsDst[i1];
+    const d2 = anchorsDst[i2];
+
+    if (!s0 || !s1 || !s2 || !d0 || !d1 || !d2) continue;
+
+    const srcTri: [Point, Point, Point] = [s0, s1, s2];
+    const dstTri: [Point, Point, Point] = [d0, d1, d2];
 
     const transform = computeAffineTransform(srcTri, dstTri);
     if (!transform) continue;
