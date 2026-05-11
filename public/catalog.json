@@ -5,13 +5,22 @@
     "name": "GSX-R Racing Jacket",
     "category": "top",
     "sku": "GSXR-JKT-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#1565C0"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#1565C0"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/GSXR-JKT-01.png",
     "anchorsUrl": "/garments/GSXR-JKT-01.anchors.json",
     "thumbnailUrl": "/garments/GSXR-JKT-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "GSXR-HD-02",
@@ -19,13 +28,22 @@
     "name": "GSX-R Hoodie",
     "category": "top",
     "sku": "GSXR-HD-02",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#1565C0"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#1565C0"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/GSXR-HD-02.png",
     "anchorsUrl": "/garments/GSXR-HD-02.anchors.json",
     "thumbnailUrl": "/garments/GSXR-HD-02.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "GSXR-TS-03",
@@ -33,13 +51,22 @@
     "name": "GSX-R T-Shirt",
     "category": "top",
     "sku": "GSXR-TS-03",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#000000"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#000000"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/GSXR-TS-03.png",
     "anchorsUrl": "/garments/GSXR-TS-03.anchors.json",
     "thumbnailUrl": "/garments/GSXR-TS-03.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "GSXR-PNT-04",
@@ -47,13 +74,22 @@
     "name": "GSX-R Track Pants",
     "category": "bottom",
     "sku": "GSXR-PNT-04",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#000000"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#000000"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/GSXR-PNT-04.png",
     "anchorsUrl": "/garments/GSXR-PNT-04.anchors.json",
     "thumbnailUrl": "/garments/GSXR-PNT-04.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "ECS-PL-01",
@@ -61,13 +97,22 @@
     "name": "Ecstar Team Polo",
     "category": "top",
     "sku": "ECS-PL-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#0033A0"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#0033A0"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/ECS-PL-01.png",
     "anchorsUrl": "/garments/ECS-PL-01.anchors.json",
     "thumbnailUrl": "/garments/ECS-PL-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "ECS-JKT-02",
@@ -75,13 +120,22 @@
     "name": "Ecstar Softshell",
     "category": "top",
     "sku": "ECS-JKT-02",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#0033A0"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#0033A0"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/ECS-JKT-02.png",
     "anchorsUrl": "/garments/ECS-JKT-02.anchors.json",
     "thumbnailUrl": "/garments/ECS-JKT-02.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "ECS-CP-03",
@@ -89,13 +143,22 @@
     "name": "Ecstar Cap",
     "category": "cap",
     "sku": "ECS-CP-03",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#C0C0C0"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#C0C0C0"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/ECS-CP-03.png",
     "anchorsUrl": "/garments/ECS-CP-03.anchors.json",
     "thumbnailUrl": "/garments/ECS-CP-03.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "HYB-LTH-01",
@@ -103,13 +166,22 @@
     "name": "Hayabusa Leather Jacket",
     "category": "top",
     "sku": "HYB-LTH-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#424242"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#424242"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/HYB-LTH-01.png",
     "anchorsUrl": "/garments/HYB-LTH-01.anchors.json",
     "thumbnailUrl": "/garments/HYB-LTH-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "HYB-TS-02",
@@ -117,13 +189,22 @@
     "name": "Hayabusa Logo T-Shirt",
     "category": "top",
     "sku": "HYB-TS-02",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#FFD700"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#FFD700"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/HYB-TS-02.png",
     "anchorsUrl": "/garments/HYB-TS-02.anchors.json",
     "thumbnailUrl": "/garments/HYB-TS-02.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "HYB-GLV-03",
@@ -131,13 +212,22 @@
     "name": "Hayabusa Riding Gloves",
     "category": "accessory",
     "sku": "HYB-GLV-03",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#424242"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#424242"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/HYB-GLV-03.png",
     "anchorsUrl": "/garments/HYB-GLV-03.anchors.json",
     "thumbnailUrl": "/garments/HYB-GLV-03.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "SWF-HD-01",
@@ -145,13 +235,22 @@
     "name": "Swift Sport Hoodie",
     "category": "top",
     "sku": "SWF-HD-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#FFD400"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#FFD400"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/SWF-HD-01.png",
     "anchorsUrl": "/garments/SWF-HD-01.anchors.json",
     "thumbnailUrl": "/garments/SWF-HD-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "SWF-TS-02",
@@ -159,13 +258,22 @@
     "name": "Swift Sport T-Shirt",
     "category": "top",
     "sku": "SWF-TS-02",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#FFD400"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#FFD400"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/SWF-TS-02.png",
     "anchorsUrl": "/garments/SWF-TS-02.anchors.json",
     "thumbnailUrl": "/garments/SWF-TS-02.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "JMN-VT-01",
@@ -173,13 +281,22 @@
     "name": "Jimny Adventure Vest",
     "category": "top",
     "sku": "JMN-VT-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#2E7D32"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#2E7D32"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/JMN-VT-01.png",
     "anchorsUrl": "/garments/JMN-VT-01.anchors.json",
     "thumbnailUrl": "/garments/JMN-VT-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "JMN-PN-02",
@@ -187,13 +304,22 @@
     "name": "Jimny Cargo Pants",
     "category": "bottom",
     "sku": "JMN-PN-02",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#8B7355"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#8B7355"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/JMN-PN-02.png",
     "anchorsUrl": "/garments/JMN-PN-02.anchors.json",
     "thumbnailUrl": "/garments/JMN-PN-02.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "MAR-TS-01",
@@ -201,13 +327,22 @@
     "name": "Suzuki Marine Tee",
     "category": "top",
     "sku": "MAR-TS-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#1A237E"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#1A237E"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/MAR-TS-01.png",
     "anchorsUrl": "/garments/MAR-TS-01.anchors.json",
     "thumbnailUrl": "/garments/MAR-TS-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   },
   {
     "id": "LFS-JKT-01",
@@ -215,12 +350,21 @@
     "name": "Suzuki Urban Jacket",
     "category": "top",
     "sku": "LFS-JKT-01",
-    "sizes": ["S", "M", "L", "XL"],
-    "colors": ["#424242"],
+    "sizes": [
+      "S",
+      "M",
+      "L",
+      "XL"
+    ],
+    "colors": [
+      "#424242"
+    ],
     "priceCents": 5900,
     "overlayUrl": "/garments/LFS-JKT-01.png",
     "anchorsUrl": "/garments/LFS-JKT-01.anchors.json",
     "thumbnailUrl": "/garments/LFS-JKT-01.png",
-    "badges": ["NEW"]
+    "badges": [
+      "NEW"
+    ]
   }
 ]
