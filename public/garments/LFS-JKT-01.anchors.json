@@ -6,8 +6,8 @@
     {
       "id": "shoulderL",
       "landmarkIndex": 11,
-      "overlayX": 256,
-      "overlayY": 240,
+      "overlayX": 200,
+      "overlayY": 260,
       "offset": {
         "x": 0,
         "y": -0.02
@@ -16,8 +16,8 @@
     {
       "id": "shoulderR",
       "landmarkIndex": 12,
-      "overlayX": 768,
-      "overlayY": 240,
+      "overlayX": 824,
+      "overlayY": 260,
       "offset": {
         "x": 0,
         "y": -0.02
@@ -26,8 +26,8 @@
     {
       "id": "hipL",
       "landmarkIndex": 23,
-      "overlayX": 320,
-      "overlayY": 800,
+      "overlayX": 280,
+      "overlayY": 820,
       "offset": {
         "x": 0,
         "y": 0
@@ -36,8 +36,28 @@
     {
       "id": "hipR",
       "landmarkIndex": 24,
-      "overlayX": 704,
-      "overlayY": 800,
+      "overlayX": 744,
+      "overlayY": 820,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "elbowL",
+      "landmarkIndex": 13,
+      "overlayX": 130,
+      "overlayY": 420,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "elbowR",
+      "landmarkIndex": 14,
+      "overlayX": 894,
+      "overlayY": 420,
       "offset": {
         "x": 0,
         "y": 0

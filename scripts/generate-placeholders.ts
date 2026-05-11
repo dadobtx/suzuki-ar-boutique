@@ -172,8 +172,8 @@ async function generateAssets() {
         <path d="M 320 200 L 704 200 L 730 850 L 294 850 Z" fill="url(#grid-${item.sku})" />
         
         <!-- Sleeves -->
-        <path d="M 320 200 L 100 400 L 150 450 L 300 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
-        <path d="M 704 200 L 924 400 L 874 450 L 724 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
+        <path d="M 320 200 L 130 420 L 180 470 L 300 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
+        <path d="M 704 200 L 894 420 L 844 470 L 724 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
         
         <!-- Neck cutout -->
         <ellipse cx="512" cy="200" rx="80" ry="40" fill="transparent" stroke="white" stroke-width="8"/>
@@ -187,17 +187,23 @@ async function generateAssets() {
         </text>
         
         <!-- Anchor markers (for visual debugging) -->
-        <circle cx="256" cy="240" r="12" fill="red" />
-        <text x="256" y="220" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">ShoulderL</text>
+        <circle cx="200" cy="260" r="12" fill="red" />
+        <text x="200" y="240" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">ShoulderL</text>
         
-        <circle cx="768" cy="240" r="12" fill="red" />
-        <text x="768" y="220" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">ShoulderR</text>
+        <circle cx="824" cy="260" r="12" fill="red" />
+        <text x="824" y="240" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">ShoulderR</text>
 
-        <circle cx="320" cy="800" r="12" fill="red" />
-        <text x="320" y="820" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">HipL</text>
+        <circle cx="280" cy="820" r="12" fill="red" />
+        <text x="280" y="840" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">HipL</text>
 
-        <circle cx="704" cy="800" r="12" fill="red" />
-        <text x="704" y="820" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">HipR</text>
+        <circle cx="744" cy="820" r="12" fill="red" />
+        <text x="744" y="840" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">HipR</text>
+
+        <circle cx="130" cy="420" r="12" fill="red" />
+        <text x="130" y="400" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">ElbowL</text>
+
+        <circle cx="894" cy="420" r="12" fill="red" />
+        <text x="894" y="400" font-family="sans-serif" font-size="16" fill="red" text-anchor="middle">ElbowR</text>
       </svg>
     `;
 
@@ -212,29 +218,43 @@ async function generateAssets() {
         {
           id: 'shoulderL',
           landmarkIndex: 11,
-          overlayX: 256,
-          overlayY: 240,
+          overlayX: 200,
+          overlayY: 260,
           offset: { x: 0, y: -0.02 },
         },
         {
           id: 'shoulderR',
           landmarkIndex: 12,
-          overlayX: 768,
-          overlayY: 240,
+          overlayX: 824,
+          overlayY: 260,
           offset: { x: 0, y: -0.02 },
         },
         {
           id: 'hipL',
           landmarkIndex: 23,
-          overlayX: 320,
-          overlayY: 800,
+          overlayX: 280,
+          overlayY: 820,
           offset: { x: 0, y: 0 },
         },
         {
           id: 'hipR',
           landmarkIndex: 24,
-          overlayX: 704,
-          overlayY: 800,
+          overlayX: 744,
+          overlayY: 820,
+          offset: { x: 0, y: 0 },
+        },
+        {
+          id: 'elbowL',
+          landmarkIndex: 13,
+          overlayX: 130,
+          overlayY: 420,
+          offset: { x: 0, y: 0 },
+        },
+        {
+          id: 'elbowR',
+          landmarkIndex: 14,
+          overlayX: 894,
+          overlayY: 420,
           offset: { x: 0, y: 0 },
         },
       ],

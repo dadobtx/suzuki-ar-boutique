@@ -372,9 +372,16 @@ export function useGarmentRenderer(
 
       setValidAnchors(validAnchorsList.length + estimatedAnchors);
 
-      // c. Build anchor arrays
+      // c. Build anchor arrays (criticals + valid non-criticals)
       const anchorsSrc = allCriticals.map((a) => a!.srcPt);
       const anchorsDst = allCriticals.map((a) => a!.dstPt);
+
+      for (const v of validAnchorsList) {
+        if (!v.isCritical) {
+          anchorsSrc.push(v.srcPt);
+          anchorsDst.push(v.dstPt);
+        }
+      }
 
       // d. Extrapolate corners to draw the full garment (sleeves, neck) instead of clipping to torso
       const s0 = criticalsById.shoulderL?.srcPt;
