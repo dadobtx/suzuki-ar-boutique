@@ -4,7 +4,12 @@ import type { NormalizedLandmark } from '@/types/pose';
 import type { Garment, GarmentAnchorsFile } from '@/types/garment';
 import type { Point } from '@/lib/garment-warping';
 import { warpGarment } from '@/lib/garment-warping';
-import { computeCropOffset, videoToCss } from '@/lib/center-crop';
+import {
+  computeCropOffset,
+  videoToCss,
+  computeContainOffset,
+  videoToCssContain,
+} from '@/lib/center-crop';
 import { useGarmentStore } from '@/store/garment';
 
 // ── Cache for loaded garment assets ──
@@ -94,6 +99,20 @@ export function useGarmentRenderer(
   const activeSkuRef = useRef<string | null>(null);
   const callbackIdRef = useRef(0);
   const activeRef = useRef(false);
+
+  // FIX 2: Rolling visibility buffer (5 frames) per landmark index
+  const visibilityBufferRef = useRef<Map<number, number[]>>(new Map());
+
+  function smoothedVisibility(landmarkIndex: number, current: number): number {
+    let buf = visibilityBufferRef.current.get(landmarkIndex);
+    if (!buf) {
+      buf = [];
+      visibilityBufferRef.current.set(landmarkIndex, buf);
+    }
+    buf.push(current);
+    if (buf.length > 5) buf.shift();
+    return buf.reduce((a, b) => a + b, 0) / buf.length;
+  }
 
   // Snapshot refs for frame callback (avoids stale closures)
   const landmarksRef = useRef(landmarks);
@@ -210,10 +229,23 @@ export function useGarmentRenderer(
         isCritical: boolean;
       }> = [];
 
+      // FIX 1: Compute contain fit for landscape
+      const containFit = computeContainOffset(
+        videoWidth,
+        videoHeight,
+        cssWidth,
+        cssHeight,
+      );
+
       for (const anchor of anchorsData.anchors) {
         const landmark = lm[anchor.landmarkIndex];
         if (!landmark) continue;
-        if ((landmark.visibility ?? 0) < VISIBILITY_THRESHOLD) continue;
+        // FIX 2: Use smoothed visibility instead of instantaneous
+        const smoothedVis = smoothedVisibility(
+          anchor.landmarkIndex,
+          landmark.visibility ?? 0,
+        );
+        if (smoothedVis < VISIBILITY_THRESHOLD) continue;
 
         // Source point: pixel position in the overlay image
         const srcPt: Point = {
@@ -230,15 +262,8 @@ export function useGarmentRenderer(
         if (layoutRef.current === 'portrait') {
           cssPt = videoToCss(lmVideoX, lmVideoY, crop);
         } else {
-          // Contain mapping (landscape)
-          const drawW = videoWidth * crop.scale;
-          const drawH = videoHeight * crop.scale;
-          const drawX = (cssWidth - drawW) / 2;
-          const drawY = (cssHeight - drawH) / 2;
-          cssPt = {
-            x: drawX + lmVideoX * crop.scale,
-            y: drawY + lmVideoY * crop.scale,
-          };
+          // FIX 1: Contain mapping (landscape) — use proper contain math
+          cssPt = videoToCssContain(lmVideoX, lmVideoY, containFit);
         }
 
         validAnchorsList.push({
@@ -314,11 +339,20 @@ export function useGarmentRenderer(
               cssHeight,
             );
           } else {
-            const drawW = videoWidth * crop.scale;
-            const drawH = videoHeight * crop.scale;
-            const drawX = (cssWidth - drawW) / 2;
-            const drawY = (cssHeight - drawH) / 2;
-            ctx.drawImage(offscreen, drawX, drawY, drawW, drawH);
+            // FIX 1: Use contain fit for landscape mask compositing
+            const maskFit = computeContainOffset(
+              videoWidth,
+              videoHeight,
+              cssWidth,
+              cssHeight,
+            );
+            ctx.drawImage(
+              offscreen,
+              maskFit.drawX,
+              maskFit.drawY,
+              maskFit.drawW,
+              maskFit.drawH,
+            );
           }
 
           ctx.restore();

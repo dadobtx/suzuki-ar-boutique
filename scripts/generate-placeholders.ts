@@ -156,23 +156,33 @@ async function generateAssets() {
       <svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
         <!-- Transparent background -->
         <rect width="1024" height="1024" fill="transparent" />
+
+        <defs>
+          <!-- Grid pattern for unambiguous identification -->
+          <pattern id="grid-${item.sku}" patternUnits="userSpaceOnUse" width="64" height="64">
+            <path d="M 64 0 L 0 0 0 64" fill="none" stroke="white" stroke-opacity="0.15" stroke-width="1"/>
+            <path d="M 0 0 L 64 64" fill="none" stroke="white" stroke-opacity="0.1" stroke-width="1"/>
+          </pattern>
+        </defs>
         
         <!-- Garment Body (T-pose approx) -->
         <!-- Torso -->
-        <path d="M 320 200 L 704 200 L 730 850 L 294 850 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="4"/>
+        <path d="M 320 200 L 704 200 L 730 850 L 294 850 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
+        <!-- Grid overlay inside torso -->
+        <path d="M 320 200 L 704 200 L 730 850 L 294 850 Z" fill="url(#grid-${item.sku})" />
         
         <!-- Sleeves -->
-        <path d="M 320 200 L 100 400 L 150 450 L 300 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="4"/>
-        <path d="M 704 200 L 924 400 L 874 450 L 724 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="4"/>
+        <path d="M 320 200 L 100 400 L 150 450 L 300 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
+        <path d="M 704 200 L 924 400 L 874 450 L 724 350 Z" fill="${item.color}" fill-opacity="0.9" stroke="white" stroke-width="8"/>
         
         <!-- Neck cutout -->
-        <ellipse cx="512" cy="200" rx="80" ry="40" fill="transparent" stroke="white" stroke-width="4"/>
+        <ellipse cx="512" cy="200" rx="80" ry="40" fill="transparent" stroke="white" stroke-width="8"/>
 
         <!-- Text Label -->
-        <text x="512" y="500" font-family="monospace" font-size="48" fill="white" font-weight="bold" text-anchor="middle" dominant-baseline="middle">
+        <text x="512" y="480" font-family="monospace" font-size="64" fill="white" font-weight="bold" text-anchor="middle" dominant-baseline="middle">
           ${item.line}
         </text>
-        <text x="512" y="560" font-family="monospace" font-size="32" fill="white" text-anchor="middle" dominant-baseline="middle">
+        <text x="512" y="560" font-family="monospace" font-size="48" fill="white" text-anchor="middle" dominant-baseline="middle">
           ${item.sku}
         </text>
         

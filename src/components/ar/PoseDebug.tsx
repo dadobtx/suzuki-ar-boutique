@@ -2,7 +2,12 @@ import { useEffect } from 'react';
 import type { RefObject } from 'react';
 import { PoseLandmarker } from '@mediapipe/tasks-vision';
 import type { NormalizedLandmark } from '@/types/pose';
-import { computeCropOffset, videoToCss } from '@/lib/center-crop';
+import {
+  computeCropOffset,
+  videoToCss,
+  computeContainOffset,
+  videoToCssContain,
+} from '@/lib/center-crop';
 
 interface PoseDebugProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -98,24 +103,14 @@ export function PoseDebug({
               cssHeight, // Dest
             );
           } else {
-            // Contain (landscape typically has objectFit contain)
-            // Wait, if it's contain, the video is letterboxed. We need exact video bounds.
-            // computeCropOffset returns scale. We can just use that.
-            // If cropX is 0, video is letterboxed horizontally or vertically.
-            // But computeCropOffset assumes cover.
-            // The instructions say "En portrait con object-fit:cover... Re-usar la lógica".
-            // For landscape, if object-fit is contain, we need to map native video to contain box.
-            // Let's assume CameraStage landscape fills the container perfectly or we handle it simply:
-            // If layout === 'landscape', objectFit is 'contain', so we just draw over the CSS space.
-            // But video might have black bars! To keep it simple, let's just draw over the exact video rect.
-            // The user only requested crop logic for portrait: "En portrait con object-fit:cover... Hay que aplicar cropX".
-            // Let's use the simplest bounding box for landscape.
-            const drawW = videoWidth * crop.scale;
-            const drawH = videoHeight * crop.scale;
-            const drawX = (cssWidth - drawW) / 2;
-            const drawY = (cssHeight - drawH) / 2;
-
-            ctx.drawImage(offscreen, drawX, drawY, drawW, drawH);
+            // FIX 1: Use proper contain math for landscape
+            const fit = computeContainOffset(
+              videoWidth,
+              videoHeight,
+              cssWidth,
+              cssHeight,
+            );
+            ctx.drawImage(offscreen, fit.drawX, fit.drawY, fit.drawW, fit.drawH);
           }
           ctx.restore();
         }
@@ -138,15 +133,9 @@ export function PoseDebug({
         if (layout === 'portrait') {
           return videoToCss(vx, vy, crop);
         } else {
-          // Contain mapping
-          const drawW = videoWidth * crop.scale;
-          const drawH = videoHeight * crop.scale;
-          const drawX = (cssWidth - drawW) / 2;
-          const drawY = (cssHeight - drawH) / 2;
-          return {
-            x: drawX + vx * crop.scale,
-            y: drawY + vy * crop.scale,
-          };
+          // FIX 1: Use proper contain math for landscape
+          const fit = computeContainOffset(videoWidth, videoHeight, cssWidth, cssHeight);
+          return videoToCssContain(vx, vy, fit);
         }
       };
 

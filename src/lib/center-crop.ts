@@ -82,3 +82,58 @@ export function videoToCss(
     y: videoY * crop.scale,
   };
 }
+
+// ── Contain-fit helpers (for landscape mode with object-fit: contain) ──
+
+export interface ContainResult {
+  /** CSS-px per native video pixel */
+  scale: number;
+  /** Horizontal offset to center the video (letterbox padding) */
+  drawX: number;
+  /** Vertical offset to center the video (letterbox padding) */
+  drawY: number;
+  /** Rendered width in CSS pixels */
+  drawW: number;
+  /** Rendered height in CSS pixels */
+  drawH: number;
+}
+
+/**
+ * Compute "contain" fit metrics for landscape mode.
+ * The video preserves aspect, fits inside container with letterboxing.
+ */
+export function computeContainOffset(
+  videoWidth: number,
+  videoHeight: number,
+  containerWidth: number,
+  containerHeight: number,
+): ContainResult {
+  if (
+    videoWidth <= 0 ||
+    videoHeight <= 0 ||
+    containerWidth <= 0 ||
+    containerHeight <= 0
+  ) {
+    return { scale: 1, drawX: 0, drawY: 0, drawW: videoWidth, drawH: videoHeight };
+  }
+  const scale = Math.min(containerWidth / videoWidth, containerHeight / videoHeight);
+  const drawW = videoWidth * scale;
+  const drawH = videoHeight * scale;
+  const drawX = (containerWidth - drawW) / 2;
+  const drawY = (containerHeight - drawH) / 2;
+  return { scale, drawX, drawY, drawW, drawH };
+}
+
+/**
+ * Convert video coords to CSS canvas coords for contain layout.
+ */
+export function videoToCssContain(
+  videoX: number,
+  videoY: number,
+  fit: ContainResult,
+): { x: number; y: number } {
+  return {
+    x: fit.drawX + videoX * fit.scale,
+    y: fit.drawY + videoY * fit.scale,
+  };
+}
