@@ -340,7 +340,13 @@ export function useGarmentRenderer(
         const sR = criticalsById.shoulderR.dstPt;
         const shoulderWidth = Math.hypot(sR.x - sL.x, sR.y - sL.y);
         const torsoHeight = shoulderWidth * 1.4;
-        const angle = Math.atan2(sR.y - sL.y, sR.x - sL.x) + Math.PI / 2;
+        
+        // sL is left shoulder, sR is right shoulder.
+        // We want a vector perpendicular to the shoulder line, pointing DOWN the torso.
+        // Since canvas Y goes down, pointing down means increasing Y.
+        // Vector sR - sL goes from left to right shoulder.
+        // We need to rotate this vector by 90 degrees.
+        const angle = Math.atan2(sR.y - sL.y, sR.x - sL.x) - Math.PI / 2;
         const dx = Math.cos(angle) * torsoHeight;
         const dy = Math.sin(angle) * torsoHeight;
         criticalsById.hipL = {

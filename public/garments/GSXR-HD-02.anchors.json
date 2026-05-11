@@ -4,8 +4,8 @@
   "overlayHeight": 1024,
   "anchors": [
     {
-      "id": "shoulderL",
-      "landmarkIndex": 11,
+      "id": "shoulderR",
+      "landmarkIndex": 12,
       "overlayX": 256,
       "overlayY": 240,
       "offset": {
@@ -14,8 +14,8 @@
       }
     },
     {
-      "id": "shoulderR",
-      "landmarkIndex": 12,
+      "id": "shoulderL",
+      "landmarkIndex": 11,
       "overlayX": 768,
       "overlayY": 240,
       "offset": {
@@ -24,8 +24,8 @@
       }
     },
     {
-      "id": "hipL",
-      "landmarkIndex": 23,
+      "id": "hipR",
+      "landmarkIndex": 24,
       "overlayX": 320,
       "overlayY": 800,
       "offset": {
@@ -34,8 +34,8 @@
       }
     },
     {
-      "id": "hipR",
-      "landmarkIndex": 24,
+      "id": "hipL",
+      "landmarkIndex": 23,
       "overlayX": 704,
       "overlayY": 800,
       "offset": {
