@@ -8,9 +8,10 @@ import { usePose } from '@/hooks/usePose';
 import { usePresence } from '@/hooks/usePresence';
 import { useGarmentStore } from '@/store/garment';
 import { CameraView } from './CameraView';
-import { HudFrame, HudCorners } from '@/components/hud';
+import { HudCorners } from '@/components/hud';
 import { PoseDebug } from '@/components/ar/PoseDebug';
 import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
+import { CatalogPanel } from '@/components/catalog';
 
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
@@ -55,7 +56,7 @@ export function CameraStage() {
   // Dev drawer visibility
   const showDevDrawer = useMemo(() => {
     if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).has('dev');
+    return new URLSearchParams(window.location.search).get('dev') === '1';
   }, []);
 
   // Active garment SKU
@@ -213,23 +214,9 @@ export function CameraStage() {
         )}
       </div>
 
-      {/* ── Catalog placeholder ── */}
-      <div className="bg-surface flex items-center justify-center p-4 overflow-hidden">
-        <HudFrame
-          variant="muted"
-          corners={false}
-          className="w-full h-full max-h-full flex items-center justify-center p-6"
-          id="catalog-placeholder"
-        >
-          <div className="text-center space-y-2">
-            <div className="font-display text-2xl text-fg-muted">
-              {t('catalog.placeholder')}
-            </div>
-            <div className="font-mono text-hud-xs text-fg-muted/50">
-              {t('catalog.comingSoon')}
-            </div>
-          </div>
-        </HudFrame>
+      {/* ── Catalog Panel ── */}
+      <div className="bg-surface flex items-center justify-center overflow-hidden">
+        <CatalogPanel />
       </div>
     </div>
   );
