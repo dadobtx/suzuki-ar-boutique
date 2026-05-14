@@ -117,5 +117,23 @@
     "cameraFeed": "Live camera feed",
     "garmentOverlay": "Garment overlay",
     "catalogGrid": "Garment catalog grid"
+  },
+  "kiosk": {
+    "attract": {
+      "cta": "STEP CLOSER TO START"
+    },
+    "awakening": {
+      "greeting": "I SEE YOU"
+    },
+    "calibration": {
+      "instruction": "STAY IN THE FRAME"
+    },
+    "cooldown": {
+      "title": "ARE YOU STILL THERE?",
+      "stay": "STAY"
+    },
+    "recovery": {
+      "message": "RESTARTING..."
+    }
   }
 }

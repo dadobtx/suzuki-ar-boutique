@@ -12,6 +12,7 @@ import { HudCorners } from '@/components/hud';
 import { PoseDebug } from '@/components/ar/PoseDebug';
 import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { CatalogPanel } from '@/components/catalog';
+import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
@@ -20,7 +21,7 @@ import { CatalogPanel } from '@/components/catalog';
  *   landscape: grid-cols [70% video | 30% catalog]
  *   portrait:  grid-rows [65% video center-cropped | 35% catalog]
  */
-export function CameraStage() {
+export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const { t } = useTranslation();
   const { layout } = useLayout();
   const camera = useCamera();
@@ -38,6 +39,7 @@ export function CameraStage() {
   // Phase 3: Pose & Presence
   const pose = usePose(camera.videoRef);
   const presence = usePresence(pose.landmarks);
+  useKioskPresenceSync(presence);
 
   // Phase 4: Garment catalog
   const loadCatalog = useGarmentStore((s) => s.loadCatalog);
@@ -85,7 +87,7 @@ export function CameraStage() {
   };
 
   const isPortrait = layout === 'portrait';
-  const garmentActive = camera.status === 'granted' && presence === 'present';
+  const garmentActive = isActive && camera.status === 'granted' && presence === 'present';
 
   // Presence Badge Color
   const presenceColors: Record<string, string> = {
@@ -216,7 +218,7 @@ export function CameraStage() {
 
       {/* ── Catalog Panel ── */}
       <div className="bg-surface flex items-center justify-center overflow-hidden">
-        <CatalogPanel />
+        {isActive && <CatalogPanel />}
       </div>
     </div>
   );

@@ -8,6 +8,7 @@ import { usePose } from '@/hooks/usePose';
 import { usePresence } from '@/hooks/usePresence';
 import { useDebugToggle } from '@/hooks/useDebugToggle';
 import { useGarmentStore } from '@/store/garment';
+import { useKioskStore } from '@/store/kiosk';
 import { HudFrame, NeonButton } from '@/components/hud';
 
 /**
@@ -38,6 +39,17 @@ export function DiagPage() {
   useEffect(() => {
     if (catalog.length === 0) loadCatalog();
   }, [catalog.length, loadCatalog]);
+
+  const kioskState = useKioskStore((s) => s.state);
+  const kioskStartTime = useKioskStore((s) => s.stateStartTime);
+  const kioskTransition = useKioskStore((s) => s.transition);
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const kioskTimeSec = Math.floor((now - kioskStartTime) / 1000);
+  const isKioskMode = new URLSearchParams(window.location.search).get('kiosk') === '1';
 
   const handleCycleGarment = useCallback(() => {
     if (catalog.length === 0) return;
@@ -303,6 +315,55 @@ export function DiagPage() {
             <NeonButton variant="cyan" size="sm" onClick={handleCycleGarment}>
               {t('diag.cycleGarment')}
             </NeonButton>
+          </div>
+        </HudFrame>
+
+        {/* ── Kiosk ── */}
+        <HudFrame className="p-4" variant="cyan" id="diag-kiosk">
+          <h2 className="font-display text-xl text-accent-cyan mb-3">KIOSKO</h2>
+          <div className="space-y-4">
+            <DiagTable
+              rows={[
+                ['STATE', kioskState],
+                ['TIME IN STATE', `${kioskTimeSec}s`],
+                ['MODE', isKioskMode ? 'KIOSK' : 'DEV'],
+              ]}
+            />
+
+            <div className="flex flex-wrap gap-2 pt-2 border-t border-surface-2 mt-3">
+              <NeonButton
+                variant="cyan"
+                size="sm"
+                onClick={() => kioskTransition('ATTRACT')}
+              >
+                Force ATTRACT
+              </NeonButton>
+              <NeonButton
+                variant="cyan"
+                size="sm"
+                onClick={() => kioskTransition('TRYON')}
+              >
+                Force TRYON
+              </NeonButton>
+              <NeonButton
+                variant="yellow"
+                size="sm"
+                onClick={() => kioskTransition('COOLDOWN')}
+              >
+                Force COOLDOWN
+              </NeonButton>
+            </div>
+
+            <div className="pt-2">
+              <a
+                href={
+                  isKioskMode ? '/suzuki-ar-boutique/' : '/suzuki-ar-boutique/?kiosk=1'
+                }
+                className="font-mono text-xs text-accent-cyan hover:underline"
+              >
+                {isKioskMode ? 'Desactivar Modo Kiosko' : 'Activar Modo Kiosko'}
+              </a>
+            </div>
           </div>
         </HudFrame>
       </div>

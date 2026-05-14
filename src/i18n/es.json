@@ -117,5 +117,23 @@
     "cameraFeed": "Vista de cámara en vivo",
     "garmentOverlay": "Superposición de prenda",
     "catalogGrid": "Grilla de catálogo de prendas"
+  },
+  "kiosk": {
+    "attract": {
+      "cta": "ACÉRCATE PARA EMPEZAR"
+    },
+    "awakening": {
+      "greeting": "TE VEO"
+    },
+    "calibration": {
+      "instruction": "MANTENTE EN EL MARCO"
+    },
+    "cooldown": {
+      "title": "¿SIGUES AHÍ?",
+      "stay": "QUEDATE"
+    },
+    "recovery": {
+      "message": "REINICIANDO..."
+    }
   }
 }
