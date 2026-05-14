@@ -16,6 +16,7 @@
     "build-storybook": "storybook build",
     "download-models": "tsx scripts/download-models.ts",
     "generate-placeholders": "tsx scripts/generate-placeholders.ts",
+    "integrate-real-garments": "tsx scripts/integrate-real-garments.ts",
     "prepare": "husky"
   },
   "dependencies": {

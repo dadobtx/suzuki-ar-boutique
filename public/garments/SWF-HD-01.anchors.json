@@ -1,13 +1,13 @@
 {
   "overlay": "/garments/SWF-HD-01.png",
-  "overlayWidth": 1024,
-  "overlayHeight": 1024,
+  "overlayWidth": 1512,
+  "overlayHeight": 1512,
   "anchors": [
     {
       "id": "shoulderL",
       "landmarkIndex": 11,
-      "overlayX": 200,
-      "overlayY": 260,
+      "overlayX": 295,
+      "overlayY": 384,
       "offset": {
         "x": 0,
         "y": -0.02
@@ -16,8 +16,8 @@
     {
       "id": "shoulderR",
       "landmarkIndex": 12,
-      "overlayX": 824,
-      "overlayY": 260,
+      "overlayX": 1217,
+      "overlayY": 384,
       "offset": {
         "x": 0,
         "y": -0.02
@@ -26,8 +26,8 @@
     {
       "id": "hipL",
       "landmarkIndex": 23,
-      "overlayX": 280,
-      "overlayY": 820,
+      "overlayX": 413,
+      "overlayY": 1211,
       "offset": {
         "x": 0,
         "y": 0
@@ -36,8 +36,8 @@
     {
       "id": "hipR",
       "landmarkIndex": 24,
-      "overlayX": 744,
-      "overlayY": 820,
+      "overlayX": 1099,
+      "overlayY": 1211,
       "offset": {
         "x": 0,
         "y": 0
@@ -46,8 +46,8 @@
     {
       "id": "elbowL",
       "landmarkIndex": 13,
-      "overlayX": 130,
-      "overlayY": 420,
+      "overlayX": 192,
+      "overlayY": 620,
       "offset": {
         "x": 0,
         "y": 0
@@ -56,8 +56,8 @@
     {
       "id": "elbowR",
       "landmarkIndex": 14,
-      "overlayX": 894,
-      "overlayY": 420,
+      "overlayX": 1320,
+      "overlayY": 620,
       "offset": {
         "x": 0,
         "y": 0

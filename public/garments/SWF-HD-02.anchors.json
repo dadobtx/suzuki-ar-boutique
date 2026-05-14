@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/SWF-HD-02.png",
+  "overlayWidth": 1512,
+  "overlayHeight": 1512,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 378,
+      "overlayY": 354,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 1134,
+      "overlayY": 354,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 473,
+      "overlayY": 1181,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 1040,
+      "overlayY": 1181,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

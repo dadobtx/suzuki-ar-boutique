@@ -143,13 +143,50 @@ const ITEMS = [
 ];
 
 async function generateAssets() {
-  console.log(`Generating ${ITEMS.length} placeholders...`);
+  console.log(`Generating placeholders (skipping SKUs with real images)...`);
+
+  // Umbral en bytes para detectar imagen real vs placeholder.
+  // Los placeholders SVG generados por este script pesan ~10-30 KB.
+  // Las imágenes reales procesadas (1512×1512 transparente) pesan 100+ KB.
+  const REAL_IMAGE_MIN_BYTES = 50 * 1024;
 
   const catalog = [];
 
   for (const item of ITEMS) {
     const pngPath = path.join(GARMENTS_DIR, `${item.sku}.png`);
     const anchorsPath = path.join(GARMENTS_DIR, `${item.sku}.anchors.json`);
+
+    // Detectar si ya hay imagen real para este SKU
+    let hasRealImage = false;
+    if (fs.existsSync(pngPath)) {
+      const stat = fs.statSync(pngPath);
+      if (stat.size > REAL_IMAGE_MIN_BYTES) {
+        hasRealImage = true;
+        console.log(
+          `  ⊘ Skip ${item.sku} — imagen real detectada (${Math.round(stat.size / 1024)}KB)`,
+        );
+      }
+    }
+
+    // Si hay imagen real, NO regenerar PNG ni anchors (preservamos lo que ya está integrado)
+    if (hasRealImage) {
+      // Pero sí agregamos la entry al catálogo para que no desaparezca
+      catalog.push({
+        id: item.sku,
+        line: item.line,
+        name: item.name,
+        category: item.category,
+        sku: item.sku,
+        sizes: ['S', 'M', 'L', 'XL'],
+        colors: [item.color],
+        priceCents: 5900,
+        overlayUrl: `/garments/${item.sku}.png`,
+        anchorsUrl: `/garments/${item.sku}.anchors.json`,
+        thumbnailUrl: `/garments/${item.sku}.png`,
+        badges: ['NEW'],
+      });
+      continue;
+    }
 
     // 1. Generate SVG -> PNG with sharp
     const svg = `
@@ -279,11 +316,29 @@ async function generateAssets() {
     });
   }
 
-  // 4. Write catalog.json
+  // 4. Write catalog.json — MERGE con entradas existentes (preserva SKUs
+  //    nuevos agregados por integrate-real-garments u otros scripts)
   const catalogPath = path.join(PUBLIC_DIR, 'catalog.json');
-  fs.writeFileSync(catalogPath, JSON.stringify(catalog, null, 2));
+  let existingCatalog: typeof catalog = [];
+  if (fs.existsSync(catalogPath)) {
+    try {
+      existingCatalog = JSON.parse(fs.readFileSync(catalogPath, 'utf-8'));
+    } catch {
+      existingCatalog = [];
+    }
+  }
 
-  console.log('✅ Generated 16 garments and catalog.json successfully.');
+  // SKUs que este script maneja (los 16 base)
+  const managedSkus = new Set(catalog.map((c) => c.sku));
+  // Preservar entradas existentes cuyos SKUs NO están en los 16 base
+  const extraEntries = existingCatalog.filter((c) => !managedSkus.has(c.sku));
+
+  const mergedCatalog = [...catalog, ...extraEntries];
+  fs.writeFileSync(catalogPath, JSON.stringify(mergedCatalog, null, 2));
+
+  console.log(
+    `✅ Catálogo escrito: ${catalog.length} base + ${extraEntries.length} preservados = ${mergedCatalog.length} total`,
+  );
 }
 
 generateAssets().catch(console.error);
