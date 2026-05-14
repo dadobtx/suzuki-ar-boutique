@@ -13,6 +13,9 @@ import { PoseDebug } from '@/components/ar/PoseDebug';
 import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { CatalogPanel } from '@/components/catalog';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
+import { useKioskStore } from '@/store/kiosk';
+import { Camera as CameraIcon } from 'lucide-react';
+import { PhotoCountdown } from '@/components/kiosk';
 
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
@@ -40,6 +43,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const pose = usePose(camera.videoRef);
   const presence = usePresence(pose.landmarks);
   useKioskPresenceSync(presence);
+
+  const transition = useKioskStore((s) => s.transition);
+  const kioskState = useKioskStore((s) => s.state);
 
   // Phase 4: Garment catalog
   const loadCatalog = useGarmentStore((s) => s.loadCatalog);
@@ -213,6 +219,27 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               ✗ Clear
             </button>
           </div>
+        )}
+
+        {/* Shoot Photo Button (z-index 40) */}
+        {garmentActive && (
+          <button
+            onClick={() => transition('PHOTO_COUNTDOWN')}
+            className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform z-40 border-4 border-white/20"
+          >
+            <CameraIcon size={48} />
+            <span className="font-display tracking-widest text-sm mt-1 uppercase">
+              {t('photo.shoot', 'DISPARAR')}
+            </span>
+          </button>
+        )}
+
+        {/* Photo Countdown Overlay (z-index 50) */}
+        {kioskState === 'PHOTO_COUNTDOWN' && (
+          <PhotoCountdown
+            videoRef={camera.videoRef}
+            overlayCanvasRef={overlayCanvasRef}
+          />
         )}
       </div>
 

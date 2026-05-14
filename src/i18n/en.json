@@ -135,5 +135,19 @@
     "recovery": {
       "message": "RESTARTING..."
     }
+  },
+  "photo": {
+    "shoot": "Take photo",
+    "countdown": {
+      "message": "Hold still"
+    },
+    "share": {
+      "title": "Your look is ready",
+      "subtitle": "Scan the QR to save to your phone",
+      "wishlistHint": "Wishlist code · show to the staff",
+      "again": "Try another",
+      "download": "Download PNG",
+      "finish": "Finish"
+    }
   }
 }

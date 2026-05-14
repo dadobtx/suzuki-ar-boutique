@@ -1,0 +1,105 @@
+import { useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { QRCodeSVG } from 'qrcode.react';
+import { useKioskStore } from '@/store/kiosk';
+import { usePhotoStore } from '@/store/photo';
+
+export function PhotoShare() {
+  const { t } = useTranslation();
+  const transition = useKioskStore((s) => s.transition);
+
+  const photoComposed = usePhotoStore((s) => s.currentPhotoComposed);
+  const wishlistCode = usePhotoStore((s) => s.currentWishlistCode);
+
+  // Auto-timeout
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      transition('ATTRACT');
+    }, 60000);
+    return () => clearTimeout(timer);
+  }, [transition]);
+
+  if (!photoComposed) {
+    return null;
+  }
+
+  const handleDownload = () => {
+    const a = document.createElement('a');
+    a.href = photoComposed;
+    a.download = `suzuki-look-${wishlistCode}.jpg`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+  };
+
+  return (
+    <div className="absolute inset-0 z-50 bg-bg text-fg flex flex-col">
+      {/* Top 60%: Photo */}
+      <div className="h-[60%] w-full flex items-center justify-center p-8 bg-black relative">
+        <div className="relative h-full aspect-[9/16] border border-accent-cyan/50 p-2 clip-hud">
+          <img src={photoComposed} alt="Tu look" className="w-full h-full object-cover" />
+        </div>
+      </div>
+
+      {/* Bottom 40%: Controls */}
+      <div className="h-[40%] w-full flex flex-col items-center justify-center p-8 gap-6 bg-surface">
+        <div className="text-center">
+          <h2 className="font-display text-4xl text-white mb-2 tracking-wide">
+            {t('photo.share.title', 'TU LOOK ESTÁ LISTO')}
+          </h2>
+          <p className="font-mono text-sm text-fg-muted">
+            {t('photo.share.subtitle', 'Escaneá el QR para llevártela al móvil')}
+          </p>
+        </div>
+
+        <div className="flex items-center gap-12">
+          {/* QR Code */}
+          <div className="bg-white p-4 rounded-lg shadow-[0_0_20px_rgba(230,0,18,0.3)]">
+            <QRCodeSVG
+              value={photoComposed}
+              size={160}
+              level="H"
+              fgColor="#E60012"
+              bgColor="#ffffff"
+            />
+          </div>
+
+          <div className="flex flex-col gap-4">
+            <div className="bg-surface-2 p-4 border border-white/10 text-center">
+              <div className="font-mono text-4xl text-brand-red tracking-widest font-bold">
+                {wishlistCode}
+              </div>
+              <div className="font-mono text-[10px] text-fg-muted mt-2 uppercase">
+                {t('photo.share.wishlistHint', 'Código wishlist · dictalo al asesor')}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <button
+                onClick={handleDownload}
+                className="w-full py-3 bg-brand-red text-white font-display text-xl tracking-widest clip-hud hover:brightness-110 active:scale-95 transition-all"
+              >
+                {t('photo.share.download', 'DESCARGAR PNG')}
+              </button>
+
+              <div className="flex gap-2">
+                <button
+                  onClick={() => transition('TRYON')}
+                  className="flex-1 py-3 bg-surface-3 text-white font-display text-lg tracking-wide border border-white/10 hover:bg-surface-4 active:scale-95 transition-all"
+                >
+                  {t('photo.share.again', 'OTRA PRENDA')}
+                </button>
+                <button
+                  onClick={() => transition('ATTRACT')}
+                  className="flex-1 py-3 bg-surface-3 text-white font-display text-lg tracking-wide border border-white/10 hover:bg-surface-4 active:scale-95 transition-all"
+                >
+                  {t('photo.share.finish', 'FINALIZAR')}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

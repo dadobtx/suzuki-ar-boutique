@@ -5,6 +5,7 @@ import {
   AwakeningSplash,
   CalibrationGuide,
   CooldownCountdown,
+  PhotoShare,
 } from '@/components/kiosk';
 
 export function HomePage() {
@@ -23,6 +24,7 @@ export function HomePage() {
       {kioskState === 'AWAKENING' && <AwakeningSplash />}
       {kioskState === 'CALIBRATING' && <CalibrationGuide />}
       {kioskState === 'COOLDOWN' && <CooldownCountdown />}
+      {kioskState === 'SHARE_QR' && <PhotoShare />}
     </main>
   );
 }

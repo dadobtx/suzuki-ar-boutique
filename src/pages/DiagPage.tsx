@@ -9,6 +9,7 @@ import { usePresence } from '@/hooks/usePresence';
 import { useDebugToggle } from '@/hooks/useDebugToggle';
 import { useGarmentStore } from '@/store/garment';
 import { useKioskStore } from '@/store/kiosk';
+import { usePhotoStore } from '@/store/photo';
 import { HudFrame, NeonButton } from '@/components/hud';
 
 /**
@@ -110,7 +111,19 @@ export function DiagPage() {
     await navigator.clipboard.writeText(JSON.stringify(report, null, 2));
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [fps, latency, layout, source, camera, activeGarment, catalog.length]);
+  }, [
+    fps,
+    latency,
+    layout,
+    source,
+    camera,
+    activeGarment,
+    catalog.length,
+    runtime.lastEstimatedAnchors,
+    runtime.lastTotalAnchors,
+    runtime.lastValidAnchors,
+    runtime.lastWarpLatencyMs,
+  ]);
 
   return (
     <div className="min-h-screen p-4 md:p-6 space-y-4 overflow-auto">
@@ -363,6 +376,49 @@ export function DiagPage() {
               >
                 {isKioskMode ? 'Desactivar Modo Kiosko' : 'Activar Modo Kiosko'}
               </a>
+            </div>
+          </div>
+        </HudFrame>
+
+        {/* ── FOTO ── */}
+        <HudFrame className="p-4" variant="cyan" id="diag-foto">
+          <h2 className="font-display text-xl text-accent-cyan mb-3">FOTO</h2>
+          <div className="space-y-4">
+            <DiagTable
+              rows={[
+                ['FOTOS SESIÓN', String(usePhotoStore.getState().history.length)],
+                ['ÚLTIMO W/L', usePhotoStore.getState().currentWishlistCode || '—'],
+              ]}
+            />
+            {usePhotoStore.getState().history.length > 0 && (
+              <div className="mt-4 pt-4 border-t border-surface-2">
+                <h3 className="font-mono text-hud-xs text-fg-muted mb-2">
+                  HISTORIAL (ÚLTIMAS 5)
+                </h3>
+                <div className="space-y-2">
+                  {usePhotoStore
+                    .getState()
+                    .history.slice(0, 5)
+                    .map((h, i) => (
+                      <div key={i} className="text-xs font-mono flex justify-between">
+                        <span className="text-accent-cyan">{h.wishlistCode}</span>
+                        <span className="text-fg-muted">{h.sku}</span>
+                        <span className="text-fg-muted opacity-50">
+                          {new Date(h.timestamp).toLocaleTimeString()}
+                        </span>
+                      </div>
+                    ))}
+                </div>
+              </div>
+            )}
+            <div className="pt-2">
+              <NeonButton
+                variant="cyan"
+                size="sm"
+                onClick={() => kioskTransition('PHOTO_COUNTDOWN')}
+              >
+                Forzar Disparo
+              </NeonButton>
             </div>
           </div>
         </HudFrame>

@@ -1,7 +1,15 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
+import { usePhotoStore } from './photo';
 
-export type KioskState = 'ATTRACT' | 'AWAKENING' | 'CALIBRATING' | 'TRYON' | 'COOLDOWN';
+export type KioskState =
+  | 'ATTRACT'
+  | 'AWAKENING'
+  | 'CALIBRATING'
+  | 'TRYON'
+  | 'PHOTO_COUNTDOWN'
+  | 'SHARE_QR'
+  | 'COOLDOWN';
 
 interface KioskStore {
   state: KioskState;
@@ -19,12 +27,20 @@ export const useKioskStore = create<KioskStore>()(
     (set) => ({
       state: 'ATTRACT',
       stateStartTime: Date.now(),
-      transition: (newState) => set({ state: newState, stateStartTime: Date.now() }),
+      transition: (newState) => {
+        if (newState === 'ATTRACT') {
+          usePhotoStore.getState().clearPhoto();
+        }
+        set({ state: newState, stateStartTime: Date.now() });
+      },
       startCooldown: () => set({ state: 'COOLDOWN', stateStartTime: Date.now() }),
       cancelCooldown: () => set({ state: 'TRYON', stateStartTime: Date.now() }),
       wakeUp: () => set({ state: 'AWAKENING', stateStartTime: Date.now() }),
       calibrationDone: () => set({ state: 'TRYON', stateStartTime: Date.now() }),
-      reset: () => set({ state: 'ATTRACT', stateStartTime: Date.now() }),
+      reset: () => {
+        usePhotoStore.getState().clearPhoto();
+        set({ state: 'ATTRACT', stateStartTime: Date.now() });
+      },
     }),
     {
       name: 'suzuki-ar-kiosk',

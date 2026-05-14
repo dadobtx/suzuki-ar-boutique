@@ -135,5 +135,19 @@
     "recovery": {
       "message": "REINICIANDO..."
     }
+  },
+  "photo": {
+    "shoot": "Disparar foto",
+    "countdown": {
+      "message": "Mantente quieto"
+    },
+    "share": {
+      "title": "Tu look está listo",
+      "subtitle": "Escaneá el QR para llevártela al móvil",
+      "wishlistHint": "Código wishlist · dictalo al asesor",
+      "again": "Otra prenda",
+      "download": "Descargar PNG",
+      "finish": "Finalizar"
+    }
   }
 }

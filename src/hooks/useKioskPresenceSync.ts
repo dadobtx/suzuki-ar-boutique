@@ -7,6 +7,7 @@ export function useKioskPresenceSync(presence: PresenceState) {
   const wakeUp = useKioskStore((s) => s.wakeUp);
   const startCooldown = useKioskStore((s) => s.startCooldown);
   const reset = useKioskStore((s) => s.reset);
+  const transition = useKioskStore((s) => s.transition);
 
   const prevStateRef = useRef<PresenceState>(presence);
   const absentTimerRef = useRef<number | null>(null);
@@ -56,6 +57,10 @@ export function useKioskPresenceSync(presence: PresenceState) {
       if (presence === 'absent') {
         reset();
       }
+    } else if (state === 'PHOTO_COUNTDOWN') {
+      if (presence === 'absent') {
+        transition('TRYON');
+      }
     } else {
       // Not in TRYON or CALIBRATING, clear timer if exists
       if (absentTimerRef.current !== null) {
@@ -71,5 +76,5 @@ export function useKioskPresenceSync(presence: PresenceState) {
         absentTimerRef.current = null;
       }
     };
-  }, [presence, state, startCooldown, reset]);
+  }, [presence, state, startCooldown, reset, transition]);
 }
