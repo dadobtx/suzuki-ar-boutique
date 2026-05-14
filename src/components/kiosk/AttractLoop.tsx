@@ -17,6 +17,7 @@ export function AttractLoop() {
     <div
       className="absolute inset-0 z-50 bg-black cursor-pointer overflow-hidden flex items-center justify-center"
       onClick={handleClick}
+      onTouchStart={handleClick}
     >
       <video
         src={`${import.meta.env.BASE_URL}videos/attract-1.mp4`}

@@ -12,16 +12,21 @@ export function useKioskFlag() {
       document.body.classList.add('kiosk-mode');
 
       // Request Fullscreen on first interaction
-      const enterFullscreen = () => {
-        if (!document.fullscreenElement) {
-          document.documentElement.requestFullscreen().catch((err) => {
-            console.warn(`Error attempting to enable fullscreen: ${err.message}`);
-          });
-        }
+      const requestFs = () => {
+        const el = document.documentElement as HTMLElement & {
+          webkitRequestFullscreen?: () => Promise<void>;
+          msRequestFullscreen?: () => Promise<void>;
+        };
+        if (document.fullscreenElement) return;
+        const req =
+          el.requestFullscreen ?? el.webkitRequestFullscreen ?? el.msRequestFullscreen;
+        req?.call(el).catch((err: Error) => {
+          console.warn('[kiosk] Fullscreen request rejected:', err);
+        });
       };
 
-      document.addEventListener('touchstart', enterFullscreen, { once: true });
-      document.addEventListener('click', enterFullscreen, { once: true });
+      document.addEventListener('touchstart', requestFs, { once: true, passive: true });
+      document.addEventListener('mousedown', requestFs, { once: true });
 
       // Block context menu, selection, zoom
       const prevent = (e: Event) => e.preventDefault();
@@ -44,6 +49,8 @@ export function useKioskFlag() {
 
       return () => {
         document.body.classList.remove('kiosk-mode');
+        document.removeEventListener('touchstart', requestFs);
+        document.removeEventListener('mousedown', requestFs);
         document.removeEventListener('contextmenu', prevent);
         document.removeEventListener('selectstart', prevent);
         document.removeEventListener('keydown', preventZoom);
