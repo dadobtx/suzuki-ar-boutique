@@ -34,6 +34,7 @@ export default defineConfig({
     __GIT_SHA__: JSON.stringify(process.env.VITE_GIT_SHA ?? 'dev'),
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
   },
+  // @ts-expect-error - vitest configuration is not part of standard vite config types
   test: {
     globals: true,
     environment: 'jsdom',
