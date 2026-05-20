@@ -48,6 +48,7 @@ jobs:
         env:
           VITE_TARGET: ghpages
           VITE_GIT_SHA: ${{ github.sha }}
+          VITE_AI_BACKEND_URL: ${{ vars.VITE_AI_BACKEND_URL || secrets.VITE_AI_BACKEND_URL }}
 
       - uses: actions/upload-pages-artifact@v3
         with:
