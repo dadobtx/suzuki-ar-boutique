@@ -1,3 +1,4 @@
+/// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
@@ -32,5 +33,17 @@ export default defineConfig({
   define: {
     __GIT_SHA__: JSON.stringify(process.env.VITE_GIT_SHA ?? 'dev'),
     __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+  },
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    exclude: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/cypress/**',
+      '**/.{idea,git,cache,output,temp}/**',
+      '**/{karma,rollup,webpack,vite,vitest}.config.*',
+      '**/backend/**',
+    ],
   },
 });
