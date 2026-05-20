@@ -6,3 +6,4 @@ export * from './PhotoCountdown';
 export * from './PhotoShare';
 export * from './AIProcessing';
 export * from './AIError';
+export * from './KioskGuide';

@@ -15,7 +15,7 @@ import { CatalogPanel } from '@/components/catalog';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
 import { Camera as CameraIcon } from 'lucide-react';
-import { PhotoCountdown } from '@/components/kiosk';
+import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
 
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
@@ -171,6 +171,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               PRESENCE: {t(`presence.${presence}`, presence.toUpperCase())}
             </div>
           </div>
+        )}
+
+        {/* Context-aware user guidance banner (z-index 35) */}
+        {camera.status === 'granted' && (
+          <KioskGuide presence={presence} layout={layout} />
         )}
 
         {/* Resolution badge (dev info, z-index 30) */}
