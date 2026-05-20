@@ -54,9 +54,12 @@ export function AIProcessing() {
       setAiData({ status: 'processing' });
 
       try {
+        const baseUrl = import.meta.env.BASE_URL;
+        const fullOverlayUrl = `${baseUrl}${activeGarment.overlayUrl.replace(/^\//, '')}`;
+
         const result = await generateTryOnPhoto(
           currentPhotoClean,
-          activeGarment.overlayUrl,
+          fullOverlayUrl,
           `${activeGarment.line} ${activeGarment.name}`,
         );
 
