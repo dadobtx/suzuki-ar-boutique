@@ -7,9 +7,9 @@
       content="default-src 'self';
              script-src 'self' 'wasm-unsafe-eval' blob:;
              style-src 'self' 'unsafe-inline';
-             img-src 'self' data: blob:;
+             img-src 'self' data: blob: https://cdn.fashn.ai;
              media-src 'self' blob:;
-             connect-src 'self' https://storage.googleapis.com;
+             connect-src 'self' https://storage.googleapis.com http://127.0.0.1:8787 http://localhost:8787 https://*.workers.dev https://api.fashn.ai;
              worker-src 'self' blob:;
              font-src 'self' data:;" />
     <meta name="description" content="Suzuki AR Boutique — Probador virtual de prendas Suzuki con realidad aumentada. Probá chaquetas, hoodies y más en tiempo real." />

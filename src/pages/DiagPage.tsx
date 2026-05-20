@@ -422,6 +422,29 @@ export function DiagPage() {
             </div>
           </div>
         </HudFrame>
+
+        {/* ── AI BACKEND ── */}
+        <HudFrame className="p-4 md:col-span-2" variant="cyan" id="diag-ai">
+          <h2 className="font-display text-xl text-accent-cyan mb-3">AI BACKEND</h2>
+          <div className="space-y-4">
+            <DiagTable
+              rows={[
+                [
+                  'ENDPOINT',
+                  import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787',
+                ],
+                ['STATUS', usePhotoStore.getState().aiGenerationStatus],
+                ['ERROR', usePhotoStore.getState().aiGenerationError || '—'],
+                [
+                  'DURATION',
+                  usePhotoStore.getState().aiDurationMs
+                    ? `${usePhotoStore.getState().aiDurationMs}ms`
+                    : '—',
+                ],
+              ]}
+            />
+          </div>
+        </HudFrame>
       </div>
 
       {/* Copy report */}

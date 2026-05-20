@@ -6,6 +6,8 @@ import {
   CalibrationGuide,
   CooldownCountdown,
   PhotoShare,
+  AIProcessing,
+  AIError,
 } from '@/components/kiosk';
 
 export function HomePage() {
@@ -23,8 +25,12 @@ export function HomePage() {
       {kioskState === 'ATTRACT' && <AttractLoop />}
       {kioskState === 'AWAKENING' && <AwakeningSplash />}
       {kioskState === 'CALIBRATING' && <CalibrationGuide />}
+      {kioskState === 'AI_PROCESSING' && <AIProcessing />}
+      {kioskState === 'AI_ERROR' && <AIError />}
       {kioskState === 'COOLDOWN' && <CooldownCountdown />}
-      {kioskState === 'SHARE_QR' && <PhotoShare />}
+      {(kioskState === 'SHARE_QR' || kioskState === 'SHARE_QR_FALLBACK') && (
+        <PhotoShare />
+      )}
     </main>
   );
 }

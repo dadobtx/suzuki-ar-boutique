@@ -4,3 +4,5 @@ export * from './CalibrationGuide';
 export * from './CooldownCountdown';
 export * from './PhotoCountdown';
 export * from './PhotoShare';
+export * from './AIProcessing';
+export * from './AIError';

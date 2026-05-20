@@ -15,6 +15,21 @@
 - 🌐 **Offline-first** — Service Worker con precache completo
 - 🌍 **i18n** — Español (default) + English
 
+## 🤖 AI Backend (Generative Virtual Try-On)
+
+A partir de la versión F9, el proyecto utiliza un backend proxy independiente para generar las fotos fotorrealistas de Virtual Try-On utilizando Replicate.
+
+Este backend está construido como un **Cloudflare Worker** y vive en la carpeta `/backend/`.
+Su principal propósito es aislar el token de la API de Replicate y proveer **Rate Limiting** para evitar abusos desde el kiosko.
+
+👉 **Ver instrucciones del backend en [backend/README.md](./backend/README.md)**
+
+Para que el frontend funcione, debes proveer la siguiente variable de entorno en tu `.env`:
+
+```env
+VITE_AI_BACKEND_URL=https://suzuki-ar-ai-proxy.<tu-usuario>.workers.dev
+```
+
 ## Setup Local
 
 ```bash

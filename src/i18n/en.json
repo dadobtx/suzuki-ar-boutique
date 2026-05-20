@@ -144,10 +144,21 @@
     "share": {
       "title": "Your look is ready",
       "subtitle": "Scan the QR to save to your phone",
+      "subtitleFallback": "Demo preview · QR scan unavailable",
       "wishlistHint": "Wishlist code · show to the staff",
       "again": "Try another",
       "download": "Download PNG",
+      "noQrFallback": "QR unavailable in demo mode",
+      "useDownload": "Use the Download button to save the photo",
       "finish": "Finish"
+    }
+  },
+  "ai": {
+    "processing": {
+      "1": "GENERATING AI LOOK...",
+      "2": "ADJUSTING DIGITAL SEAMS...",
+      "3": "APPLYING LIGHTING...",
+      "4": "ALMOST READY..."
     }
   }
 }

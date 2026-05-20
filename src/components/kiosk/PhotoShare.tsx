@@ -7,9 +7,17 @@ import { usePhotoStore } from '@/store/photo';
 export function PhotoShare() {
   const { t } = useTranslation();
   const transition = useKioskStore((s) => s.transition);
+  const kioskState = useKioskStore((s) => s.state);
 
   const photoComposed = usePhotoStore((s) => s.currentPhotoComposed);
   const wishlistCode = usePhotoStore((s) => s.currentWishlistCode);
+  const aiGeneratedUrl = usePhotoStore((s) => s.aiGeneratedUrl);
+  const aiDurationMs = usePhotoStore((s) => s.aiDurationMs);
+
+  const displayImage =
+    kioskState === 'SHARE_QR' && aiGeneratedUrl ? aiGeneratedUrl : photoComposed;
+  const qrUrl =
+    aiGeneratedUrl && /^https?:\/\//.test(aiGeneratedUrl) ? aiGeneratedUrl : null;
 
   // Auto-timeout
   useEffect(() => {
@@ -19,13 +27,13 @@ export function PhotoShare() {
     return () => clearTimeout(timer);
   }, [transition]);
 
-  if (!photoComposed) {
+  if (!displayImage) {
     return null;
   }
 
   const handleDownload = () => {
     const a = document.createElement('a');
-    a.href = photoComposed;
+    a.href = displayImage;
     a.download = `suzuki-look-${wishlistCode}.jpg`;
     document.body.appendChild(a);
     a.click();
@@ -36,8 +44,18 @@ export function PhotoShare() {
     <div className="absolute inset-0 z-50 bg-bg text-fg flex flex-col">
       {/* Top 60%: Photo */}
       <div className="h-[60%] w-full flex items-center justify-center p-8 bg-black relative">
-        <div className="relative h-full aspect-[9/16] border border-accent-cyan/50 p-2 clip-hud">
-          <img src={photoComposed} alt="Tu look" className="w-full h-full object-cover" />
+        <div className="relative h-full aspect-square border border-accent-cyan/50 p-2 clip-hud">
+          <img src={displayImage} alt="Tu look" className="w-full h-full object-cover" />
+          {kioskState === 'SHARE_QR_FALLBACK' && (
+            <div className="absolute top-4 left-4 bg-black/70 text-white font-mono text-xs px-2 py-1 rounded border border-white/20">
+              {t('photo.share.fallback_badge', 'VISTA PREVIA DEMO')}
+            </div>
+          )}
+          {aiDurationMs && (
+            <div className="absolute bottom-4 left-4 bg-black/70 text-white font-mono text-xs px-2 py-1 rounded border border-white/20">
+              ⏱ {(aiDurationMs / 1000).toFixed(1)}s
+            </div>
+          )}
         </div>
       </div>
 
@@ -48,20 +66,36 @@ export function PhotoShare() {
             {t('photo.share.title', 'TU LOOK ESTÁ LISTO')}
           </h2>
           <p className="font-mono text-sm text-fg-muted">
-            {t('photo.share.subtitle', 'Escaneá el QR para llevártela al móvil')}
+            {qrUrl
+              ? t('photo.share.subtitle', 'Escaneá el QR para llevártela al móvil')
+              : t(
+                  'photo.share.subtitleFallback',
+                  'Vista previa demo · escaneá QR no disponible',
+                )}
           </p>
         </div>
 
         <div className="flex items-center gap-12">
           {/* QR Code */}
-          <div className="bg-white p-4 rounded-lg shadow-[0_0_20px_rgba(230,0,18,0.3)]">
-            <QRCodeSVG
-              value={photoComposed}
-              size={160}
-              level="H"
-              fgColor="#E60012"
-              bgColor="#ffffff"
-            />
+          <div className="bg-white p-4 rounded-lg shadow-[0_0_20px_rgba(230,0,18,0.3)] w-[192px] h-[192px] flex items-center justify-center">
+            {qrUrl ? (
+              <QRCodeSVG
+                value={qrUrl}
+                size={160}
+                level="H"
+                fgColor="#E60012"
+                bgColor="#ffffff"
+              />
+            ) : (
+              <div className="text-center text-fg-muted p-2">
+                <p className="font-mono text-xs mb-2 text-brand-red">
+                  {t('photo.share.noQrFallback', 'QR no disponible en modo demo')}
+                </p>
+                <p className="font-mono text-[10px]">
+                  {t('photo.share.useDownload', 'Usá el botón Descargar')}
+                </p>
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-4">

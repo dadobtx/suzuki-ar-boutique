@@ -8,7 +8,10 @@ export type KioskState =
   | 'CALIBRATING'
   | 'TRYON'
   | 'PHOTO_COUNTDOWN'
+  | 'AI_PROCESSING'
+  | 'AI_ERROR'
   | 'SHARE_QR'
+  | 'SHARE_QR_FALLBACK'
   | 'COOLDOWN';
 
 interface KioskStore {

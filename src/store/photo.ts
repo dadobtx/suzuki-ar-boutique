@@ -11,8 +11,18 @@ interface PhotoState {
   currentPhotoClean: string | null;
   currentWishlistCode: string | null;
   currentGarmentSku: string | null;
+  aiGeneratedUrl: string | null;
+  aiGenerationStatus: 'idle' | 'processing' | 'success' | 'error';
+  aiGenerationError: string | null;
+  aiDurationMs: number | null;
   history: PhotoHistory[];
   setPhoto: (composed: string, clean: string, wishlistCode: string, sku: string) => void;
+  setAiData: (data: {
+    url?: string;
+    status: 'idle' | 'processing' | 'success' | 'error';
+    error?: string;
+    durationMs?: number;
+  }) => void;
   clearPhoto: () => void;
 }
 
@@ -21,6 +31,10 @@ export const usePhotoStore = create<PhotoState>((set, get) => ({
   currentPhotoClean: null,
   currentWishlistCode: null,
   currentGarmentSku: null,
+  aiGeneratedUrl: null,
+  aiGenerationStatus: 'idle',
+  aiGenerationError: null,
+  aiDurationMs: null,
   history: [],
 
   setPhoto: (composed, clean, wishlistCode, sku) => {
@@ -59,6 +73,19 @@ export const usePhotoStore = create<PhotoState>((set, get) => ({
       currentPhotoClean: null,
       currentWishlistCode: null,
       currentGarmentSku: null,
+      aiGeneratedUrl: null,
+      aiGenerationStatus: 'idle',
+      aiGenerationError: null,
+      aiDurationMs: null,
     });
+  },
+
+  setAiData: (data) => {
+    set((state) => ({
+      aiGeneratedUrl: data.url !== undefined ? data.url : state.aiGeneratedUrl,
+      aiGenerationStatus: data.status,
+      aiGenerationError: data.error !== undefined ? data.error : state.aiGenerationError,
+      aiDurationMs: data.durationMs !== undefined ? data.durationMs : state.aiDurationMs,
+    }));
   },
 }));

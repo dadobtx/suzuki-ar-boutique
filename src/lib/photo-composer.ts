@@ -18,8 +18,13 @@ export async function composePhoto({
   garment,
   wishlistCode,
 }: ComposeOptions): Promise<ComposedPhotos> {
+  // Canvas at 1:1 aspect ratio (1080×1080). With a 16:9 webcam, this captures
+  // ~56% of the video width — enough horizontal room for arms in any casual
+  // pose (one hand up, both hands on hips, akimbo, etc.) without cropping.
+  // Trade-off: less vertical space than 3:4, which works fine if the user
+  // stands 1.5-2m from the camera so the full upper body fits naturally.
   const width = 1080;
-  const height = 1920;
+  const height = 1080;
 
   // Clean photo canvas (only video)
   const cleanCanvas = document.createElement('canvas');
@@ -34,7 +39,7 @@ export async function composePhoto({
     throw new Error('Could not get 2D context for photo composer');
   }
 
-  // Calculate object-fit: cover for video on 1080x1920
+  // Calculate object-fit: cover for video on 1080x1080 (1:1)
   // Fallback to 16:9 if video size is 0
   const vWidth = videoEl.videoWidth || 1920;
   const vHeight = videoEl.videoHeight || 1080;

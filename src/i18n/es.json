@@ -144,10 +144,21 @@
     "share": {
       "title": "Tu look está listo",
       "subtitle": "Escaneá el QR para llevártela al móvil",
+      "subtitleFallback": "Vista previa demo · escaneá QR no disponible",
       "wishlistHint": "Código wishlist · dictalo al asesor",
       "again": "Otra prenda",
       "download": "Descargar PNG",
+      "noQrFallback": "QR no disponible en modo demo",
+      "useDownload": "Usá el botón Descargar para guardar la foto",
       "finish": "Finalizar"
+    }
+  },
+  "ai": {
+    "processing": {
+      "1": "GENERANDO LOOK CON IA...",
+      "2": "AJUSTANDO COSTURAS DIGITALES...",
+      "3": "APLICANDO ILUMINACIÓN...",
+      "4": "CASI LISTO..."
     }
   }
 }

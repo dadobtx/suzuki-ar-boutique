@@ -80,7 +80,7 @@ export function PhotoCountdown({ videoRef, overlayCanvasRef }: PhotoCountdownPro
             );
 
             setTimeout(() => {
-              transition('SHARE_QR');
+              transition('AI_PROCESSING');
             }, 300);
           } catch (err) {
             console.error('Failed to take photo', err);

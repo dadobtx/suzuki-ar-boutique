@@ -340,7 +340,7 @@ export function useGarmentRenderer(
         const sR = criticalsById.shoulderR.dstPt;
         const shoulderWidth = Math.hypot(sR.x - sL.x, sR.y - sL.y);
         const torsoHeight = shoulderWidth * 1.4;
-        
+
         // sL is left shoulder, sR is right shoulder.
         // We want a vector perpendicular to the shoulder line, pointing DOWN the torso.
         // Since canvas Y goes down, pointing down means increasing Y.
@@ -372,16 +372,32 @@ export function useGarmentRenderer(
 
       setValidAnchors(validAnchorsList.length + estimatedAnchors);
 
-      // c. Build anchor arrays (criticals + valid non-criticals)
+      // Widen the hip destination points outward from their midpoint. MediaPipe's
+      // hip landmarks (23, 24) tend to sit on the iliac crests (skeleton hip),
+      // which is narrower than the visible silhouette of the garment at hip
+      // level. Pushing them apart ~15% makes the warped garment match the
+      // user's actual visible hip width rather than their bone width.
+      if (criticalsById.hipL && criticalsById.hipR) {
+        const HIP_WIDEN_FACTOR = 1.15;
+        const midX = (criticalsById.hipL.dstPt.x + criticalsById.hipR.dstPt.x) / 2;
+        criticalsById.hipL.dstPt = {
+          x: midX + (criticalsById.hipL.dstPt.x - midX) * HIP_WIDEN_FACTOR,
+          y: criticalsById.hipL.dstPt.y,
+        };
+        criticalsById.hipR.dstPt = {
+          x: midX + (criticalsById.hipR.dstPt.x - midX) * HIP_WIDEN_FACTOR,
+          y: criticalsById.hipR.dstPt.y,
+        };
+      }
+
+      // c. Build anchor arrays (criticals only — shoulders + hips).
+      // Non-critical anchors like elbows are intentionally OMITTED from the warp:
+      // when the user raises an arm, the elbow landmark moves wildly and drags
+      // the entire sleeve region of the warped garment with it, producing a
+      // distorted oversized result. With shoulders+hips only, sleeves are
+      // extrapolated via the affine transform and stay visually "arms-down".
       const anchorsSrc = allCriticals.map((a) => a!.srcPt);
       const anchorsDst = allCriticals.map((a) => a!.dstPt);
-
-      for (const v of validAnchorsList) {
-        if (!v.isCritical) {
-          anchorsSrc.push(v.srcPt);
-          anchorsDst.push(v.dstPt);
-        }
-      }
 
       // d. Extrapolate corners to draw the full garment (sleeves, neck) instead of clipping to torso
       const s0 = criticalsById.shoulderL?.srcPt;
@@ -399,9 +415,19 @@ export function useGarmentRenderer(
           const imgW = cached.img.naturalWidth || 1024;
           const imgH = cached.img.naturalHeight || 1024;
 
+          // FIX: cap the top of the extrapolated region at (shoulderY - neckMargin)
+          // instead of y=0. This prevents the top of the source PNG (which contains
+          // empty/transparent space above the garment) from being warped to ABOVE
+          // the user's shoulders, where it would cover the face/head.
+          // 150px gives enough room for collar/neckline to reach the user's neck
+          // without spilling onto the face for tight-cropped garments.
+          const NECK_MARGIN_PX = 150;
+          const shoulderSrcY = Math.min(s0.y, s1.y);
+          const topY = Math.max(0, shoulderSrcY - NECK_MARGIN_PX);
+
           const corners = [
-            { x: 0, y: 0 },
-            { x: imgW, y: 0 },
+            { x: 0, y: topY },
+            { x: imgW, y: topY },
             { x: imgW, y: imgH },
             { x: 0, y: imgH },
           ];
