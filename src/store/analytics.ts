@@ -32,9 +32,11 @@ interface AnalyticsStore {
    * (if one is active). Caller only needs to provide the type-specific fields.
    */
   track: (
-    event: Omit<AnalyticsEvent, 'id' | 'timestamp' | 'sessionId'> & {
-      sessionId?: string;
-    },
+    event: {
+      [K in AnalyticsEvent as K['type']]: Omit<K, 'id' | 'timestamp' | 'sessionId'> & {
+        sessionId?: string;
+      };
+    }[AnalyticsEvent['type']],
   ) => void;
 
   /** Starts a new session and emits a session_started event. */
