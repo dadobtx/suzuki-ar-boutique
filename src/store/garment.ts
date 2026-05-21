@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Garment } from '@/types/garment';
+import { useAnalyticsStore } from './analytics';
 
 export interface GarmentFilters {
   line: string;
@@ -101,27 +102,61 @@ export const useGarmentStore = create<GarmentState>()(
         }
       },
 
-      selectGarment: (id: string | null) => set({ activeGarmentId: id }),
+      selectGarment: (id: string | null) => {
+        // Analytics: track which garment was picked (interest signal).
+        if (id) {
+          const garment = useGarmentStore.getState().catalog.find((g) => g.id === id);
+          if (garment) {
+            useAnalyticsStore.getState().track({
+              type: 'garment_selected',
+              sku: garment.sku,
+              line: garment.line,
+              category: garment.category,
+            });
+          }
+        }
+        set({ activeGarmentId: id });
+      },
       clearGarment: () => set({ activeGarmentId: null }),
 
       filters: initialFilters,
-      setFilter: (key, value) =>
+      setFilter: (key, value) => {
+        // Only track filters that map to user preference dimensions.
+        if (key === 'sizes' || key === 'colors' || key === 'line' || key === 'category') {
+          const values = Array.isArray(value)
+            ? value
+            : value === null
+              ? []
+              : [String(value)];
+          useAnalyticsStore.getState().track({
+            type: 'filter_applied',
+            filterType: key === 'sizes' ? 'size' : key === 'colors' ? 'color' : key,
+            values,
+          });
+        }
         set((state) => ({
           filters: { ...state.filters, [key]: value },
-        })),
+        }));
+      },
       clearFilters: () => set({ filters: initialFilters }),
 
       wishlist: getInitialWishlist(),
       toggleWishlist: (sku) =>
         set((state) => {
-          const newWishlist = state.wishlist.includes(sku)
-            ? state.wishlist.filter((id) => id !== sku)
-            : [...state.wishlist, sku];
+          const isAdding = !state.wishlist.includes(sku);
+          const newWishlist = isAdding
+            ? [...state.wishlist, sku]
+            : state.wishlist.filter((id) => id !== sku);
           try {
             localStorage.setItem('suzuki-wishlist', JSON.stringify(newWishlist));
           } catch {
             // Ignore storage errors
           }
+          // Analytics: wishlist signal is one of the strongest interest indicators
+          useAnalyticsStore.getState().track({
+            type: isAdding ? 'garment_wishlisted' : 'garment_unwishlisted',
+            sku,
+          });
           return { wishlist: newWishlist };
         }),
     }),

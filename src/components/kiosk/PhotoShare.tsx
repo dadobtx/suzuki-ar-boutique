@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
 import { useKioskStore } from '@/store/kiosk';
 import { usePhotoStore } from '@/store/photo';
+import { useAnalyticsStore } from '@/store/analytics';
 
 export function PhotoShare() {
   const { t } = useTranslation();
@@ -32,6 +33,18 @@ export function PhotoShare() {
   }
 
   const handleDownload = () => {
+    // Analytics: download is the strongest "I love this look" signal.
+    // Track whether they downloaded the real AI-generated photo or the
+    // local demo composite (different conversion meaning).
+    const currentSku = usePhotoStore.getState().currentGarmentSku;
+    if (currentSku) {
+      useAnalyticsStore.getState().track({
+        type: 'photo_downloaded',
+        sku: currentSku,
+        isAI: kioskState === 'SHARE_QR' && !!aiGeneratedUrl,
+      });
+    }
+
     const a = document.createElement('a');
     a.href = displayImage;
     a.download = `suzuki-look-${wishlistCode}.jpg`;

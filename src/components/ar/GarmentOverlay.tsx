@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { NormalizedLandmark } from '@/types/pose';
 import { useDprCanvas } from '@/hooks/useDprCanvas';
@@ -34,6 +34,22 @@ export function GarmentOverlay({
   // DPR-aware sizing for this canvas
   useDprCanvas(canvasRef, containerRef);
 
+  // When the overlay goes inactive (e.g. kiosk transitions out of TRYON into
+  // PHOTO_COUNTDOWN), the renderer stops drawing — but the canvas keeps the
+  // last frame painted. If the user was leaning forward to tap the photo
+  // button, that last frame is a heavily distorted warp that then "freezes"
+  // over the user during the 3-2-1 countdown. Clear the canvas on the way out
+  // so they get a clean view of themselves during countdown.
+  useEffect(() => {
+    if (!active && canvasRef.current) {
+      const ctx = canvasRef.current.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+    }
+  }, [active]);
+
   // Garment rendering hook
   const renderer: GarmentRendererResult = useGarmentRenderer(
     videoRef,
@@ -50,7 +66,12 @@ export function GarmentOverlay({
     <canvas
       ref={canvasRef}
       className="absolute inset-0 pointer-events-none"
-      style={{ zIndex: 10 }} // Between video (0) and skeleton debug (20)
+      style={{
+        zIndex: 10, // Between video (0) and skeleton debug (20)
+        // 0.5px Gaussian softens visible Delaunay triangle seams along sleeves
+        // and shoulders without making the garment look blurry overall.
+        filter: 'blur(0.5px)',
+      }}
       aria-label="Garment overlay"
       data-warp-latency={renderer.warpLatencyMs}
       data-valid-anchors={renderer.validAnchors}

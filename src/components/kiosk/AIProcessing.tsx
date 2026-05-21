@@ -4,7 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useKioskStore } from '@/store/kiosk';
 import { usePhotoStore } from '@/store/photo';
 import { useGarmentStore } from '@/store/garment';
+import { useAnalyticsStore } from '@/store/analytics';
 import { generateTryOnPhoto } from '@/lib/ai-tryon-client';
+import { categorizeError } from '@/lib/analytics-events';
 import { Loader2 } from 'lucide-react';
 
 const PHRASES = [
@@ -53,6 +55,12 @@ export function AIProcessing() {
 
       setAiData({ status: 'processing' });
 
+      // Analytics: record that a FASHN call was initiated for this SKU and
+      // start a wall-clock timer so we can attribute duration to the event.
+      const analytics = useAnalyticsStore.getState();
+      analytics.track({ type: 'photo_initiated', sku: activeGarment.sku });
+      const t0 = Date.now();
+
       try {
         const baseUrl = import.meta.env.BASE_URL;
         const fullOverlayUrl = `${baseUrl}${activeGarment.overlayUrl.replace(/^\//, '')}`;
@@ -64,6 +72,12 @@ export function AIProcessing() {
         );
 
         if (result.status === 'success' && result.imageUrl) {
+          analytics.track({
+            type: 'photo_generated',
+            sku: activeGarment.sku,
+            durationMs: result.durationMs ?? Date.now() - t0,
+            attempts: result.attempts ?? 1,
+          });
           setAiData({
             status: 'success',
             url: result.imageUrl,
@@ -75,6 +89,12 @@ export function AIProcessing() {
           // user to a retry screen instead of falling back to the local demo
           // composite. The demo confuses users because it's not the photo they
           // were promised; an explicit "retake the photo" message is clearer.
+          analytics.track({
+            type: 'photo_failed',
+            sku: activeGarment.sku,
+            errorCategory: categorizeError(result.error),
+            durationMs: Date.now() - t0,
+          });
           setAiData({
             status: 'error',
             error: result.error || 'Failed to generate',
@@ -83,6 +103,12 @@ export function AIProcessing() {
         }
       } catch (err) {
         const error = err as Error;
+        analytics.track({
+          type: 'photo_failed',
+          sku: activeGarment.sku,
+          errorCategory: categorizeError(error.message),
+          durationMs: Date.now() - t0,
+        });
         setAiData({
           status: 'error',
           error: error.message || 'Unknown error',

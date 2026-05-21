@@ -419,11 +419,12 @@ export function useGarmentRenderer(
           // instead of y=0. This prevents the top of the source PNG (which contains
           // empty/transparent space above the garment) from being warped to ABOVE
           // the user's shoulders, where it would cover the face/head.
-          // 150px gives enough room for collar/neckline to reach the user's neck
-          // without spilling onto the face for tight-cropped garments.
+          // The garment's anchors.json can override this default via `topClipY`
+          // (in source PNG pixels) for collars/hoods that need a different reach.
           const NECK_MARGIN_PX = 150;
           const shoulderSrcY = Math.min(s0.y, s1.y);
-          const topY = Math.max(0, shoulderSrcY - NECK_MARGIN_PX);
+          const defaultTopY = Math.max(0, shoulderSrcY - NECK_MARGIN_PX);
+          const topY = cached.anchors.topClipY ?? defaultTopY;
 
           const corners = [
             { x: 0, y: topY },
