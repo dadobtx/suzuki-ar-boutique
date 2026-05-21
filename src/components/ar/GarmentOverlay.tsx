@@ -71,6 +71,11 @@ export function GarmentOverlay({
         // 0.5px Gaussian softens visible Delaunay triangle seams along sleeves
         // and shoulders without making the garment look blurry overall.
         filter: 'blur(0.5px)',
+        // Hide immediately when inactive. The clearRect in the useEffect above
+        // handles freeing the pixel buffer, but due to a race with pending
+        // requestVideoFrameCallback frames it can briefly flash the last
+        // distorted warp. visibility:hidden is synchronous and deterministic.
+        visibility: active ? 'visible' : 'hidden',
       }}
       aria-label="Garment overlay"
       data-warp-latency={renderer.warpLatencyMs}
