@@ -42,6 +42,7 @@ export function PhotoShare() {
         type: 'photo_downloaded',
         sku: currentSku,
         isAI: kioskState === 'SHARE_QR' && !!aiGeneratedUrl,
+        wishlistCode: wishlistCode || undefined,
       });
     }
 

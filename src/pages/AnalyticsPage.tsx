@@ -1,5 +1,15 @@
 import { useMemo, useState } from 'react';
-import { Download, Trash2, BarChart3, TrendingUp, Users, Clock } from 'lucide-react';
+import { useSearchParams } from 'react-router-dom';
+import {
+  Download,
+  Trash2,
+  BarChart3,
+  TrendingUp,
+  Users,
+  Clock,
+  Search,
+  Lock,
+} from 'lucide-react';
 import { useAnalyticsStore } from '@/store/analytics';
 import { useGarmentStore } from '@/store/garment';
 import { downloadEventsCSV } from '@/lib/analytics-export';
@@ -74,17 +84,106 @@ function KpiCard({ label, value, sub, icon }: KpiCardProps) {
   );
 }
 
+/**
+ * Renders a deliberately bland "not found" screen when the dashboard is
+ * accessed without the ?admin=1 gate. We don't want to advertise that this
+ * route exists to random kiosk visitors who happen to type in URLs, so the
+ * page mimics a generic 404 rather than saying "permission denied".
+ */
+function NotAuthorized() {
+  return (
+    <div className="min-h-screen bg-bg text-fg flex flex-col items-center justify-center p-8">
+      <Lock className="w-12 h-12 text-fg-muted/40 mb-4" />
+      <h1 className="font-display text-3xl tracking-widest text-white uppercase">404</h1>
+      <p className="font-mono text-xs text-fg-muted mt-2 tracking-widest uppercase">
+        Página no encontrada
+      </p>
+    </div>
+  );
+}
+
+/**
+ * Public route wrapper that gates the actual dashboard behind ?admin=1.
+ * Without the flag, we render a generic 404 — no hint that the dashboard
+ * exists, no Reset button exposed, no event data leaked into the DOM.
+ * Access via:  https://<host>/#/analytics?admin=1
+ *
+ * We do the gate at this layer (rather than inside AnalyticsDashboard) so the
+ * dashboard's hooks (useMemo, useState) don't run for unauthorized visitors —
+ * which also avoids the Rules-of-Hooks problem of an early-return-before-hooks.
+ */
 export function AnalyticsPage() {
+  const [searchParams] = useSearchParams();
+  const isAdmin = searchParams.get('admin') === '1';
+
+  if (!isAdmin) {
+    return <NotAuthorized />;
+  }
+  return <AnalyticsDashboard />;
+}
+
+function AnalyticsDashboard() {
   const events = useAnalyticsStore((s) => s.events);
   const clearAll = useAnalyticsStore((s) => s.clearAll);
   const catalog = useGarmentStore((s) => s.catalog);
   const [range, setRange] = useState<TimeRange>('all');
+  const [codeSearch, setCodeSearch] = useState('');
 
   const filtered = useMemo<AnalyticsEvent[]>(() => {
     if (range === 'all') return events;
     const since = Date.now() - RANGE_TO_MS[range];
     return events.filter((e) => e.timestamp >= since);
   }, [events, range]);
+
+  // ── Wishlist code ledger ────────────────────────────────────────────────
+  // Builds a per-code record from photo_* events so the sales team can take a
+  // code a customer dictates them and look up: which SKU/line, when it was
+  // generated, whether the customer ended up downloading the photo (strongest
+  // "I want to buy this" signal). One row per unique wishlist code.
+  const codeLedger = useMemo(() => {
+    type Record = {
+      code: string;
+      sku: string;
+      timestamp: number;
+      downloaded: boolean;
+      generated: boolean;
+      failed: boolean;
+      sessionId: string;
+    };
+    const byCode = new Map<string, Record>();
+    for (const e of filtered) {
+      // Only photo events carry wishlistCode
+      if (
+        e.type !== 'photo_initiated' &&
+        e.type !== 'photo_generated' &&
+        e.type !== 'photo_failed' &&
+        e.type !== 'photo_downloaded'
+      )
+        continue;
+      const code = e.wishlistCode;
+      if (!code) continue;
+      const existing = byCode.get(code);
+      if (!existing) {
+        byCode.set(code, {
+          code,
+          sku: e.sku,
+          timestamp: e.timestamp,
+          downloaded: e.type === 'photo_downloaded',
+          generated: e.type === 'photo_generated',
+          failed: e.type === 'photo_failed',
+          sessionId: e.sessionId,
+        });
+      } else {
+        // Keep the earliest timestamp (when the code was first issued) but
+        // OR-in the lifecycle flags.
+        existing.timestamp = Math.min(existing.timestamp, e.timestamp);
+        if (e.type === 'photo_downloaded') existing.downloaded = true;
+        if (e.type === 'photo_generated') existing.generated = true;
+        if (e.type === 'photo_failed') existing.failed = true;
+      }
+    }
+    return Array.from(byCode.values()).sort((a, b) => b.timestamp - a.timestamp);
+  }, [filtered]);
 
   // ── Aggregations ────────────────────────────────────────────────────────
   const stats = useMemo(() => {
@@ -180,6 +279,20 @@ export function AnalyticsPage() {
   }, [catalog]);
 
   const labelFor = (sku: string) => skuToName.get(sku) ?? sku;
+
+  // Apply the search box filter on top of the date-range-filtered ledger.
+  // Case-insensitive substring match across code AND sku so the sales team can
+  // search by either dimension.
+  const filteredCodeLedger = useMemo(() => {
+    if (!codeSearch.trim()) return codeLedger;
+    const q = codeSearch.trim().toLowerCase();
+    return codeLedger.filter(
+      (r) =>
+        r.code.toLowerCase().includes(q) ||
+        r.sku.toLowerCase().includes(q) ||
+        labelFor(r.sku).toLowerCase().includes(q),
+    );
+  }, [codeLedger, codeSearch, skuToName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const topBy = (
     map: Map<string, number>,
@@ -437,6 +550,98 @@ export function AnalyticsPage() {
             </div>
           </div>
         )}
+
+        {/* Wishlist code ledger — for sales-side reconciliation */}
+        <div className="bg-surface border border-surface-hover p-6 mb-8 clip-hud">
+          <div className="flex items-center justify-between mb-4 flex-wrap gap-3">
+            <div>
+              <h2 className="font-display text-2xl tracking-widest text-white uppercase">
+                Códigos de wishlist
+              </h2>
+              <p className="font-mono text-xs text-fg-muted mt-1">
+                Match con asesores: buscá el código que te dictó el cliente para ver qué
+                prenda eligió
+              </p>
+            </div>
+            <div className="relative">
+              <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-fg-muted" />
+              <input
+                type="text"
+                value={codeSearch}
+                onChange={(e) => setCodeSearch(e.target.value.toUpperCase())}
+                placeholder="Buscar código o SKU…"
+                className="bg-bg border border-surface-hover pl-9 pr-3 py-2 font-mono text-sm text-white placeholder:text-fg-muted/50 focus:outline-none focus:border-accent-cyan w-64 uppercase tracking-widest"
+              />
+            </div>
+          </div>
+
+          {filteredCodeLedger.length === 0 ? (
+            <p className="font-mono text-xs text-fg-muted py-6 text-center">
+              {codeSearch
+                ? `Ningún código coincide con "${codeSearch}"`
+                : 'Sin códigos generados todavía'}
+            </p>
+          ) : (
+            <div className="overflow-x-auto -mx-2">
+              <table className="w-full text-sm font-mono">
+                <thead>
+                  <tr className="text-fg-muted uppercase text-xs tracking-widest border-b border-surface-hover">
+                    <th className="text-left py-2 px-3">Código</th>
+                    <th className="text-left py-2 px-3">Prenda</th>
+                    <th className="text-left py-2 px-3">SKU</th>
+                    <th className="text-left py-2 px-3">Fecha</th>
+                    <th className="text-center py-2 px-3">Generada</th>
+                    <th className="text-center py-2 px-3">Descargada</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredCodeLedger.slice(0, 200).map((r) => (
+                    <tr
+                      key={r.code + r.sessionId}
+                      className="border-b border-surface-hover/30 hover:bg-bg/40"
+                    >
+                      <td className="py-2 px-3 text-brand-red font-bold tracking-widest">
+                        {r.code}
+                      </td>
+                      <td className="py-2 px-3 text-white">{labelFor(r.sku)}</td>
+                      <td className="py-2 px-3 text-fg-muted text-xs">{r.sku}</td>
+                      <td className="py-2 px-3 text-fg-muted text-xs">
+                        {new Date(r.timestamp).toLocaleString('es-EC', {
+                          day: '2-digit',
+                          month: '2-digit',
+                          hour: '2-digit',
+                          minute: '2-digit',
+                        })}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {r.generated ? (
+                          <span className="text-accent-cyan">✓</span>
+                        ) : r.failed ? (
+                          <span className="text-brand-red">✗</span>
+                        ) : (
+                          <span className="text-fg-muted/30">—</span>
+                        )}
+                      </td>
+                      <td className="py-2 px-3 text-center">
+                        {r.downloaded ? (
+                          <span className="text-accent-cyan">✓</span>
+                        ) : (
+                          <span className="text-fg-muted/30">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              {filteredCodeLedger.length > 200 && (
+                <p className="font-mono text-xs text-fg-muted mt-3 text-center">
+                  Mostrando los 200 más recientes de {filteredCodeLedger.length} — exportá
+                  a CSV para ver todo
+                </p>
+              )}
+            </div>
+          )}
+        </div>
 
         {/* Footer note */}
         <p className="font-mono text-xs text-fg-muted/50 mt-12 text-center tracking-wider">

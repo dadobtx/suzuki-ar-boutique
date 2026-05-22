@@ -3,6 +3,7 @@ import { HashRouter, Route, Routes } from 'react-router-dom';
 import { useAppStore } from './store/app';
 import { HomePage } from './pages/HomePage';
 import { DiagPage } from './pages/DiagPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
 import { useKioskFlag } from './hooks/useKioskFlag';
 import { setupAutoRecovery } from './lib/auto-recovery';
 
@@ -32,6 +33,7 @@ export default function App() {
         <Routes>
           <Route path="/" element={<HomePage />} />
           <Route path="/diag" element={<DiagPage />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
         </Routes>
       </div>
     </HashRouter>

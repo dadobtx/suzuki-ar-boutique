@@ -20,6 +20,10 @@ export function eventsToCSV(events: AnalyticsEvent[]): string {
     'sku',
     'line',
     'category',
+    // The wishlist code shown to the user is the master key the asesor uses
+    // when closing a sale. Promote it to a top-level column so the sales team
+    // can VLOOKUP from their CRM against this CSV.
+    'wishlist_code',
     'error_category',
     'outcome',
     'duration_ms',
@@ -51,6 +55,7 @@ export function eventsToCSV(events: AnalyticsEvent[]): string {
       get('sku'),
       get('line'),
       get('category'),
+      get('wishlistCode'),
       get('errorCategory'),
       get('outcome'),
       get('durationMs'),

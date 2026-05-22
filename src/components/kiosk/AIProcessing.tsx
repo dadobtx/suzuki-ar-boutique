@@ -57,8 +57,16 @@ export function AIProcessing() {
 
       // Analytics: record that a FASHN call was initiated for this SKU and
       // start a wall-clock timer so we can attribute duration to the event.
+      // Capture the wishlistCode that was generated during photo composition —
+      // it's the master key the asesor will reference when closing a sale, so
+      // every event in this photo's lifecycle gets tagged with it.
       const analytics = useAnalyticsStore.getState();
-      analytics.track({ type: 'photo_initiated', sku: activeGarment.sku });
+      const wishlistCode = usePhotoStore.getState().currentWishlistCode ?? undefined;
+      analytics.track({
+        type: 'photo_initiated',
+        sku: activeGarment.sku,
+        wishlistCode,
+      });
       const t0 = Date.now();
 
       try {
@@ -77,6 +85,7 @@ export function AIProcessing() {
             sku: activeGarment.sku,
             durationMs: result.durationMs ?? Date.now() - t0,
             attempts: result.attempts ?? 1,
+            wishlistCode,
           });
           setAiData({
             status: 'success',
@@ -94,6 +103,7 @@ export function AIProcessing() {
             sku: activeGarment.sku,
             errorCategory: categorizeError(result.error),
             durationMs: Date.now() - t0,
+            wishlistCode,
           });
           setAiData({
             status: 'error',
@@ -108,6 +118,7 @@ export function AIProcessing() {
           sku: activeGarment.sku,
           errorCategory: categorizeError(error.message),
           durationMs: Date.now() - t0,
+          wishlistCode,
         });
         setAiData({
           status: 'error',

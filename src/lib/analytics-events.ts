@@ -63,6 +63,14 @@ export interface FilterAppliedEvent extends BaseEvent {
 export interface PhotoInitiatedEvent extends BaseEvent {
   type: 'photo_initiated';
   sku: string;
+  /**
+   * The 6-char code shown to the user that they dictate to the asesor.
+   * Captured on every photo event so that when an asesor closes a sale we can
+   * trace the code back to: which kiosk session, which SKU, which line, which
+   * filters were applied. Optional because legacy events (pre-this-feature)
+   * won't have it.
+   */
+  wishlistCode?: string;
 }
 
 export interface PhotoGeneratedEvent extends BaseEvent {
@@ -70,6 +78,7 @@ export interface PhotoGeneratedEvent extends BaseEvent {
   sku: string;
   durationMs: number;
   attempts: number;
+  wishlistCode?: string;
 }
 
 export interface PhotoFailedEvent extends BaseEvent {
@@ -77,12 +86,14 @@ export interface PhotoFailedEvent extends BaseEvent {
   sku: string;
   errorCategory: ErrorCategory;
   durationMs: number;
+  wishlistCode?: string;
 }
 
 export interface PhotoDownloadedEvent extends BaseEvent {
   type: 'photo_downloaded';
   sku: string;
   isAI: boolean;
+  wishlistCode?: string;
 }
 
 export type AnalyticsEvent =
