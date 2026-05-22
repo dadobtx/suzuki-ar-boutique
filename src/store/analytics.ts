@@ -143,3 +143,22 @@ export const useAnalyticsStore = create<AnalyticsStore>()(
     },
   ),
 );
+
+// Cross-tab synchronization: if an admin clears the analytics in Tab A,
+// Tab B (the kiosk) needs to clear its in-memory events array too. Otherwise,
+// the next time Tab B tracks an event, it will append it to its stale in-memory
+// array and overwrite the empty localStorage, bringing all the old events back.
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'suzuki-ar-analytics' && e.newValue) {
+      try {
+        const parsed = JSON.parse(e.newValue);
+        if (parsed?.state?.events) {
+          useAnalyticsStore.setState({ events: parsed.state.events });
+        }
+      } catch {
+        // ignore
+      }
+    }
+  });
+}
