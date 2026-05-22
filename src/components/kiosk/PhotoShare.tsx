@@ -15,8 +15,7 @@ export function PhotoShare() {
   const aiGeneratedUrl = usePhotoStore((s) => s.aiGeneratedUrl);
   const aiDurationMs = usePhotoStore((s) => s.aiDurationMs);
 
-  const displayImage =
-    kioskState === 'SHARE_QR' && aiGeneratedUrl ? aiGeneratedUrl : photoComposed;
+  const displayImage = aiGeneratedUrl ?? photoComposed;
   const qrUrl =
     aiGeneratedUrl && /^https?:\/\//.test(aiGeneratedUrl) ? aiGeneratedUrl : null;
 
@@ -59,7 +58,31 @@ export function PhotoShare() {
       {/* Top 60%: Photo */}
       <div className="h-[60%] w-full flex items-center justify-center p-8 bg-black relative">
         <div className="relative h-full aspect-square border border-accent-cyan/50 p-2 clip-hud">
-          <img src={displayImage} alt="Tu look" className="w-full h-full object-cover" />
+          <img
+            src={displayImage}
+            alt="Tu look"
+            className="w-full h-full object-cover"
+            onError={(e) => {
+              // If the FASHN URL expired or the blob was revoked, hide the
+              // broken image and show a friendly placeholder instead.
+              const target = e.currentTarget;
+              target.style.display = 'none';
+              const placeholder = target.nextElementSibling as HTMLElement | null;
+              if (placeholder) placeholder.style.display = 'flex';
+            }}
+          />
+          {/* Shown only when the img fails to load */}
+          <div
+            className="hidden w-full h-full items-center justify-center flex-col gap-3 bg-surface"
+            style={{ display: 'none' }}
+          >
+            <span className="text-fg-muted/40 text-6xl">📷</span>
+            <p className="font-mono text-xs text-fg-muted uppercase tracking-widest text-center px-4">
+              Imagen no disponible
+              <br />
+              La foto generada expiró · descargala antes de cerrar
+            </p>
+          </div>
           {kioskState === 'SHARE_QR_FALLBACK' && (
             <div className="absolute top-4 left-4 bg-black/70 text-white font-mono text-xs px-2 py-1 rounded border border-white/20">
               {t('photo.share.fallback_badge', 'VISTA PREVIA DEMO')}

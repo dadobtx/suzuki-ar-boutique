@@ -102,12 +102,13 @@ export const useAnalyticsStore = create<AnalyticsStore>()(
       },
 
       clearAll: () => {
-        // Also wipe the kiosk state from sessionStorage. If we don't, the kiosk
-        // store rehydrates into whatever mid-flow state it was in (TRYON, etc.)
-        // and its transition() logic fires startSession() again — inflating the
-        // session count and photo counters even though events[] is empty.
+        // Also wipe the kiosk and photo state from sessionStorage. If we don't,
+        // the kiosk store rehydrates into whatever mid-flow state it was in
+        // (TRYON, etc.) and its transition() logic fires startSession() again —
+        // inflating the session count and photo counters even though events[] is empty.
         try {
           sessionStorage.removeItem('suzuki-ar-kiosk');
+          sessionStorage.removeItem('suzuki-ar-photo');
         } catch {
           // Ignore storage errors
         }
