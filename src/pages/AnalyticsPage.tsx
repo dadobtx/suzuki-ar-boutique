@@ -203,7 +203,10 @@ function AnalyticsDashboard() {
 
     for (const e of filtered) {
       byType.set(e.type, (byType.get(e.type) ?? 0) + 1);
-      sessions.add(e.sessionId);
+      // Exclude the 'no-session' sentinel — it's used for events emitted before
+      // startSession() runs (e.g. during store rehydration) and should not be
+      // counted as a real user visit.
+      if (e.sessionId !== 'no-session') sessions.add(e.sessionId);
 
       if (e.type === 'garment_selected') {
         garmentSelections.set(e.sku, (garmentSelections.get(e.sku) ?? 0) + 1);

@@ -47,10 +47,18 @@ export function PhotoCountdown({ videoRef, overlayCanvasRef }: PhotoCountdownPro
       }
     };
 
+    // Beep immediately for the initial "3" display.
+    playBeep();
+
     const interval = setInterval(() => {
       setCountdown((c) => {
         if (c > 1) {
-          playBeep();
+          // Defer the beep to AFTER React flushes the state update so it never
+          // fires while the previous number's exit animation is still running.
+          // Without this deferral the 3→2 transition produced a double-tone
+          // because the new AudioContext was created synchronously inside the
+          // setState callback, overlapping with the still-playing exit animation.
+          setTimeout(playBeep, 0);
           return c - 1;
         }
 
@@ -92,8 +100,6 @@ export function PhotoCountdown({ videoRef, overlayCanvasRef }: PhotoCountdownPro
         return 0;
       });
     }, 1000);
-
-    playBeep();
 
     return () => clearInterval(interval);
   }, [transition, catalog, activeGarmentId, videoRef, overlayCanvasRef, setPhoto]);
