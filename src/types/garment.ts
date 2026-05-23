@@ -60,6 +60,12 @@ export interface GarmentAnchorsFile {
    * collarbone.
    */
   topClipY?: number;
+  /**
+   * Optional: source-Y coordinate (in PNG pixels) below which the garment is
+   * NOT warped. Lets each garment tune how much fabric to project below the
+   * hip landmarks.
+   */
+  bottomClipY?: number;
   /** Anchor points: pixel position in overlay → MediaPipe landmark */
   anchors: Array<
     GarmentAnchor & {

@@ -426,11 +426,19 @@ export function useGarmentRenderer(
           const defaultTopY = Math.max(0, shoulderSrcY - NECK_MARGIN_PX);
           const topY = cached.anchors.topClipY ?? defaultTopY;
 
+          // Clip the bottom at the hip anchor line so the garment ends at the
+          // waist instead of running down to mid-thigh. Tune HIP_BOTTOM_MARGIN_PX
+          // to taste: 0 = stop at hip, negative = crop above hip, positive = a
+          // bit of fabric below. Garments can override via `bottomClipY`.
+          const HIP_BOTTOM_MARGIN_PX = 0;
+          const defaultBottomY = Math.min(imgH, s2.y + HIP_BOTTOM_MARGIN_PX);
+          const bottomY = cached.anchors.bottomClipY ?? defaultBottomY;
+
           const corners = [
             { x: 0, y: topY },
             { x: imgW, y: topY },
-            { x: imgW, y: imgH },
-            { x: 0, y: imgH },
+            { x: imgW, y: bottomY },
+            { x: 0, y: bottomY },
           ];
 
           for (const pt of corners) {
@@ -447,6 +455,29 @@ export function useGarmentRenderer(
       ctx.save();
       ctx.translate(cssWidth, 0);
       ctx.scale(-1, 1);
+
+      // Proximity fade: when the user leans close to the screen to tap the
+      // catalog, MediaPipe's pose predictions get unreliable and the warp
+      // distorts over the user's face. Fade the garment out before that
+      // happens, using the normalized distance between the ears (landmarks
+      // 7 & 8) as a proximity proxy. Fully transparent by 0.16.
+      const lEar = lm[7];
+      const rEar = lm[8];
+      if (lEar && rEar) {
+        const exDx = (lEar.x - rEar.x) * videoWidth;
+        const exDy = (lEar.y - rEar.y) * videoHeight;
+        const earDistNormalized =
+          Math.hypot(exDx, exDy) / Math.max(videoWidth, videoHeight);
+        const FADE_START = 0.1;
+        const FADE_END = 0.16;
+        if (earDistNormalized > FADE_START) {
+          const t = Math.min(
+            1,
+            (earDistNormalized - FADE_START) / (FADE_END - FADE_START),
+          );
+          ctx.globalAlpha = 1 - t;
+        }
+      }
 
       // f. Warp garment
       warpGarment(ctx, cached.img, anchorsSrc, anchorsDst);
