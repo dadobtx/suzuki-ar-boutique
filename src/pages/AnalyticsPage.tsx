@@ -201,6 +201,12 @@ function AnalyticsDashboard() {
 
     const outcomes = { photo_downloaded: 0, photo_taken: 0, abandoned: 0, error: 0 };
 
+    const styleSelections = new Map<string, number>();
+    const styleDownloads = new Map<string, number>();
+    const styleGenerations = new Map<string, number>();
+    let styleGenerationsCount = 0;
+    let styleGenerationsSuccessCount = 0;
+
     for (const e of filtered) {
       byType.set(e.type, (byType.get(e.type) ?? 0) + 1);
       // Exclude the 'no-session' sentinel — it's used for events emitted before
@@ -235,6 +241,16 @@ function AnalyticsDashboard() {
         for (const v of e.values) {
           m.set(v, (m.get(v) ?? 0) + 1);
         }
+      } else if (e.type === 'style_generated') {
+        styleGenerationsCount++;
+        if (e.success) {
+          styleGenerationsSuccessCount++;
+          styleGenerations.set(e.styleId, (styleGenerations.get(e.styleId) ?? 0) + 1);
+        }
+      } else if (e.type === 'style_selected') {
+        styleSelections.set(e.styleId, (styleSelections.get(e.styleId) ?? 0) + 1);
+      } else if (e.type === 'style_downloaded') {
+        styleDownloads.set(e.styleId, (styleDownloads.get(e.styleId) ?? 0) + 1);
       }
     }
 
@@ -270,6 +286,11 @@ function AnalyticsDashboard() {
       errorCategories,
       outcomes,
       filterValues,
+      styleSelections,
+      styleDownloads,
+      styleGenerations,
+      styleGenerationsCount,
+      styleGenerationsSuccessCount,
     };
   }, [filtered]);
 
@@ -523,6 +544,75 @@ function AnalyticsDashboard() {
                   Sin errores aún (buenas noticias)
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* Viral Styles Metrics */}
+        <div className="bg-surface border border-surface-hover p-6 mb-8 clip-hud">
+          <h2 className="font-display text-2xl tracking-widest text-white uppercase mb-4">
+            Estilos Animados Virales (Social Share Boost)
+          </h2>
+          <p className="font-mono text-xs text-fg-muted mb-6 uppercase tracking-widest">
+            Total Generados: {stats.styleGenerationsSuccessCount} exitosos /{' '}
+            {stats.styleGenerationsCount} intentos
+          </p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Generados */}
+            <div>
+              <h3 className="font-mono text-xs text-accent-cyan uppercase tracking-widest mb-3">
+                Top Generados Exitosos
+              </h3>
+              {['anime-racing', 'kart-arcade', 'action-figure'].map((styleId) => {
+                const val = stats.styleGenerations.get(styleId) ?? 0;
+                const maxVal = Math.max(
+                  ...Array.from(stats.styleGenerations.values()),
+                  1,
+                );
+                const name =
+                  styleId === 'anime-racing'
+                    ? 'Anime'
+                    : styleId === 'kart-arcade'
+                      ? 'Kart Racer'
+                      : 'Figura de Acción';
+                return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
+              })}
+            </div>
+
+            {/* Seleccionados */}
+            <div>
+              <h3 className="font-mono text-xs text-accent-cyan uppercase tracking-widest mb-3">
+                Top Seleccionados en Kiosko
+              </h3>
+              {['anime-racing', 'kart-arcade', 'action-figure'].map((styleId) => {
+                const val = stats.styleSelections.get(styleId) ?? 0;
+                const maxVal = Math.max(...Array.from(stats.styleSelections.values()), 1);
+                const name =
+                  styleId === 'anime-racing'
+                    ? 'Anime'
+                    : styleId === 'kart-arcade'
+                      ? 'Kart Racer'
+                      : 'Figura de Acción';
+                return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
+              })}
+            </div>
+
+            {/* Descargados */}
+            <div>
+              <h3 className="font-mono text-xs text-accent-cyan uppercase tracking-widest mb-3">
+                Top Descargados
+              </h3>
+              {['anime-racing', 'kart-arcade', 'action-figure'].map((styleId) => {
+                const val = stats.styleDownloads.get(styleId) ?? 0;
+                const maxVal = Math.max(...Array.from(stats.styleDownloads.values()), 1);
+                const name =
+                  styleId === 'anime-racing'
+                    ? 'Anime'
+                    : styleId === 'kart-arcade'
+                      ? 'Kart Racer'
+                      : 'Figura de Acción';
+                return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
+              })}
             </div>
           </div>
         </div>

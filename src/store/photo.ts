@@ -7,6 +7,12 @@ interface PhotoHistory {
   wishlistCode: string;
 }
 
+export interface StylizedImage {
+  styleId: string;
+  status: 'pending' | 'success' | 'error';
+  url?: string;
+}
+
 interface PhotoState {
   currentPhotoComposed: string | null;
   currentPhotoClean: string | null;
@@ -16,6 +22,7 @@ interface PhotoState {
   aiGenerationStatus: 'idle' | 'processing' | 'success' | 'error';
   aiGenerationError: string | null;
   aiDurationMs: number | null;
+  stylizedImages: StylizedImage[];
   history: PhotoHistory[];
   setPhoto: (composed: string, clean: string, wishlistCode: string, sku: string) => void;
   setAiData: (data: {
@@ -24,6 +31,12 @@ interface PhotoState {
     error?: string;
     durationMs?: number;
   }) => void;
+  setStylizedImages: (images: StylizedImage[]) => void;
+  updateStylizedImageStatus: (
+    styleId: string,
+    status: 'pending' | 'success' | 'error',
+    url?: string,
+  ) => void;
   clearPhoto: () => void;
 }
 
@@ -38,6 +51,7 @@ export const usePhotoStore = create<PhotoState>()(
       aiGenerationStatus: 'idle',
       aiGenerationError: null,
       aiDurationMs: null,
+      stylizedImages: [],
       history: [],
 
       setPhoto: (composed, clean, wishlistCode, sku) => {
@@ -53,6 +67,7 @@ export const usePhotoStore = create<PhotoState>()(
           currentPhotoClean: clean,
           currentWishlistCode: wishlistCode,
           currentGarmentSku: sku,
+          stylizedImages: [], // Reset stylized images for new session
           history: [
             {
               timestamp: new Date().toISOString(),
@@ -80,6 +95,7 @@ export const usePhotoStore = create<PhotoState>()(
           aiGenerationStatus: 'idle',
           aiGenerationError: null,
           aiDurationMs: null,
+          stylizedImages: [], // Clear stylized images
         });
       },
 
@@ -93,6 +109,18 @@ export const usePhotoStore = create<PhotoState>()(
             data.durationMs !== undefined ? data.durationMs : state.aiDurationMs,
         }));
       },
+
+      setStylizedImages: (images) => {
+        set({ stylizedImages: images });
+      },
+
+      updateStylizedImageStatus: (styleId, status, url) => {
+        set((state) => ({
+          stylizedImages: state.stylizedImages.map((img) =>
+            img.styleId === styleId ? { ...img, status, url: url ?? img.url } : img,
+          ),
+        }));
+      },
     }),
     {
       name: 'suzuki-ar-photo',
@@ -100,6 +128,9 @@ export const usePhotoStore = create<PhotoState>()(
       // Only persist what survives a reload. Blob URLs are revoked and can't
       // be re-used — only persist the AI-generated HTTPS URL and the metadata
       // the share screen needs (wishlistCode, sku, timing).
+      // Note: stylizedImages is deliberately omitted from partialize because
+      // Replicate output URLs expire, and in a shared kiosk context we must prevent
+      // leakage of style photos between separate sessions.
       partialize: (state) => ({
         currentWishlistCode: state.currentWishlistCode,
         currentGarmentSku: state.currentGarmentSku,

@@ -96,6 +96,27 @@ export interface PhotoDownloadedEvent extends BaseEvent {
   wishlistCode?: string;
 }
 
+export interface StyleGeneratedEvent extends BaseEvent {
+  type: 'style_generated';
+  styleId: string;
+  sku: string;
+  durationMs: number;
+  success: boolean;
+}
+
+export interface StyleSelectedEvent extends BaseEvent {
+  type: 'style_selected';
+  styleId: string;
+  sku: string;
+}
+
+export interface StyleDownloadedEvent extends BaseEvent {
+  type: 'style_downloaded';
+  styleId: string;
+  sku: string;
+  wishlistCode?: string;
+}
+
 export type AnalyticsEvent =
   | SessionStartedEvent
   | SessionEndedEvent
@@ -106,7 +127,10 @@ export type AnalyticsEvent =
   | PhotoInitiatedEvent
   | PhotoGeneratedEvent
   | PhotoFailedEvent
-  | PhotoDownloadedEvent;
+  | PhotoDownloadedEvent
+  | StyleGeneratedEvent
+  | StyleSelectedEvent
+  | StyleDownloadedEvent;
 
 export type AnalyticsEventType = AnalyticsEvent['type'];
 

@@ -1,9 +1,12 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QRCodeSVG } from 'qrcode.react';
+import { Loader2 } from 'lucide-react';
 import { useKioskStore } from '@/store/kiosk';
 import { usePhotoStore } from '@/store/photo';
 import { useAnalyticsStore } from '@/store/analytics';
+import { cancelStylizeRequests } from '@/lib/ai-stylize-client';
+import { STYLE_CATALOG } from '@/lib/style-catalog';
 
 export function PhotoShare() {
   const { t } = useTranslation();
@@ -14,14 +17,26 @@ export function PhotoShare() {
   const wishlistCode = usePhotoStore((s) => s.currentWishlistCode);
   const aiGeneratedUrl = usePhotoStore((s) => s.aiGeneratedUrl);
   const aiDurationMs = usePhotoStore((s) => s.aiDurationMs);
+  const stylizedImages = usePhotoStore((s) => s.stylizedImages);
 
-  const displayImage = aiGeneratedUrl ?? photoComposed;
-  const qrUrl =
-    aiGeneratedUrl && /^https?:\/\//.test(aiGeneratedUrl) ? aiGeneratedUrl : null;
+  const [selectedStyleId, setSelectedStyleId] = useState<string>('original');
+
+  const selectedStyleImg = stylizedImages.find((img) => img.styleId === selectedStyleId);
+  const displayImage =
+    selectedStyleId !== 'original' && selectedStyleImg?.url
+      ? selectedStyleImg.url
+      : (aiGeneratedUrl ?? photoComposed);
+
+  const qrUrl = displayImage && /^https?:\/\//.test(displayImage) ? displayImage : null;
+
+  const showThumbnails =
+    stylizedImages &&
+    stylizedImages.some((img) => img.status === 'success' || img.status === 'pending');
 
   // Auto-timeout
   useEffect(() => {
     const timer = setTimeout(() => {
+      cancelStylizeRequests();
       transition('ATTRACT');
     }, 60000);
     return () => clearTimeout(timer);
@@ -31,23 +46,51 @@ export function PhotoShare() {
     return null;
   }
 
+  const handleSelectStyle = (styleId: string) => {
+    setSelectedStyleId(styleId);
+    if (styleId !== 'original') {
+      const currentSku = usePhotoStore.getState().currentGarmentSku;
+      if (currentSku) {
+        useAnalyticsStore.getState().track({
+          type: 'style_selected',
+          styleId,
+          sku: currentSku,
+        });
+      }
+    }
+  };
+
   const handleDownload = () => {
     // Analytics: download is the strongest "I love this look" signal.
-    // Track whether they downloaded the real AI-generated photo or the
-    // local demo composite (different conversion meaning).
     const currentSku = usePhotoStore.getState().currentGarmentSku;
-    if (currentSku) {
-      useAnalyticsStore.getState().track({
-        type: 'photo_downloaded',
-        sku: currentSku,
-        isAI: kioskState === 'SHARE_QR' && !!aiGeneratedUrl,
-        wishlistCode: wishlistCode || undefined,
-      });
+
+    if (selectedStyleId !== 'original') {
+      if (currentSku) {
+        useAnalyticsStore.getState().track({
+          type: 'style_downloaded',
+          styleId: selectedStyleId,
+          sku: currentSku,
+          wishlistCode: wishlistCode || undefined,
+        });
+      }
+    } else {
+      if (currentSku) {
+        useAnalyticsStore.getState().track({
+          type: 'photo_downloaded',
+          sku: currentSku,
+          isAI: kioskState === 'SHARE_QR' && !!aiGeneratedUrl,
+          wishlistCode: wishlistCode || undefined,
+        });
+      }
     }
 
     const a = document.createElement('a');
     a.href = displayImage;
-    a.download = `suzuki-look-${wishlistCode}.jpg`;
+    if (selectedStyleId === 'original') {
+      a.download = `suzuki-look-${wishlistCode}.jpg`;
+    } else {
+      a.download = `suzuki-look-${wishlistCode}-${selectedStyleId}.jpg`;
+    }
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -55,9 +98,13 @@ export function PhotoShare() {
 
   return (
     <div className="absolute inset-0 z-50 bg-bg text-fg flex flex-col">
-      {/* Top 60%: Photo */}
-      <div className="h-[60%] w-full flex items-center justify-center p-8 bg-black relative">
-        <div className="relative h-full aspect-square border border-accent-cyan/50 p-2 clip-hud">
+      {/* Top Section: Photo & Thumbnails Rail */}
+      <div className="flex-1 w-full flex flex-col items-center justify-center p-6 bg-black gap-4 relative min-h-0">
+        <div
+          className={`relative flex-1 aspect-square ${
+            showThumbnails ? 'max-h-[70%]' : 'max-h-[85%]'
+          } border border-accent-cyan/50 p-2 clip-hud`}
+        >
           <img
             src={displayImage}
             alt="Tu look"
@@ -88,16 +135,79 @@ export function PhotoShare() {
               {t('photo.share.fallback_badge', 'VISTA PREVIA DEMO')}
             </div>
           )}
-          {aiDurationMs && (
+          {aiDurationMs && selectedStyleId === 'original' && (
             <div className="absolute bottom-4 left-4 bg-black/70 text-white font-mono text-xs px-2 py-1 rounded border border-white/20">
               ⏱ {(aiDurationMs / 1000).toFixed(1)}s
             </div>
           )}
         </div>
+
+        {/* Thumbnails rail */}
+        {showThumbnails && (
+          <div className="flex gap-4 justify-center items-center py-2 z-10 w-full shrink-0">
+            {/* Original Look */}
+            <button
+              onClick={() => handleSelectStyle('original')}
+              className={`relative w-16 h-16 border transition-all duration-200 clip-hud overflow-hidden bg-surface flex flex-col items-center justify-center shrink-0 ${
+                selectedStyleId === 'original'
+                  ? 'border-accent-cyan shadow-[0_0_10px_rgba(0,255,244,0.4)] scale-105'
+                  : 'border-white/20 hover:border-white/50 hover:scale-102'
+              }`}
+            >
+              <img
+                src={aiGeneratedUrl ?? photoComposed ?? ''}
+                alt="Original"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[9px] font-mono text-center text-white py-0.5 uppercase tracking-wider">
+                Original
+              </div>
+            </button>
+
+            {/* Stylized Options */}
+            {STYLE_CATALOG.map((catItem) => {
+              const styleImg = stylizedImages.find((img) => img.styleId === catItem.id);
+              if (!styleImg || styleImg.status === 'error') return null;
+
+              const isPending = styleImg.status === 'pending';
+              const isSelected = selectedStyleId === catItem.id;
+
+              return (
+                <button
+                  key={catItem.id}
+                  disabled={isPending}
+                  onClick={() => handleSelectStyle(catItem.id)}
+                  className={`relative w-16 h-16 border transition-all duration-200 clip-hud overflow-hidden bg-surface flex flex-col items-center justify-center shrink-0 ${
+                    isPending ? 'opacity-70 cursor-wait border-white/10' : ''
+                  } ${
+                    isSelected
+                      ? 'border-accent-cyan shadow-[0_0_10px_rgba(0,255,244,0.4)] scale-105'
+                      : 'border-white/20 hover:border-white/50 hover:scale-102'
+                  }`}
+                >
+                  {isPending ? (
+                    <div className="flex items-center justify-center w-full h-full">
+                      <Loader2 className="w-5 h-5 text-accent-cyan animate-spin" />
+                    </div>
+                  ) : (
+                    <img
+                      src={styleImg.url ?? ''}
+                      alt={catItem.name}
+                      className="w-full h-full object-cover"
+                    />
+                  )}
+                  <div className="absolute bottom-0 inset-x-0 bg-black/70 text-[8px] font-mono text-center text-white py-0.5 uppercase tracking-wider truncate px-0.5">
+                    {catItem.name}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Bottom 40%: Controls */}
-      <div className="h-[40%] w-full flex flex-col items-center justify-center p-8 gap-6 bg-surface">
+      {/* Bottom Section: Controls */}
+      <div className="w-full flex flex-col items-center justify-center p-8 gap-6 bg-surface border-t border-white/5 shrink-0">
         <div className="text-center">
           <h2 className="font-display text-4xl text-white mb-2 tracking-wide">
             {t('photo.share.title', 'TU LOOK ESTÁ LISTO')}
@@ -155,13 +265,19 @@ export function PhotoShare() {
 
               <div className="flex gap-2">
                 <button
-                  onClick={() => transition('TRYON')}
+                  onClick={() => {
+                    cancelStylizeRequests();
+                    transition('TRYON');
+                  }}
                   className="flex-1 py-3 bg-surface-3 text-white font-display text-lg tracking-wide border border-white/10 hover:bg-surface-4 active:scale-95 transition-all"
                 >
                   {t('photo.share.again', 'OTRA PRENDA')}
                 </button>
                 <button
-                  onClick={() => transition('ATTRACT')}
+                  onClick={() => {
+                    cancelStylizeRequests();
+                    transition('ATTRACT');
+                  }}
                   className="flex-1 py-3 bg-surface-3 text-white font-display text-lg tracking-wide border border-white/10 hover:bg-surface-4 active:scale-95 transition-all"
                 >
                   {t('photo.share.finish', 'FINALIZAR')}

@@ -6,6 +6,10 @@ import { usePhotoStore } from '@/store/photo';
 import { useGarmentStore } from '@/store/garment';
 import { useAnalyticsStore } from '@/store/analytics';
 import { generateTryOnPhoto } from '@/lib/ai-tryon-client';
+import {
+  generateStylizedPhoto,
+  createNewStylizeController,
+} from '@/lib/ai-stylize-client';
 import { categorizeError } from '@/lib/analytics-events';
 import { Loader2 } from 'lucide-react';
 
@@ -92,6 +96,64 @@ export function AIProcessing() {
             url: result.imageUrl,
             durationMs: result.durationMs,
           });
+
+          // Trigger style generation in parallel (now that account has credit and backend handles 429)
+          const styles = ['anime-racing', 'kart-arcade', 'action-figure'];
+          usePhotoStore
+            .getState()
+            .setStylizedImages(styles.map((id) => ({ styleId: id, status: 'pending' })));
+
+          const signal = createNewStylizeController();
+
+          const stylizePromises = styles.map(async (styleId) => {
+            if (signal.aborted) {
+              usePhotoStore.getState().updateStylizedImageStatus(styleId, 'error');
+              return;
+            }
+
+            const startTime = Date.now();
+            try {
+              const res = await generateStylizedPhoto(result.imageUrl!, styleId, signal);
+              if (signal.aborted) {
+                usePhotoStore.getState().updateStylizedImageStatus(styleId, 'error');
+                return;
+              }
+
+              analytics.track({
+                type: 'style_generated',
+                styleId,
+                sku: activeGarment.sku,
+                durationMs: res.durationMs ?? Date.now() - startTime,
+                success: res.status === 'success',
+              });
+
+              if (res.status === 'success' && res.imageUrl) {
+                usePhotoStore
+                  .getState()
+                  .updateStylizedImageStatus(styleId, 'success', res.imageUrl);
+              } else {
+                usePhotoStore.getState().updateStylizedImageStatus(styleId, 'error');
+              }
+            } catch {
+              if (signal.aborted) {
+                usePhotoStore.getState().updateStylizedImageStatus(styleId, 'error');
+                return;
+              }
+
+              analytics.track({
+                type: 'style_generated',
+                styleId,
+                sku: activeGarment.sku,
+                durationMs: Date.now() - startTime,
+                success: false,
+              });
+
+              usePhotoStore.getState().updateStylizedImageStatus(styleId, 'error');
+            }
+          });
+
+          Promise.allSettled(stylizePromises);
+
           transition('SHARE_QR');
         } else {
           // FASHN failure (PoseError, NSFW, model rejection, etc.) — route the
