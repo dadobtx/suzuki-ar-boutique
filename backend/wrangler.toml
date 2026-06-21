@@ -5,8 +5,13 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "RATE_LIMITER"
-id = "2d21cf062beb49f08566d3e4a23b852c" # Rate Limiter KV
+id = "9355c750421143358ac517d9ab836921" # Rate Limiter KV
 
 [vars]
 ALLOWED_ORIGIN = "https://dadobtx.github.io"
 # FASHN_API_KEY is a secret, set via `wrangler secret put FASHN_API_KEY`
+
+[[d1_databases]]
+binding = "DB"
+database_name = "kiosk-sizing-db"
+database_id = "ac979b1d-4c4c-4149-ae5b-76b250313715" # Placeholder for local dev

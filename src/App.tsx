@@ -4,6 +4,8 @@ import { useAppStore } from './store/app';
 import { HomePage } from './pages/HomePage';
 import { DiagPage } from './pages/DiagPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
+import { KioskPage } from './pages/KioskPage';
+import { KioskReportsPage } from './pages/KioskReportsPage';
 import { useKioskFlag } from './hooks/useKioskFlag';
 import { setupAutoRecovery } from './lib/auto-recovery';
 
@@ -34,6 +36,8 @@ export default function App() {
           <Route path="/" element={<HomePage />} />
           <Route path="/diag" element={<DiagPage />} />
           <Route path="/analytics" element={<AnalyticsPage />} />
+          <Route path="/kiosk" element={<KioskPage />} />
+          <Route path="/kiosk/reports" element={<KioskReportsPage />} />
         </Routes>
       </div>
     </HashRouter>

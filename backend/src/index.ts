@@ -9,6 +9,8 @@ type Bindings = {
   REPLICATE_API_TOKEN: string;
   ALLOWED_ORIGIN: string;
   RATE_LIMITER: KVNamespace;
+  DB: D1Database;
+  KIOSK_REPORTS_TOKEN?: string;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -219,6 +221,147 @@ app.post('/stylize', async (c) => {
         error: err.message || 'Internal Server Error',
       },
       200,
+    );
+  }
+});
+
+// Kiosk API Endpoints
+
+app.get('/kiosk/catalog', async (c) => {
+  try {
+    const { results: prendas } = await c.env.DB.prepare(
+      'SELECT * FROM prendas WHERE activo = 1',
+    ).all();
+
+    const { results: tablas } = await c.env.DB.prepare(
+      'SELECT * FROM tablas_tallas',
+    ).all();
+
+    return c.json({ status: 'success', prendas, tablas });
+  } catch (err) {
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
+app.post('/kiosk/sessions', async (c) => {
+  try {
+    const body = await c.req.json();
+    const session_id = crypto.randomUUID();
+
+    await c.env.DB.prepare(
+      `INSERT INTO sesiones (session_id, ubicacion_evento, dispositivo_id, talla_habitual, preferencia_fit, pecho_ar, cintura_ar, altura_ar, ar_confianza)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        session_id,
+        body.ubicacion_evento || null,
+        body.dispositivo_id || null,
+        body.talla_habitual || null,
+        body.preferencia_fit || null,
+        body.pecho_ar || null,
+        body.cintura_ar || null,
+        body.altura_ar || null,
+        body.ar_confianza || null,
+      )
+      .run();
+
+    return c.json({ status: 'success', session_id });
+  } catch (err) {
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
+app.post('/kiosk/interactions', async (c) => {
+  try {
+    const body = await c.req.json();
+    const interaccion_id = crypto.randomUUID();
+
+    await c.env.DB.prepare(
+      `INSERT INTO interacciones (interaccion_id, session_id, sku, accion, talla_recomendada, talla_elegida, tabla_origen_id)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        interaccion_id,
+        body.session_id,
+        body.sku,
+        body.accion,
+        body.talla_recomendada || null,
+        body.talla_elegida || null,
+        body.tabla_origen_id,
+      )
+      .run();
+
+    return c.json({ status: 'success' });
+  } catch (err) {
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
+app.get('/kiosk/reports', async (c) => {
+  try {
+    const token = c.req.query('token');
+    if (token !== (c.env.KIOSK_REPORTS_TOKEN || 'suzuki-kiosk-2026')) {
+      return c.json({ status: 'error', error: 'Unauthorized' }, 401);
+    }
+
+    // Top prendas por interacción
+    const { results: ranking } = await c.env.DB.prepare(
+      `
+      SELECT sku, talla_elegida, COUNT(*) as count
+      FROM interacciones
+      WHERE accion = 'probo' AND talla_elegida IS NOT NULL
+      GROUP BY sku, talla_elegida
+      ORDER BY count DESC
+    `,
+    ).all();
+
+    // Distribución de medidas (solo sesiones con AR confiable)
+    const { results: distribucion } = await c.env.DB.prepare(
+      `
+      SELECT i.sku, s.pecho_ar, s.cintura_ar
+      FROM interacciones i
+      JOIN sesiones s ON i.session_id = s.session_id
+      WHERE s.ar_confianza > 0.8 AND s.pecho_ar IS NOT NULL AND s.cintura_ar IS NOT NULL
+    `,
+    ).all();
+
+    // Top favoritos
+    const { results: favoritos } = await c.env.DB.prepare(
+      `
+      SELECT sku, COUNT(*) as count
+      FROM interacciones
+      WHERE accion = 'favorito'
+      GROUP BY sku
+      ORDER BY count DESC
+      LIMIT 10
+    `,
+    ).all();
+
+    // Calibración AR vs Talla
+    const { results: calibracion } = await c.env.DB.prepare(
+      `
+      SELECT i.tabla_origen_id, i.talla_elegida, AVG(s.pecho_ar) as avg_pecho, AVG(s.cintura_ar) as avg_cintura, COUNT(*) as count
+      FROM interacciones i
+      JOIN sesiones s ON i.session_id = s.session_id
+      WHERE i.accion = 'probo' AND s.ar_confianza > 0.8 AND i.talla_elegida IS NOT NULL
+      GROUP BY i.tabla_origen_id, i.talla_elegida
+    `,
+    ).all();
+
+    return c.json({ status: 'success', ranking, distribucion, favoritos, calibracion });
+  } catch (err) {
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
     );
   }
 });

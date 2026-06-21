@@ -1,0 +1,70 @@
+# F13 — Estilos Animados Virales (Social Share Boost)
+
+## Contexto
+Suzuki AR Boutique (React + TS + Vite, kiosko AR para autoshow). El flujo actual: foto del usuario → FASHN try-on vía Cloudflare Worker (backend/src/index.ts, Hono) → resultado en PhotoShare.tsx (src/components/kiosk/PhotoShare.tsx) con QR y código wishlist.
+
+## Objetivo
+A partir de la imagen try-on generada por FASHN, generar 3 imágenes adicionales con estilos animados virales para que el usuario las publique en redes. Los logos Suzuki de las prendas DEBEN seguir siendo legibles en las versiones estilizadas.
+
+## Arquitectura
+
+### 1. Backend — nuevo endpoint POST /stylize (backend/src/index.ts)
+- Input JSON: { imageUrl: string, styleId: string }
+- Valida que styleId exista en el catálogo de estilos (ver abajo). Rechaza 400 si no.
+- Llama a la API de Replicate con el modelo `google/nano-banana` (Gemini 2.5 Flash Image), pasando la imagen try-on como input image + el prompt del estilo.
+- Secret: REPLICATE_API_TOKEN (wrangler secret put REPLICATE_API_TOKEN). NOTA: el proyecto usó Replicate antes de migrar a FASHN — verificar si el secret/token ya está configurado en el Worker o en .dev.vars y reutilizarlo; si quedó código Replicate muerto de esa época, evaluarlo antes de escribir desde cero. Agregar a Bindings y a .dev.vars.example. NO hardcodear.
+- Usa el endpoint sync de Replicate (`Prefer: wait`) con timeout 30s; si no, poll como ya se hace con FASHN (patrón en backend/src/fashn.ts).
+- Reusar el rate-limiter KV existente (10 req/IP/min ya cubre las 3 llamadas; verificar que el middleware aplique también a /stylize).
+- Respuesta: { status: 'success', imageUrl, durationMs } | { status: 'error', error }.
+- Logs estilo `[stylize] styleId=... durationMs=...` como los de /tryon.
+
+### 2. Catálogo de estilos (backend, exportable o duplicado tipado en frontend)
+3 estilos fijos; se generan los 3 en cada sesión. IDs y prompts:
+
+- `anime-racing`: "Transform this photo into a 1990s Japanese street-racing anime illustration (cel-shaded, hand-drawn): night city backdrop with neon lights, wet asphalt reflections, dramatic speed lines, cinematic teal-and-magenta lighting. The person keeps their exact pose and proportions. CRITICAL: preserve the garment design and ALL logos and text on the clothing (especially the SUZUKI logo) exactly as they appear, sharp and legible."
+- `kart-arcade`: "Turn this person into a cheerful 90s Japanese arcade kart-racing video game character: riding a colorful generic go-kart on a bright cartoon racetrack with generic coins, balloons and checkered flags, vibrant toy-like 3D render style. Do NOT include any Nintendo, Mario or other copyrighted game characters, items or logos. The character wears exactly the same garment as the photo. CRITICAL: keep the SUZUKI logo and garment graphics visible and legible."
+- `action-figure`: "Turn this person into a collectible action figure inside a retail blister box. The box is themed 'SUZUKI RACING TEAM' with red branding, includes accessories: a mini motorcycle helmet and a tiny Jimny 4x4. The figure wears exactly the same garment as in the photo. CRITICAL: keep all garment logos and text (SUZUKI) legible on both the figure and the packaging."
+
+Nota legal: en UI usar nombres genéricos ("Anime", "Kart Racer", "Figura de Acción"). NO usar "Initial D", "Mario", "Mario Kart" ni ninguna IP de terceros en textos visibles al usuario ni en assets. El prompt de kart-arcade incluye negative instruction explícita anti-Nintendo; mantenerla.
+
+### 3. Frontend
+- Nuevo cliente src/lib/ai-stylize-client.ts siguiendo el patrón de ai-tryon-client.ts (timeout 30s, 1 retry solo en errores transitorios, sin retry en rate-limit/timeout).
+- Store (src/store/photo.ts): agregar `stylizedImages: Array<{ styleId: string; status: 'pending' | 'success' | 'error'; url?: string }>` + acciones.
+- Disparo: cuando el try-on FASHN llega con éxito (donde hoy se setea aiGeneratedUrl), lanzar las 3 llamadas /stylize EN PARALELO (Promise.allSettled, no bloquear la transición a SHARE_QR). El usuario ve su try-on de inmediato.
+- PhotoShare.tsx: fila de 4 thumbnails (try-on original + 3 estilos). Cada estilo muestra spinner mientras status=pending, la imagen al llegar, y se oculta silenciosamente si status=error (sin mensaje de error intrusivo). Tap en thumbnail → cambia la imagen principal y el QR apunta a esa URL. Download descarga la imagen seleccionada con nombre `suzuki-look-${wishlistCode}-${styleId}.jpg`.
+- Respetar el estilo visual actual (clip-hud, paleta, fuente mono para labels) — F12 lo refinará después.
+- Auto-timeout de 60s a ATTRACT se mantiene; cancelar (AbortController) las llamadas pendientes al salir de SHARE_QR.
+
+### 4. Analytics (src/lib/analytics-events.ts + store)
+Nuevos eventos:
+- `style_generated` { styleId, sku, durationMs, success: boolean }
+- `style_selected` { styleId, sku }
+- `style_downloaded` { styleId, sku, wishlistCode }
+Integrarlos al dashboard admin existente (conteo por estilo: cuál es el más viral).
+
+### 5. Modo demo / fallback
+Si VITE_AI_BACKEND_URL no responde o no hay REPLICATE_API_TOKEN, la fila de estilos simplemente no aparece (feature-flag implícito). Nada de pantallas de error nuevas.
+
+### 6. Tests
+- backend/tests: stylize.test.ts — valida styleId inválido → 400, éxito mockeado, error de Replicate → status error, rate-limit aplica.
+- Frontend: test del store (estados pending→success/error) y del client (retry solo en transitorios), siguiendo los tests existentes.
+
+## Gates obligatorios antes de commit
+1. npx tsc --noEmit → 0 errores
+2. npm run lint → 0 errores
+3. npm test → verde
+4. npm run build → verde (es lo que corre GitHub Actions)
+
+## Commit sugerido
+feat(social): viral style generation from try-on result
+
+- new /stylize Worker endpoint calling Replicate google/nano-banana
+- 3 style catalog (anime racing, kart arcade, action figure)
+- parallel generation, thumbnail rail in PhotoShare with per-style QR/download
+- analytics: style_generated / style_selected / style_downloaded
+- silent degradation when backend or token missing
+
+## Restricciones
+- NO tocar useGarmentRenderer.ts ni el pipeline AR de MediaPipe.
+- NO modificar el flujo FASHN existente, solo engancharse a su éxito.
+- Prompts de estilo en un solo módulo para poder tunearlos sin tocar lógica.
