@@ -14,8 +14,11 @@ import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { CatalogPanel } from '@/components/catalog';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
-import { Camera as CameraIcon } from 'lucide-react';
+import { Camera as CameraIcon, RefreshCw } from 'lucide-react';
 import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
+import { SizingOnboardingModal } from '@/components/SizingOnboarding';
+import { SizingControls } from './SizingControls';
+import { useSizingStore } from '@/store/sizing';
 
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
@@ -43,6 +46,15 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const pose = usePose(camera.videoRef);
   const presence = usePresence(pose.landmarks);
   useKioskPresenceSync(presence);
+
+  // Reset sizing profile when user leaves
+  const resetProfile = useSizingStore((s) => s.reset);
+  const hasProfile = useSizingStore((s) => s.hasProfile);
+  useEffect(() => {
+    if (presence === 'absent') {
+      resetProfile();
+    }
+  }, [presence, resetProfile]);
 
   const transition = useKioskStore((s) => s.transition);
   const kioskState = useKioskStore((s) => s.state);
@@ -104,6 +116,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   };
   const badgeColor = presenceColors[presence] || 'text-fg-muted bg-surface/50';
 
+  // Only allow garment interaction if they have a profile
+  const garmentActiveWithProfile = garmentActive && hasProfile;
+
   return (
     <div
       className={
@@ -134,7 +149,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           landmarks={pose.landmarks}
           mask={pose.mask}
           layout={layout}
-          active={garmentActive}
+          active={garmentActiveWithProfile}
         />
 
         {/* Skeleton debug overlay canvas (z-index 20) */}
@@ -227,7 +242,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
 
         {/* Shoot Photo Button (z-index 40) */}
-        {garmentActive && (
+        {garmentActiveWithProfile && (
           <button
             onClick={() => transition('PHOTO_COUNTDOWN')}
             className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform z-40 border-4 border-white/20"
@@ -245,6 +260,25 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             videoRef={camera.videoRef}
             overlayCanvasRef={overlayCanvasRef}
           />
+        )}
+
+        {/* Sizing Controls HUD (z-index 40) */}
+        {garmentActiveWithProfile && <SizingControls />}
+
+        {/* Sizing Onboarding Modal (z-index 60) */}
+        {kioskState === 'TRYON' && presence === 'present' && !hasProfile && (
+          <SizingOnboardingModal />
+        )}
+
+        {/* Manual Reset Button (z-index 40) */}
+        {kioskState === 'TRYON' && hasProfile && (
+          <button
+            onClick={() => resetProfile()}
+            className="absolute top-4 left-4 flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur rounded-full text-white hover:bg-black/80 transition-colors z-40 border border-zinc-700"
+          >
+            <RefreshCw size={16} />
+            <span className="font-bold text-sm">Nuevo usuario</span>
+          </button>
         )}
       </div>
 

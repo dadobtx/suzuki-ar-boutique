@@ -100,3 +100,32 @@ describe('Motor de Tallas - recomendarTalla', () => {
     expect(rec).toBe('L');
   });
 });
+
+import { recomendarTallaGarment } from '../../src/lib/sizing';
+import { Garment } from '../../src/types/garment';
+
+describe('Motor de Tallas - recomendarTallaGarment', () => {
+  it('mapea correctamente un Garment a Prenda y devuelve recomendacion', () => {
+    const garment: Garment = {
+      id: 'g1',
+      line: 'GSX-R',
+      name: 'Test',
+      category: 'top',
+      sku: 'SKU-TEST',
+      sizes: ['S', 'M', 'L'],
+      colors: [],
+      overlayUrl: '',
+      anchorsUrl: '',
+    };
+    const profile: SesionKiosko = {
+      session_id: 'test',
+      talla_habitual: 'L',
+      preferencia_fit: 'regular',
+      ar_confianza: 0,
+    };
+
+    const res = recomendarTallaGarment(profile, garment);
+    expect(res.recomendada).toBe('L');
+    expect(res.tabla_origen_id).toBe('tt_eu_std');
+  });
+});

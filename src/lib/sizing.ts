@@ -1,3 +1,5 @@
+import type { Garment } from '../types/garment';
+
 export interface Medidas {
   pecho: number;
   cintura: number;
@@ -29,6 +31,31 @@ export interface Prenda {
   asset_ar?: string;
   activo: boolean;
 }
+
+export const SIZE_TABLES: Record<string, TablaTallas> = {
+  tt_eu_std: {
+    tabla_id: 'tt_eu_std',
+    origen: 'EU_Standard_Unisex',
+    version: '1.0',
+    provisional: true,
+    filas: [
+      { talla: 'S', pecho_min: 88, pecho_max: 96, cintura_min: 73, cintura_max: 81 },
+      { talla: 'M', pecho_min: 96, pecho_max: 104, cintura_min: 81, cintura_max: 89 },
+      { talla: 'L', pecho_min: 104, pecho_max: 112, cintura_min: 89, cintura_max: 97 },
+      { talla: 'XL', pecho_min: 112, pecho_max: 124, cintura_min: 97, cintura_max: 109 },
+    ],
+  },
+};
+
+export const LINE_TO_TABLE: Record<string, string> = {
+  'GSX-R': 'tt_eu_std',
+  Ecstar: 'tt_eu_std',
+  Hayabusa: 'tt_eu_std',
+  'Swift Sport': 'tt_eu_std',
+  Jimny: 'tt_eu_std',
+  Marine: 'tt_eu_std',
+  Lifestyle: 'tt_eu_std',
+};
 
 export interface SesionKiosko {
   session_id: string;
@@ -153,4 +180,41 @@ export function recomendarTalla(
   }
 
   return recomendacion;
+}
+
+export function recomendarTallaGarment(
+  profile: {
+    session_id?: string;
+    sessionId?: string | null;
+    talla_habitual?: string | null;
+    tallaHabitual?: string | null;
+    preferencia_fit?: 'ajustado' | 'regular' | 'holgado';
+    preferenciaFit?: 'ajustado' | 'regular' | 'holgado';
+    ar_confianza?: number | null;
+    arConfianza?: number;
+  },
+  garment: Garment,
+): { recomendada: string; tabla_origen_id: string } {
+  const tableId = LINE_TO_TABLE[garment.line] || 'tt_eu_std';
+  const table = SIZE_TABLES[tableId] || SIZE_TABLES['tt_eu_std']!;
+
+  const prenda: Prenda = {
+    sku: garment.sku,
+    nombre: garment.name,
+    tipo: garment.category,
+    genero: 'unisex',
+    tabla_origen_id: tableId,
+    tallas_disponibles: garment.sizes,
+    activo: true,
+  };
+
+  const mappedProfile: SesionKiosko = {
+    session_id: profile.session_id || profile.sessionId || '',
+    talla_habitual: profile.talla_habitual ?? profile.tallaHabitual,
+    preferencia_fit: profile.preferencia_fit ?? profile.preferenciaFit,
+    ar_confianza: profile.ar_confianza ?? profile.arConfianza ?? null,
+  };
+
+  const recomendada = recomendarTalla(mappedProfile, prenda, table);
+  return { recomendada, tabla_origen_id: tableId };
 }

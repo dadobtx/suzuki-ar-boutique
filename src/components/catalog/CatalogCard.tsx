@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { Heart, SlidersHorizontal, X } from 'lucide-react';
 import { useGarmentStore } from '@/store/garment';
 import type { Garment } from '@/types/garment';
+import { useSizingStore } from '@/store/sizing';
+import { recomendarTallaGarment } from '@/lib/sizing';
 
 interface CatalogCardProps {
   garment: Garment;
@@ -24,6 +26,15 @@ export function CatalogCard({ garment }: CatalogCardProps) {
   const isActive = activeGarmentId === garment.id;
   const isWishlisted = wishlist.includes(garment.sku);
   const baseUrl = import.meta.env.BASE_URL;
+
+  const hasProfile = useSizingStore((s) => s.hasProfile);
+  const profile = useSizingStore();
+
+  let recomendacionText = '';
+  if (hasProfile) {
+    const { recomendada } = recomendarTallaGarment(profile, garment);
+    recomendacionText = recomendada;
+  }
 
   const imageUrl = `${baseUrl}${garment.overlayUrl.replace(/^\//, '')}`;
 
@@ -87,18 +98,21 @@ export function CatalogCard({ garment }: CatalogCardProps) {
       </button>
 
       {/* Badges - Top Left Below Filter */}
-      {garment.badges && garment.badges.length > 0 && (
-        <div className="absolute top-[80px] left-4 z-10 flex flex-col gap-2">
-          {garment.badges.map((b) => (
-            <span
-              key={b}
-              className="text-xs font-bold px-2 py-1 bg-brand-red text-white clip-hud tracking-widest"
-            >
-              {b}
-            </span>
-          ))}
-        </div>
-      )}
+      <div className="absolute top-[80px] left-4 z-10 flex flex-col gap-2">
+        {hasProfile && recomendacionText && (
+          <span className="text-xs font-bold px-3 py-1.5 bg-blue-600 text-white clip-hud tracking-widest shadow-[0_0_10px_rgba(37,99,235,0.5)]">
+            TALLA: {recomendacionText}
+          </span>
+        )}
+        {garment.badges?.map((b) => (
+          <span
+            key={b}
+            className="text-xs font-bold px-2 py-1 bg-brand-red text-white clip-hud tracking-widest"
+          >
+            {b}
+          </span>
+        ))}
+      </div>
 
       {/* Image Area */}
       <div

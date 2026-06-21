@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Garment } from '@/types/garment';
 import { useAnalyticsStore } from './analytics';
+import { useSizingStore } from './sizing';
+import { recomendarTallaGarment } from '@/lib/sizing';
 
 export interface GarmentFilters {
   line: string;
@@ -113,6 +115,23 @@ export const useGarmentStore = create<GarmentState>()(
               line: garment.line,
               category: garment.category,
             });
+
+            // Sizing: record 'probo' interaction
+            const profile = useSizingStore.getState();
+            if (profile.hasProfile) {
+              const { recomendada, tabla_origen_id } = recomendarTallaGarment(
+                profile,
+                garment,
+              );
+              const elegida = profile.tallasElegidas[garment.sku] || recomendada;
+              profile.recordInteraction(
+                garment.sku,
+                'probo',
+                recomendada,
+                elegida,
+                tabla_origen_id,
+              );
+            }
           }
         }
         set({ activeGarmentId: id });
@@ -157,6 +176,31 @@ export const useGarmentStore = create<GarmentState>()(
             type: isAdding ? 'garment_wishlisted' : 'garment_unwishlisted',
             sku,
           });
+
+          // Sizing: record 'favorito' interaction (only on add)
+          if (isAdding) {
+            const profile = useSizingStore.getState();
+            if (profile.hasProfile) {
+              const garment = useGarmentStore
+                .getState()
+                .catalog.find((g) => g.sku === sku);
+              if (garment) {
+                const { recomendada, tabla_origen_id } = recomendarTallaGarment(
+                  profile,
+                  garment,
+                );
+                const elegida = profile.tallasElegidas[garment.sku] || recomendada;
+                profile.recordInteraction(
+                  garment.sku,
+                  'favorito',
+                  recomendada,
+                  elegida,
+                  tabla_origen_id,
+                );
+              }
+            }
+          }
+
           return { wishlist: newWishlist };
         }),
     }),

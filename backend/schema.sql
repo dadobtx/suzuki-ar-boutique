@@ -35,6 +35,7 @@ CREATE TABLE IF NOT EXISTS sesiones (
 );
 
 -- Interacciones del usuario con prendas
+DROP TABLE IF EXISTS interacciones;
 CREATE TABLE IF NOT EXISTS interacciones (
   interaccion_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -44,9 +45,7 @@ CREATE TABLE IF NOT EXISTS interacciones (
   talla_elegida TEXT,
   tabla_origen_id TEXT NOT NULL,
   timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY(session_id) REFERENCES sesiones(session_id),
-  FOREIGN KEY(sku) REFERENCES prendas(sku),
-  FOREIGN KEY(tabla_origen_id) REFERENCES tablas_tallas(tabla_id)
+  FOREIGN KEY(session_id) REFERENCES sesiones(session_id)
 );
 
 -- Índices útiles para reportes
