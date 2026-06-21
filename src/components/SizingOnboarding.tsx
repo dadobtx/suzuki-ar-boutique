@@ -22,12 +22,9 @@ export function SizingOnboardingModal() {
         {/* Decoración superior */}
         <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
 
-        <h2 className="text-4xl font-black mb-2 text-center mt-4">
+        <h2 className="text-4xl font-black mb-8 text-center mt-4">
           Personaliza tu Prueba
         </h2>
-        <p className="text-zinc-400 text-center mb-8 text-lg">
-          Cuéntanos sobre ti para recomendarte la talla ideal.
-        </p>
 
         <div className="space-y-8">
           <div>

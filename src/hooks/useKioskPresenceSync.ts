@@ -2,7 +2,10 @@ import { useEffect, useRef } from 'react';
 import { useKioskStore } from '@/store/kiosk';
 import type { PresenceState } from './usePresence';
 
-export function useKioskPresenceSync(presence: PresenceState) {
+export function useKioskPresenceSync(
+  presence: PresenceState,
+  hasProfile: boolean = true,
+) {
   const state = useKioskStore((s) => s.state);
   const wakeUp = useKioskStore((s) => s.wakeUp);
   const startCooldown = useKioskStore((s) => s.startCooldown);
@@ -13,10 +16,20 @@ export function useKioskPresenceSync(presence: PresenceState) {
   const absentTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
+    // If onboarding is active (!hasProfile), freeze transitions and stay in ATTRACT
+    if (!hasProfile) {
+      prevStateRef.current = presence;
+      return;
+    }
+
     const prev = prevStateRef.current;
 
+    // Edge case: User finished onboarding (hasProfile=true), and presence is already 'present'
+    if (presence === 'present' && (state === 'ATTRACT' || state === 'COOLDOWN')) {
+      wakeUp();
+    }
     // absent -> present from ATTRACT/COOLDOWN
-    if (prev === 'absent' && presence === 'present') {
+    else if (prev === 'absent' && presence === 'present') {
       if (state === 'ATTRACT' || state === 'COOLDOWN') {
         wakeUp();
       }
@@ -33,7 +46,7 @@ export function useKioskPresenceSync(presence: PresenceState) {
     }
 
     prevStateRef.current = presence;
-  }, [presence, state, wakeUp]);
+  }, [presence, state, wakeUp, hasProfile]);
 
   useEffect(() => {
     // Manage the 25s absent timer for TRYON

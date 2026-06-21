@@ -45,11 +45,14 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Phase 3: Pose & Presence
   const pose = usePose(camera.videoRef);
   const presence = usePresence(pose.landmarks);
-  useKioskPresenceSync(presence);
 
-  // Reset sizing profile when user leaves
+  // Profile state
   const resetProfile = useSizingStore((s) => s.reset);
   const hasProfile = useSizingStore((s) => s.hasProfile);
+
+  useKioskPresenceSync(presence, hasProfile);
+
+  // Reset sizing profile when user leaves
   useEffect(() => {
     if (presence === 'absent') {
       resetProfile();
