@@ -202,7 +202,7 @@ export function AIProcessing() {
       >
         <Loader2 className="w-24 h-24 text-accent-cyan animate-spin mb-8" />
 
-        <div className="h-12 relative flex items-center justify-center w-full overflow-hidden">
+        <div className="h-20 relative flex items-center justify-center w-full overflow-hidden">
           <AnimatePresence mode="wait">
             <motion.div
               key={phraseIndex}

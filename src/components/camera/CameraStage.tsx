@@ -263,12 +263,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
 
         {/* Sizing Controls HUD (z-index 40) */}
-        {garmentActiveWithProfile && <SizingControls />}
+        {garmentActiveWithProfile && <SizingControls pose={pose} />}
 
         {/* Sizing Onboarding Modal (z-index 60) */}
-        {kioskState === 'TRYON' && presence === 'present' && !hasProfile && (
-          <SizingOnboardingModal />
-        )}
+        {!hasProfile && <SizingOnboardingModal />}
 
         {/* Manual Reset Button (z-index 40) */}
         {kioskState === 'TRYON' && hasProfile && (

@@ -277,6 +277,35 @@ app.post('/kiosk/sessions', async (c) => {
   }
 });
 
+app.post('/kiosk/sessions/ar', async (c) => {
+  try {
+    const body = await c.req.json();
+    if (!body.session_id) {
+      return c.json({ status: 'error', error: 'Missing session_id' }, 400);
+    }
+
+    await c.env.DB.prepare(
+      `UPDATE sesiones 
+       SET pecho_ar = ?, cintura_ar = ?, ar_confianza = ?
+       WHERE session_id = ?`,
+    )
+      .bind(
+        body.pecho_ar || null,
+        body.cintura_ar || null,
+        body.ar_confianza || null,
+        body.session_id,
+      )
+      .run();
+
+    return c.json({ status: 'success' });
+  } catch (err) {
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
 app.post('/kiosk/interactions', async (c) => {
   try {
     const body = await c.req.json();
