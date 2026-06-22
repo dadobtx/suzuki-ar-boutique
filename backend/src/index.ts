@@ -286,12 +286,13 @@ app.post('/kiosk/sessions/ar', async (c) => {
 
     await c.env.DB.prepare(
       `UPDATE sesiones 
-       SET pecho_ar = ?, cintura_ar = ?, ar_confianza = ?
+       SET pecho_ar = ?, cintura_ar = ?, altura_ar = ?, ar_confianza = ?
        WHERE session_id = ?`,
     )
       .bind(
         body.pecho_ar || null,
         body.cintura_ar || null,
+        body.altura_ar || null,
         body.ar_confianza || null,
         body.session_id,
       )

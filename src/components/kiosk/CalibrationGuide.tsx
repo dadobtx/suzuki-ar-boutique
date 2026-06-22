@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useKioskStore } from '@/store/kiosk';
+import { useLayout } from '@/hooks/useLayout';
 
 export function CalibrationGuide() {
   const { t } = useTranslation();
   const transition = useKioskStore((s) => s.transition);
+  const { layout } = useLayout();
+  const isPortrait = layout === 'portrait';
   const [countdown, setCountdown] = useState(3);
 
   useEffect(() => {
@@ -23,7 +26,11 @@ export function CalibrationGuide() {
   }, [transition]);
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
+    <div
+      className={`absolute inset-0 z-50 flex items-center justify-center pointer-events-none
+        ${isPortrait ? 'bottom-[35vh]' : 'right-[30vw]'}
+      `}
+    >
       {/* HUD Frame */}
       <div className="absolute inset-8 border border-accent-cyan/50 clip-hud" />
 
