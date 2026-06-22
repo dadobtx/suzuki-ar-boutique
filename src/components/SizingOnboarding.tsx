@@ -17,7 +17,7 @@ export function SizingOnboardingModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950 p-4">
       <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-2xl w-full text-white shadow-2xl relative overflow-hidden">
         {/* Decoración superior */}
         <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-500 to-cyan-400"></div>

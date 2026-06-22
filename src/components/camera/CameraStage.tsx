@@ -269,7 +269,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         {garmentActiveWithProfile && <SizingControls pose={pose} />}
 
         {/* Sizing Onboarding Modal (z-index 60) */}
-        {!hasProfile && <SizingOnboardingModal />}
+        {!hasProfile && presence !== 'absent' && <SizingOnboardingModal />}
 
         {/* Manual Reset Button (z-index 40) */}
         {kioskState === 'TRYON' && hasProfile && (

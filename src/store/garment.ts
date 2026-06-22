@@ -3,7 +3,7 @@ import { persist, createJSONStorage } from 'zustand/middleware';
 import type { Garment } from '@/types/garment';
 import { useAnalyticsStore } from './analytics';
 import { useSizingStore } from './sizing';
-import { recomendarTallaGarment } from '@/lib/sizing';
+import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 
 export interface GarmentFilters {
   line: string;
@@ -123,7 +123,7 @@ export const useGarmentStore = create<GarmentState>()(
                 profile,
                 garment,
               );
-              const elegida = profile.tallasElegidas[garment.sku] || recomendada;
+              const elegida = resolverTallaElegida(profile, garment, recomendada);
               profile.recordInteraction(
                 garment.sku,
                 'probo',

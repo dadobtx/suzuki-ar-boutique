@@ -218,3 +218,45 @@ export function recomendarTallaGarment(
   const recomendada = recomendarTalla(mappedProfile, prenda, table);
   return { recomendada, tabla_origen_id: tableId };
 }
+
+export function resolverTallaElegida(
+  profile: { tallaHabitual: string | null; tallasElegidas: Record<string, string> },
+  garment: Prenda | Garment,
+  recomendada: string,
+): string {
+  // 1) Si ya eligió con +/-
+  const elegidaManual = profile.tallasElegidas[garment.sku];
+  const sizes = ('sizes' in garment ? garment.sizes : garment.tallas_disponibles) || [];
+  if (elegidaManual && sizes.includes(elegidaManual)) {
+    return elegidaManual;
+  }
+
+  // 2) Si declaró en onboarding y está disponible
+  if (profile.tallaHabitual && profile.tallaHabitual !== 'No sé') {
+    const declared = profile.tallaHabitual.toUpperCase();
+    if (sizes.includes(declared)) {
+      return declared;
+    }
+
+    // Si no está exacta, aproximar
+    const wantedIdx = SIZE_ORDER.indexOf(declared);
+    if (wantedIdx !== -1) {
+      let closest = recomendada;
+      let minDiff = Infinity;
+      for (const s of sizes) {
+        const idx = SIZE_ORDER.indexOf(s as string);
+        if (idx !== -1) {
+          const diff = Math.abs(idx - wantedIdx);
+          if (diff < minDiff) {
+            minDiff = diff;
+            closest = s as string;
+          }
+        }
+      }
+      return closest;
+    }
+  }
+
+  // 3) Fallback a recomendada
+  return recomendada;
+}

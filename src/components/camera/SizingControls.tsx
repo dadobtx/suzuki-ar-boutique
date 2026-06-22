@@ -1,7 +1,7 @@
 import { Plus, Minus } from 'lucide-react';
 import { useSizingStore } from '@/store/sizing';
 import { useGarmentStore } from '@/store/garment';
-import { recomendarTallaGarment } from '@/lib/sizing';
+import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 import { useEffect, useState } from 'react';
 import type { UsePoseResult } from '@/hooks/usePose';
 const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
@@ -113,7 +113,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
   if (!garment || !garment.sizes || garment.sizes.length === 0) return null;
 
   const { recomendada } = recomendarTallaGarment(profile, garment);
-  const elegida = profile.tallasElegidas[garment.sku] || recomendada;
+  const elegida = resolverTallaElegida(profile, garment, recomendada);
 
   const currentIndex = garment.sizes.indexOf(
     elegida as 'XS' | 'S' | 'M' | 'L' | 'XL' | 'XXL' | 'Única',
@@ -159,7 +159,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
       <div className="text-center w-full mt-1">
         {elegida === recomendada ? (
           <span className="text-[11px] font-bold text-green-400 leading-tight block">
-            ✓ Es la recomendada
+            ✓ Coincide con la recomendada
           </span>
         ) : (
           <button
