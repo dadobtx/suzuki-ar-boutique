@@ -125,9 +125,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   return (
     <div
       className={
-        isPortrait
-          ? 'grid grid-rows-[65fr_35fr] h-screen w-full'
-          : 'grid grid-cols-[7fr_3fr] h-screen w-full'
+        !isActive
+          ? 'block h-screen w-full'
+          : isPortrait
+            ? 'grid grid-rows-[65fr_35fr] h-screen w-full'
+            : 'grid grid-cols-[7fr_3fr] h-screen w-full'
       }
     >
       {/* ── Video area ── */}
@@ -283,10 +285,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
       </div>
 
-      {/* ── Catalog Panel ── */}
-      <div className="bg-surface flex items-center justify-center overflow-hidden">
-        {isActive && <CatalogPanel />}
-      </div>
+      {/* ── Catalog area ── */}
+      {isActive && (
+        <div className="relative bg-zinc-950 z-40 border-l border-white/10 overflow-hidden">
+          <CatalogPanel />
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Camera, ShieldOff, AlertTriangle, Loader } from 'lucide-react';
+import { ShieldOff, AlertTriangle } from 'lucide-react';
 import { HudFrame, NeonButton } from '@/components/hud';
 import type { CameraStatus } from '@/store/camera';
 import type { RefObject } from 'react';
@@ -61,20 +61,6 @@ export function CameraView({
       {/* Overlays absolute para estados no-granted */}
       {status !== 'granted' && (
         <div className="absolute inset-0 flex items-center justify-center bg-surface">
-          {status === 'idle' && (
-            <StateMessage
-              icon={<Camera className="w-12 h-12 text-fg-muted" />}
-              message={t('camera.initializing')}
-            />
-          )}
-
-          {status === 'requesting' && (
-            <StateMessage
-              icon={<Loader className="w-12 h-12 text-accent-cyan animate-spin" />}
-              message={t('camera.requesting')}
-            />
-          )}
-
           {status === 'denied' && (
             <HudFrame variant="red" className="max-w-md p-6 m-4" id="camera-denied">
               <div className="text-center space-y-4">
@@ -119,15 +105,6 @@ export function CameraView({
           )}
         </div>
       )}
-    </div>
-  );
-}
-
-function StateMessage({ icon, message }: { icon: React.ReactNode; message: string }) {
-  return (
-    <div className="text-center space-y-3">
-      <div className="flex justify-center">{icon}</div>
-      <p className="font-mono text-sm text-fg-muted">{message}</p>
     </div>
   );
 }
