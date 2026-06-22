@@ -27,7 +27,16 @@ export function PhotoShare() {
       ? selectedStyleImg.url
       : (aiGeneratedUrl ?? photoComposed);
 
-  const qrUrl = displayImage && /^https?:\/\//.test(displayImage) ? displayImage : null;
+  const availableUrls = [
+    aiGeneratedUrl ?? photoComposed,
+    ...stylizedImages.map((img) => img.url),
+  ].filter((url): url is string => !!url && /^https?:\/\//.test(url));
+
+  const baseUrl = window.location.origin + window.location.pathname;
+  const qrUrl =
+    availableUrls.length > 0
+      ? `${baseUrl}#/gallery?urls=${encodeURIComponent(availableUrls.join(','))}`
+      : null;
 
   const showThumbnails =
     stylizedImages &&
