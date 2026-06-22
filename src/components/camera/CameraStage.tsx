@@ -273,6 +273,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         {/* Sizing Onboarding Modal (z-index 60) */}
         {!hasProfile && presence !== 'absent' && <SizingOnboardingModal />}
 
+        {/* Ocultar la cámara durante ATTRACT y el Onboarding Modal (z-index 55) */}
+        {(!hasProfile || kioskState === 'ATTRACT') && (
+          <div className="absolute inset-0 bg-zinc-950 z-[55]" />
+        )}
+
         {/* Manual Reset Button (z-index 40) */}
         {kioskState === 'TRYON' && hasProfile && (
           <button
