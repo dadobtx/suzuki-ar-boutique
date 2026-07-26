@@ -316,9 +316,15 @@ app.post('/live/token', async (c) => {
       throw new Error(`Fal token error: ${errorText}`);
     }
 
-    const tokenData = (await tokenRes.json()) as { token?: string; secret?: string };
+    // fal returns the JWT as a plain JSON string ("eyJ..."); older/other
+    // shapes may wrap it in an object. Accept both.
+    const tokenData = (await tokenRes.json()) as
+      | string
+      | { token?: string; secret?: string };
+    const falToken =
+      typeof tokenData === 'string' ? tokenData : tokenData.token || tokenData.secret;
 
-    if (!tokenData.token && !tokenData.secret) {
+    if (!falToken) {
       await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
         .bind(live_id)
         .run();
@@ -327,7 +333,7 @@ app.post('/live/token', async (c) => {
 
     return c.json({
       status: 'success',
-      token: tokenData.token || tokenData.secret,
+      token: falToken,
       live_id,
       max_seconds: maxSeconds,
     });
