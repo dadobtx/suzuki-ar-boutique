@@ -40,7 +40,7 @@ export function KioskGuide({ presence, layout }: KioskGuideProps) {
     showArrow = layout === 'portrait' ? 'down' : 'right';
     pulse = true;
   } else if (presence === 'present' && activeGarmentId) {
-    message = 'TOCÁ EL BOTÓN ROJO PARA TU FOTO';
+    message = 'ELIGE TOMAR UNA FOTO O PRUEBA EN VIVO';
     icon = Camera;
     showArrow = 'down';
   }

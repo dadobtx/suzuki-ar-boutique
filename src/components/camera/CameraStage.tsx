@@ -330,11 +330,6 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               className="w-full h-full object-cover"
               style={{ transform: 'scaleX(-1)' }}
             />
-            {liveCountdown !== null && (
-              <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center justify-center w-16 h-16 rounded-full border-4 border-white text-white text-2xl font-bold bg-black/50 backdrop-blur">
-                {liveCountdown}
-              </div>
-            )}
             <button
               onClick={handleStopLiveTryon}
               className="absolute bottom-8 right-8 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold shadow-lg flex items-center gap-2"
@@ -441,28 +436,50 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
 
         {/* Shoot Photo & Live Tryon Buttons (z-index 40) */}
-        {garmentActiveWithProfile && !isLiveActive && (
+        {garmentActiveWithProfile && activeGarment && (
           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center justify-center gap-8 z-40">
-            <button
-              onClick={() => transition('PHOTO_COUNTDOWN')}
-              className="w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
-            >
-              <CameraIcon size={48} />
-              <span className="font-display tracking-widest text-sm mt-1 uppercase">
-                {t('photo.shoot', 'DISPARAR')}
-              </span>
-            </button>
+            {!isLiveActive && (
+              <button
+                onClick={() => transition('PHOTO_COUNTDOWN')}
+                className="w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
+              >
+                <CameraIcon size={48} />
+                <span className="font-display tracking-widest text-sm mt-1 uppercase">
+                  {t('photo.shoot', 'DISPARAR')}
+                </span>
+              </button>
+            )}
 
             {showLiveButton && (
               <button
                 onClick={handleStartLiveTryon}
-                disabled={isLiveLoading}
-                className="w-[120px] h-[120px] rounded-full bg-purple-600 flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(147,51,234,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={isLiveLoading || isLiveActive}
+                className={`w-[120px] h-[120px] rounded-full bg-purple-600 flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(147,51,234,0.6)] transition-transform border-4 border-white/20 ${
+                  isLiveLoading
+                    ? 'opacity-50 cursor-not-allowed'
+                    : isLiveActive
+                      ? 'cursor-default scale-100'
+                      : 'hover:scale-105 active:scale-95'
+                }`}
               >
-                <Sparkles size={40} className={isLiveLoading ? 'animate-spin' : ''} />
-                <span className="font-display tracking-widest text-xs mt-2 uppercase text-center leading-tight">
-                  {isLiveLoading ? 'Cargando...' : 'Verme en vivo (15s)'}
-                </span>
+                {isLiveActive ? (
+                  <span className="text-5xl font-display">{liveCountdown}</span>
+                ) : (
+                  <>
+                    <Sparkles size={40} className={isLiveLoading ? 'animate-spin' : ''} />
+                    <span className="font-display tracking-widest text-xs mt-2 uppercase text-center leading-tight">
+                      {isLiveLoading ? (
+                        'CARGANDO...'
+                      ) : (
+                        <>
+                          VERME
+                          <br />
+                          EN VIVO
+                        </>
+                      )}
+                    </span>
+                  </>
+                )}
               </button>
             )}
           </div>
