@@ -15,6 +15,11 @@ interface ReportsData {
     avg_cintura: number;
     count: number;
   }[];
+  live?: {
+    sesiones_hoy: number;
+    segundos_hoy: number;
+    costo_estimado_usd: number;
+  };
 }
 
 export function KioskReportsPage() {
@@ -159,6 +164,37 @@ export function KioskReportsPage() {
               </table>
             </div>
           </div>
+
+          {/* Live Try-On Stats */}
+          {data.live && (
+            <div className="bg-white dark:bg-zinc-900 p-6 rounded-2xl shadow-sm border border-zinc-200 dark:border-zinc-800 md:col-span-2">
+              <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
+                <Activity className="text-purple-500" /> Pruebas en Vivo (Hoy)
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
+                  <p className="text-sm text-zinc-500 uppercase tracking-wider mb-1">
+                    Sesiones
+                  </p>
+                  <p className="text-3xl font-bold">{data.live.sesiones_hoy}</p>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
+                  <p className="text-sm text-zinc-500 uppercase tracking-wider mb-1">
+                    Tiempo (seg)
+                  </p>
+                  <p className="text-3xl font-bold">{data.live.segundos_hoy}</p>
+                </div>
+                <div className="bg-zinc-50 dark:bg-zinc-800 p-4 rounded-lg text-center">
+                  <p className="text-sm text-zinc-500 uppercase tracking-wider mb-1">
+                    Costo Est. USD
+                  </p>
+                  <p className="text-3xl font-bold text-red-500">
+                    ${data.live.costo_estimado_usd.toFixed(2)}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

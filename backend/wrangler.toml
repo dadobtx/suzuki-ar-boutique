@@ -9,7 +9,12 @@ id = "9355c750421143358ac517d9ab836921" # Rate Limiter KV
 
 [vars]
 ALLOWED_ORIGIN = "https://dadobtx.github.io"
+LIVE_SESSION_SECONDS = 15
+LIVE_MAX_SESSIONS_PER_USER = 3
+LIVE_MAX_SESSIONS_PER_DAY = 400
+LIVE_BUDGET_CENTS_PER_EVENT = 10000
 # FASHN_API_KEY is a secret, set via `wrangler secret put FASHN_API_KEY`
+# FAL_API_KEY is a secret, set via `wrangler secret put FAL_API_KEY`
 
 [[d1_databases]]
 binding = "DB"

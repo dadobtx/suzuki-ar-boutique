@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo } from 'react';
+import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCamera } from '@/hooks/useCamera';
 import { useLayout } from '@/hooks/useLayout';
@@ -14,8 +14,9 @@ import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { CatalogPanel } from '@/components/catalog';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
-import { Camera as CameraIcon, RefreshCw } from 'lucide-react';
+import { Camera as CameraIcon, RefreshCw, Sparkles, X as XIcon } from 'lucide-react';
 import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
+import { LiveTryOnManager } from '@/lib/liveTryon';
 import { SizingOnboardingModal } from '@/components/SizingOnboarding';
 import { SizingControls } from './SizingControls';
 import { useSizingStore } from '@/store/sizing';
@@ -49,6 +50,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Profile state
   const resetProfile = useSizingStore((s) => s.reset);
   const hasProfile = useSizingStore((s) => s.hasProfile);
+  const sessionId = useSizingStore((s) => s.sessionId);
 
   useKioskPresenceSync(presence, hasProfile);
 
@@ -122,6 +124,166 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Only allow garment interaction if they have a profile
   const garmentActiveWithProfile = garmentActive && hasProfile;
 
+  const isLiveTryOnEnabled = import.meta.env.VITE_LIVE_TRYON === 'on';
+  const showLiveButton =
+    isLiveTryOnEnabled && activeGarment?.category === 'top' && garmentActiveWithProfile;
+
+  const [liveManager, setLiveManager] = useState<LiveTryOnManager | null>(null);
+  const [isLiveActive, setIsLiveActive] = useState(false);
+  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
+  const [liveCountdown, setLiveCountdown] = useState<number | null>(null);
+  const [liveToast, setLiveToast] = useState<string | null>(null);
+  const [isLiveLoading, setIsLiveLoading] = useState(false);
+  const liveVideoRef = useRef<HTMLVideoElement>(null);
+  const sessionStartTimeRef = useRef<number>(0);
+
+  const handleStopLiveTryon = useCallback(() => {
+    if (liveManager) {
+      liveManager.stop();
+    }
+    setLiveManager(null);
+    setIsLiveActive(false);
+    setLiveStream(null);
+    setLiveCountdown(null);
+    setIsLiveLoading(false);
+  }, [liveManager]);
+
+  useEffect(() => {
+    if (isLiveActive && presence === 'absent') {
+      handleStopLiveTryon();
+    }
+  }, [presence, isLiveActive, handleStopLiveTryon]);
+
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.hidden && isLiveActive) {
+        handleStopLiveTryon();
+      }
+    };
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
+  }, [isLiveActive, handleStopLiveTryon]);
+
+  useEffect(() => {
+    return () => {
+      if (liveManager) liveManager.stop();
+    };
+  }, [liveManager]);
+
+  useEffect(() => {
+    if (isLiveActive && liveManager && activeGarment) {
+      liveManager.sendGarment(activeGarment.sku);
+    }
+  }, [activeGarment, isLiveActive, liveManager]);
+
+  useEffect(() => {
+    if (!isLiveActive || liveCountdown === null || liveCountdown <= 0) return;
+    const timer = setTimeout(() => {
+      if (liveCountdown - 1 <= 0) {
+        handleStopLiveTryon();
+      } else {
+        setLiveCountdown(liveCountdown - 1);
+      }
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [isLiveActive, liveCountdown, handleStopLiveTryon]);
+
+  useEffect(() => {
+    if (isLiveActive && liveStream && liveVideoRef.current) {
+      liveVideoRef.current.srcObject = liveStream;
+    }
+  }, [isLiveActive, liveStream]);
+
+  const handleStartLiveTryon = useCallback(async () => {
+    if (!activeGarment || !camera.videoRef.current?.srcObject || !sessionId) return;
+    setIsLiveLoading(true);
+
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
+      const event =
+        new URLSearchParams(window.location.search).get('event') || 'default-event';
+
+      const res = await fetch(`${BACKEND_URL}/live/token`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          session_id: sessionId,
+          sku: activeGarment.sku,
+          event,
+        }),
+      });
+
+      const data = await res.json();
+      if (res.status === 429) {
+        const msg =
+          data.limit === 'user'
+            ? 'Ya usaste tus 3 pruebas en vivo'
+            : 'Prueba en vivo no disponible por hoy';
+        setLiveToast(msg);
+        setTimeout(() => setLiveToast(null), 3000);
+        setIsLiveLoading(false);
+        return;
+      }
+
+      if (data.status !== 'success') {
+        throw new Error(data.error || 'Token error');
+      }
+
+      const stream = camera.videoRef.current.srcObject as MediaStream;
+
+      const manager = new LiveTryOnManager({
+        token: data.token,
+        maxSeconds: data.max_seconds,
+        liveId: data.live_id,
+        stream,
+        sku: activeGarment.sku,
+        onUpdate: (remoteStream) => {
+          sessionStartTimeRef.current = Date.now();
+          setLiveStream(remoteStream);
+          setIsLiveActive(true);
+          setIsLiveLoading(false);
+          setLiveCountdown(data.max_seconds);
+
+          fetch(`${BACKEND_URL}/kiosk/interactions`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              session_id: sessionId,
+              sku: activeGarment.sku,
+              accion: 'live_tryon',
+              tabla_origen_id: activeGarment.sku,
+            }),
+          }).catch(() => {});
+        },
+        onError: (err) => {
+          console.error(err);
+          handleStopLiveTryon();
+        },
+        onClose: () => {
+          const elapsedSeconds = Math.floor(
+            (Date.now() - sessionStartTimeRef.current) / 1000,
+          );
+          fetch(`${BACKEND_URL}/live/complete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              live_id: data.live_id,
+              seconds: Math.max(0, Math.min(elapsedSeconds, data.max_seconds)),
+            }),
+          }).catch(() => {});
+        },
+      });
+
+      setLiveManager(manager);
+      await manager.start();
+    } catch (err) {
+      console.error(err);
+      setIsLiveLoading(false);
+      setLiveToast('Error al iniciar prueba en vivo');
+      setTimeout(() => setLiveToast(null), 3000);
+    }
+  }, [activeGarment, camera, sessionId, handleStopLiveTryon]);
+
   return (
     <div
       className={
@@ -154,8 +316,40 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           landmarks={pose.landmarks}
           mask={pose.mask}
           layout={layout}
-          active={garmentActiveWithProfile}
+          active={garmentActiveWithProfile && !isLiveActive}
         />
+
+        {/* Live Try-On Video Overlay (z-index 15) */}
+        {isLiveActive && (
+          <div className="absolute inset-0 z-15 bg-black" style={{ zIndex: 15 }}>
+            <video
+              ref={liveVideoRef}
+              autoPlay
+              playsInline
+              muted
+              className="w-full h-full object-cover"
+              style={{ transform: 'scaleX(-1)' }}
+            />
+            {liveCountdown !== null && (
+              <div className="absolute top-8 left-1/2 -translate-x-1/2 flex items-center justify-center w-16 h-16 rounded-full border-4 border-white text-white text-2xl font-bold bg-black/50 backdrop-blur">
+                {liveCountdown}
+              </div>
+            )}
+            <button
+              onClick={handleStopLiveTryon}
+              className="absolute bottom-8 right-8 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold shadow-lg flex items-center gap-2"
+            >
+              <XIcon size={20} /> Salir
+            </button>
+          </div>
+        )}
+
+        {/* Toast Notification (z-index 60) */}
+        {liveToast && (
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg z-50 transition-opacity">
+            {liveToast}
+          </div>
+        )}
 
         {/* Skeleton debug overlay canvas (z-index 20) */}
         <canvas
@@ -246,17 +440,32 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           </div>
         )}
 
-        {/* Shoot Photo Button (z-index 40) */}
-        {garmentActiveWithProfile && (
-          <button
-            onClick={() => transition('PHOTO_COUNTDOWN')}
-            className="absolute bottom-12 left-1/2 -translate-x-1/2 w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform z-40 border-4 border-white/20"
-          >
-            <CameraIcon size={48} />
-            <span className="font-display tracking-widest text-sm mt-1 uppercase">
-              {t('photo.shoot', 'DISPARAR')}
-            </span>
-          </button>
+        {/* Shoot Photo & Live Tryon Buttons (z-index 40) */}
+        {garmentActiveWithProfile && !isLiveActive && (
+          <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center justify-center gap-8 z-40">
+            <button
+              onClick={() => transition('PHOTO_COUNTDOWN')}
+              className="w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
+            >
+              <CameraIcon size={48} />
+              <span className="font-display tracking-widest text-sm mt-1 uppercase">
+                {t('photo.shoot', 'DISPARAR')}
+              </span>
+            </button>
+
+            {showLiveButton && (
+              <button
+                onClick={handleStartLiveTryon}
+                disabled={isLiveLoading}
+                className="w-[120px] h-[120px] rounded-full bg-purple-600 flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(147,51,234,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Sparkles size={40} className={isLiveLoading ? 'animate-spin' : ''} />
+                <span className="font-display tracking-widest text-xs mt-2 uppercase text-center leading-tight">
+                  {isLiveLoading ? 'Cargando...' : 'Verme en vivo (15s)'}
+                </span>
+              </button>
+            )}
+          </div>
         )}
 
         {/* Photo Countdown Overlay (z-index 50) */}

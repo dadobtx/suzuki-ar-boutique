@@ -7,10 +7,15 @@ import { STYLE_CATALOG } from './styles';
 type Bindings = {
   FASHN_API_KEY: string;
   REPLICATE_API_TOKEN: string;
+  FAL_API_KEY: string;
   ALLOWED_ORIGIN: string;
   RATE_LIMITER: KVNamespace;
   DB: D1Database;
   KIOSK_REPORTS_TOKEN?: string;
+  LIVE_SESSION_SECONDS?: string | number;
+  LIVE_MAX_SESSIONS_PER_USER?: string | number;
+  LIVE_MAX_SESSIONS_PER_DAY?: string | number;
+  LIVE_BUDGET_CENTS_PER_EVENT?: string | number;
 };
 
 const app = new Hono<{ Bindings: Bindings }>();
@@ -19,7 +24,8 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use('*', async (c, next) => {
   const corsMiddleware = cors({
     origin: (origin) => {
-      const allowedOrigins = c.env.ALLOWED_ORIGIN.split(',').map((s) => s.trim());
+      const allowed = c.env.ALLOWED_ORIGIN || 'https://dadobtx.github.io';
+      const allowedOrigins = allowed.split(',').map((s) => s.trim());
       return allowedOrigins.includes(origin) ? origin : null;
     },
     allowMethods: ['POST', 'OPTIONS'],
@@ -225,6 +231,140 @@ app.post('/stylize', async (c) => {
   }
 });
 
+// Live Try-On API Endpoints
+
+app.post('/live/token', async (c) => {
+  try {
+    if (!c.env.FAL_API_KEY) {
+      return c.json({ status: 'error', error: 'FAL_API_KEY is not configured.' }, 500);
+    }
+
+    const { session_id, sku, event } = await c.req.json();
+    if (!session_id || !sku || !event) {
+      return c.json({ status: 'error', error: 'Missing parameters' }, 400);
+    }
+
+    const maxSeconds = Number(c.env.LIVE_SESSION_SECONDS || 15);
+    const maxUserSessions = Number(c.env.LIVE_MAX_SESSIONS_PER_USER || 3);
+    const maxDaySessions = Number(c.env.LIVE_MAX_SESSIONS_PER_DAY || 400);
+    const budgetCents = Number(c.env.LIVE_BUDGET_CENTS_PER_EVENT || 10000);
+
+    // 1. Check User Limit
+    const { results: userRes } = await c.env.DB.prepare(
+      `SELECT COUNT(id) as count FROM live_sesiones WHERE session_id = ? AND date(started_at) = date('now')`,
+    )
+      .bind(session_id)
+      .all();
+    if (userRes[0] && (userRes[0].count as number) >= maxUserSessions) {
+      return c.json(
+        { status: 'error', error: 'Rate limit exceeded', limit: 'user' },
+        429,
+      );
+    }
+
+    // 2. Check Daily Limit
+    const { results: dayRes } = await c.env.DB.prepare(
+      `SELECT COUNT(id) as count FROM live_sesiones WHERE date(started_at) = date('now')`,
+    ).all();
+    if (dayRes[0] && (dayRes[0].count as number) >= maxDaySessions) {
+      return c.json(
+        { status: 'error', error: 'Daily limit exceeded', limit: 'day' },
+        429,
+      );
+    }
+
+    // 3. Check Budget Limit
+    const { results: secRes } = await c.env.DB.prepare(
+      `SELECT SUM(seconds) as total FROM live_sesiones WHERE date(started_at) = date('now')`,
+    ).all();
+    const currentSeconds = secRes[0] ? (secRes[0].total as number) || 0 : 0;
+    const projectedCostCents = (currentSeconds + maxSeconds) * 2;
+    if (projectedCostCents > budgetCents) {
+      return c.json(
+        { status: 'error', error: 'Budget limit exceeded', limit: 'budget' },
+        429,
+      );
+    }
+
+    // Insert with pessimistic billing
+    const { meta } = await c.env.DB.prepare(
+      `INSERT INTO live_sesiones (session_id, sku, event, seconds) VALUES (?, ?, ?, ?)`,
+    )
+      .bind(session_id, sku, event, maxSeconds)
+      .run();
+
+    const live_id = meta.last_row_id;
+
+    // Fetch token from Fal
+    const tokenRes = await fetch('https://rest.alpha.fal.ai/tokens/', {
+      method: 'POST',
+      headers: {
+        Authorization: `Key ${c.env.FAL_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        allowed_apps: ['decart/lucy2-vton'],
+        token_expiration: 60,
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const errorText = await tokenRes.text();
+      await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+        .bind(live_id)
+        .run();
+      throw new Error(`Fal token error: ${errorText}`);
+    }
+
+    const tokenData = (await tokenRes.json()) as { token?: string; secret?: string };
+
+    if (!tokenData.token && !tokenData.secret) {
+      await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+        .bind(live_id)
+        .run();
+      throw new Error('Fal token response missing token/secret');
+    }
+
+    return c.json({
+      status: 'success',
+      token: tokenData.token || tokenData.secret,
+      live_id,
+      max_seconds: maxSeconds,
+    });
+  } catch (err) {
+    console.error('Live token error', err);
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
+app.post('/live/complete', async (c) => {
+  try {
+    const { live_id, seconds } = await c.req.json();
+    if (!live_id || seconds === undefined) {
+      return c.json({ status: 'error', error: 'Missing parameters' }, 400);
+    }
+
+    const maxSeconds = Number(c.env.LIVE_SESSION_SECONDS || 15);
+    const clampedSeconds = Math.max(0, Math.min(Number(seconds), maxSeconds));
+
+    await c.env.DB.prepare(
+      `UPDATE live_sesiones SET seconds = ? WHERE id = ? AND seconds > ?`,
+    )
+      .bind(clampedSeconds, live_id, clampedSeconds)
+      .run();
+
+    return c.json({ status: 'success' });
+  } catch (err) {
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
 // Kiosk API Endpoints
 
 app.get('/kiosk/catalog', async (c) => {
@@ -387,7 +527,30 @@ app.get('/kiosk/reports', async (c) => {
     `,
     ).all();
 
-    return c.json({ status: 'success', ranking, distribucion, favoritos, calibracion });
+    // Live Try-On Stats
+    const { results: liveStats } = await c.env.DB.prepare(
+      `
+      SELECT COUNT(id) as sesiones_hoy, SUM(seconds) as segundos_hoy
+      FROM live_sesiones
+      WHERE date(started_at) = date('now')
+      `,
+    ).all();
+
+    const live = {
+      sesiones_hoy: liveStats[0] ? (liveStats[0].sesiones_hoy as number) || 0 : 0,
+      segundos_hoy: liveStats[0] ? (liveStats[0].segundos_hoy as number) || 0 : 0,
+      costo_estimado_usd:
+        (liveStats[0] ? (liveStats[0].segundos_hoy as number) || 0 : 0) * 0.02,
+    };
+
+    return c.json({
+      status: 'success',
+      ranking,
+      distribucion,
+      favoritos,
+      calibracion,
+      live,
+    });
   } catch (err) {
     return c.json(
       { status: 'error', error: err instanceof Error ? err.message : String(err) },

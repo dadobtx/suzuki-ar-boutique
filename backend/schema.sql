@@ -74,3 +74,16 @@ INSERT OR IGNORE INTO prendas (sku, nombre, tipo, genero, tabla_origen_id, talla
 ('sku-001', 'Camiseta Básica Logo', 't-shirt', 'unisex', 'tt_eu_std_m', '["S", "M", "L", "XL"]', 1),
 ('sku-002', 'Chaqueta Deportiva', 'jacket', 'hombre', 'tt_eu_std_m', '["M", "L", "XL"]', 1),
 ('sku-003', 'Top Deportivo', 'top', 'mujer', 'tt_eu_std_w', '["XS", "S", "M", "L"]', 1);
+
+-- Sesiones en vivo (decart/lucy2-vton)
+CREATE TABLE IF NOT EXISTS live_sesiones (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  session_id TEXT NOT NULL,
+  sku TEXT NOT NULL,
+  event TEXT NOT NULL,
+  started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  seconds INTEGER DEFAULT 15 -- Pessimistic default (LIVE_SESSION_SECONDS)
+);
+
+CREATE INDEX IF NOT EXISTS idx_live_sesiones_session ON live_sesiones(session_id);
+CREATE INDEX IF NOT EXISTS idx_live_sesiones_started_at ON live_sesiones(started_at);
