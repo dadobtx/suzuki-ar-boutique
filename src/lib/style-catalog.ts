@@ -4,7 +4,7 @@ export interface StyleCatalogItem {
 }
 
 export const STYLE_CATALOG: StyleCatalogItem[] = [
-  { id: 'anime-racing', name: 'Anime' },
+  { id: 'anime-football', name: 'Anime Fútbol' },
   { id: 'kart-arcade', name: 'Kart Racer' },
   { id: 'action-figure', name: 'Figura de Acción' },
 ];

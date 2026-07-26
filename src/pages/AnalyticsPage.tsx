@@ -563,20 +563,24 @@ function AnalyticsDashboard() {
               <h3 className="font-mono text-xs text-accent-cyan uppercase tracking-widest mb-3">
                 Top Generados Exitosos
               </h3>
-              {['anime-racing', 'kart-arcade', 'action-figure'].map((styleId) => {
-                const val = stats.styleGenerations.get(styleId) ?? 0;
-                const maxVal = Math.max(
-                  ...Array.from(stats.styleGenerations.values()),
-                  1,
-                );
-                const name =
-                  styleId === 'anime-racing'
-                    ? 'Anime'
-                    : styleId === 'kart-arcade'
-                      ? 'Kart Racer'
-                      : 'Figura de Acción';
-                return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
-              })}
+              {['anime-football', 'anime-racing', 'kart-arcade', 'action-figure'].map(
+                (styleId) => {
+                  const val = stats.styleGenerations.get(styleId) ?? 0;
+                  const maxVal = Math.max(
+                    ...Array.from(stats.styleGenerations.values()),
+                    1,
+                  );
+                  const name =
+                    styleId === 'anime-football'
+                      ? 'Anime Fútbol'
+                      : styleId === 'anime-racing'
+                        ? 'Anime (v1)'
+                        : styleId === 'kart-arcade'
+                          ? 'Kart Racer'
+                          : 'Figura de Acción';
+                  return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
+                },
+              )}
             </div>
 
             {/* Seleccionados */}
@@ -584,17 +588,24 @@ function AnalyticsDashboard() {
               <h3 className="font-mono text-xs text-accent-cyan uppercase tracking-widest mb-3">
                 Top Seleccionados en Kiosko
               </h3>
-              {['anime-racing', 'kart-arcade', 'action-figure'].map((styleId) => {
-                const val = stats.styleSelections.get(styleId) ?? 0;
-                const maxVal = Math.max(...Array.from(stats.styleSelections.values()), 1);
-                const name =
-                  styleId === 'anime-racing'
-                    ? 'Anime'
-                    : styleId === 'kart-arcade'
-                      ? 'Kart Racer'
-                      : 'Figura de Acción';
-                return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
-              })}
+              {['anime-football', 'anime-racing', 'kart-arcade', 'action-figure'].map(
+                (styleId) => {
+                  const val = stats.styleSelections.get(styleId) ?? 0;
+                  const maxVal = Math.max(
+                    ...Array.from(stats.styleSelections.values()),
+                    1,
+                  );
+                  const name =
+                    styleId === 'anime-football'
+                      ? 'Anime Fútbol'
+                      : styleId === 'anime-racing'
+                        ? 'Anime (v1)'
+                        : styleId === 'kart-arcade'
+                          ? 'Kart Racer'
+                          : 'Figura de Acción';
+                  return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
+                },
+              )}
             </div>
 
             {/* Descargados */}
@@ -602,17 +613,24 @@ function AnalyticsDashboard() {
               <h3 className="font-mono text-xs text-accent-cyan uppercase tracking-widest mb-3">
                 Top Descargados
               </h3>
-              {['anime-racing', 'kart-arcade', 'action-figure'].map((styleId) => {
-                const val = stats.styleDownloads.get(styleId) ?? 0;
-                const maxVal = Math.max(...Array.from(stats.styleDownloads.values()), 1);
-                const name =
-                  styleId === 'anime-racing'
-                    ? 'Anime'
-                    : styleId === 'kart-arcade'
-                      ? 'Kart Racer'
-                      : 'Figura de Acción';
-                return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
-              })}
+              {['anime-football', 'anime-racing', 'kart-arcade', 'action-figure'].map(
+                (styleId) => {
+                  const val = stats.styleDownloads.get(styleId) ?? 0;
+                  const maxVal = Math.max(
+                    ...Array.from(stats.styleDownloads.values()),
+                    1,
+                  );
+                  const name =
+                    styleId === 'anime-football'
+                      ? 'Anime Fútbol'
+                      : styleId === 'anime-racing'
+                        ? 'Anime (v1)'
+                        : styleId === 'kart-arcade'
+                          ? 'Kart Racer'
+                          : 'Figura de Acción';
+                  return <BarRow key={styleId} label={name} value={val} max={maxVal} />;
+                },
+              )}
             </div>
           </div>
         </div>

@@ -25,7 +25,7 @@ describe('generateStylizedPhoto', () => {
     const signal = new AbortController().signal;
     const result = await generateStylizedPhoto(
       'http://example.com/original.jpg',
-      'anime-racing',
+      'anime-football',
       signal,
     );
     expect(result.status).toBe('success');
@@ -48,7 +48,7 @@ describe('generateStylizedPhoto', () => {
     const signal = new AbortController().signal;
     const result = await generateStylizedPhoto(
       'http://example.com/original.jpg',
-      'anime-racing',
+      'anime-football',
       signal,
     );
     expect(result.status).toBe('error');
@@ -72,7 +72,7 @@ describe('generateStylizedPhoto', () => {
     const signal = new AbortController().signal;
     const result = await generateStylizedPhoto(
       'http://example.com/original.jpg',
-      'anime-racing',
+      'anime-football',
       signal,
     );
     expect(result.status).toBe('error');
@@ -98,7 +98,7 @@ describe('generateStylizedPhoto', () => {
 
     const result = await generateStylizedPhoto(
       'http://example.com/original.jpg',
-      'anime-racing',
+      'anime-football',
       controller.signal,
     );
     expect(result.status).toBe('error');
@@ -123,7 +123,7 @@ describe('generateStylizedPhoto', () => {
 
     const result = await generateStylizedPhoto(
       'http://example.com/original.jpg',
-      'anime-racing',
+      'anime-football',
       controller.signal,
     );
     expect(result.status).toBe('error');
@@ -155,7 +155,7 @@ describe('generateStylizedPhoto', () => {
     const signal = new AbortController().signal;
     const result = await generateStylizedPhoto(
       'http://example.com/original.jpg',
-      'anime-racing',
+      'anime-football',
       signal,
     );
     expect(result.status).toBe('success');

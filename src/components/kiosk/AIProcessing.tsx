@@ -98,7 +98,7 @@ export function AIProcessing() {
           });
 
           // Trigger style generation in parallel (now that account has credit and backend handles 429)
-          const styles = ['anime-racing', 'kart-arcade', 'action-figure'];
+          const styles = ['anime-football', 'kart-arcade', 'action-figure'];
           usePhotoStore
             .getState()
             .setStylizedImages(styles.map((id) => ({ styleId: id, status: 'pending' })));

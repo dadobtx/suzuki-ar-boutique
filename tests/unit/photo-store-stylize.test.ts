@@ -16,12 +16,12 @@ describe('Photo Store - Stylized Images', () => {
 
     // Set stylized images to pending
     store.setStylizedImages([
-      { styleId: 'anime-racing', status: 'pending' },
+      { styleId: 'anime-football', status: 'pending' },
       { styleId: 'kart-arcade', status: 'pending' },
     ]);
 
     expect(usePhotoStore.getState().stylizedImages).toEqual([
-      { styleId: 'anime-racing', status: 'pending' },
+      { styleId: 'anime-football', status: 'pending' },
       { styleId: 'kart-arcade', status: 'pending' },
     ]);
 
@@ -29,14 +29,14 @@ describe('Photo Store - Stylized Images', () => {
     usePhotoStore
       .getState()
       .updateStylizedImageStatus(
-        'anime-racing',
+        'anime-football',
         'success',
         'http://example.com/anime.jpg',
       );
 
     expect(usePhotoStore.getState().stylizedImages).toEqual([
       {
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
         status: 'success',
         url: 'http://example.com/anime.jpg',
       },
@@ -48,7 +48,7 @@ describe('Photo Store - Stylized Images', () => {
 
     expect(usePhotoStore.getState().stylizedImages).toEqual([
       {
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
         status: 'success',
         url: 'http://example.com/anime.jpg',
       },
@@ -58,7 +58,7 @@ describe('Photo Store - Stylized Images', () => {
 
   it('should clear stylized images when clearPhoto is called', () => {
     const store = usePhotoStore.getState();
-    store.setStylizedImages([{ styleId: 'anime-racing', status: 'pending' }]);
+    store.setStylizedImages([{ styleId: 'anime-football', status: 'pending' }]);
 
     store.clearPhoto();
     expect(usePhotoStore.getState().stylizedImages).toEqual([]);
@@ -66,7 +66,7 @@ describe('Photo Store - Stylized Images', () => {
 
   it('should clear stylized images when setPhoto is called', () => {
     const store = usePhotoStore.getState();
-    store.setStylizedImages([{ styleId: 'anime-racing', status: 'pending' }]);
+    store.setStylizedImages([{ styleId: 'anime-football', status: 'pending' }]);
 
     store.setPhoto('composed_url', 'clean_url', '123456', 'SKU_JACKET');
     expect(usePhotoStore.getState().stylizedImages).toEqual([]);

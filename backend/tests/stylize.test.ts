@@ -37,7 +37,7 @@ describe('POST /stylize', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageUrl: 'https://eviltracker.com/input.jpg',
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
       }),
     });
     const res = await app.fetch(req, MOCK_ENV);
@@ -66,7 +66,7 @@ describe('POST /stylize', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageUrl: 'https://cdn.fashn.ai/input.jpg',
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
       }),
     });
     const res = await app.fetch(req, MOCK_ENV);
@@ -96,7 +96,7 @@ describe('POST /stylize', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageUrl: 'https://cdn.fashn.ai/input.jpg',
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
       }),
     });
     const res = await app.fetch(req, MOCK_ENV);
@@ -140,7 +140,7 @@ describe('POST /stylize', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageUrl: 'https://cdn.fashn.ai/input.jpg',
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
       }),
     });
     const res = await app.fetch(req, MOCK_ENV);
@@ -164,7 +164,7 @@ describe('POST /stylize', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         imageUrl: 'https://cdn.fashn.ai/input.jpg',
-        styleId: 'anime-racing',
+        styleId: 'anime-football',
       }),
     });
     const res = await app.fetch(req, MOCK_ENV);
