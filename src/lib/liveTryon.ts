@@ -23,14 +23,14 @@ export class LiveTryOnManager {
 
   public async start() {
     try {
-      // Configure credentials
-      fal.config({
-        credentials: this.config.token,
-      });
-
-      // The typical signature for fal realtime using WebRTC
+      // The typical signature for fal realtime using WebRTC.
+      // The JWT comes from our Worker (/live/token); a custom tokenProvider
+      // avoids the client's default token fetch (blocked by CSP and would
+      // require exposing credentials in the browser).
       this.connection = await fal.realtime.connect('decart/lucy2-vton/realtime', {
         connectionKey: 'lucy2-vton',
+        tokenProvider: async () => this.config.token,
+        tokenExpirationSeconds: 60,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         onResult: async (result: any) => {
           if (result.type === 'iceservers' || result.type === 'iceServers') {
