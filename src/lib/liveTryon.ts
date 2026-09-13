@@ -5,7 +5,7 @@ export interface LiveTryOnConfig {
   maxSeconds: number;
   liveId: number;
   stream: MediaStream; // Stream reused from CameraView
-  sku: string;
+  referenceImageUrl: string;
   onUpdate: (stream: MediaStream) => void;
   onError: (error: Error) => void;
   onClose: () => void;
@@ -69,7 +69,7 @@ export class LiveTryOnManager {
       });
 
       // 1. Immediately send the prompt and reference image
-      this.sendGarment(this.config.sku);
+      this.sendGarment(this.config.referenceImageUrl);
     } catch (err) {
       this.config.onError(err instanceof Error ? err : new Error(String(err)));
       this.stop();
@@ -118,13 +118,13 @@ export class LiveTryOnManager {
     }
   }
 
-  public sendGarment(sku: string) {
+  public sendGarment(referenceImageUrl: string) {
     if (!this.connection) return;
 
     this.connection.send({
       prompt:
         'Replace the current top with the garment from the reference image. Preserve the exact logos, text, and graphics from the reference, keeping them sharp and readable',
-      reference_image_url: `https://dadobtx.github.io/suzuki-ar-boutique/garments/${sku}.png`,
+      reference_image_url: referenceImageUrl,
     });
   }
 

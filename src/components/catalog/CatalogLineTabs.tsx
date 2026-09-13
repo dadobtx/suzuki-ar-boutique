@@ -1,14 +1,14 @@
 import { useTranslation } from 'react-i18next';
 import { useGarmentStore } from '@/store/garment';
 
+// Líneas presentes en public/catalog.json. Mantener sincronizado con el catálogo:
+// una pestaña sin prendas se ve como una sección vacía en el kiosko.
 const LINES = [
   { id: 'Todas', labelKey: 'catalog.allLines' },
+  { id: 'Team Black', label: 'Team Black' },
+  { id: 'Team Blue', label: 'Team Blue' },
   { id: 'GSX-R', label: 'GSX-R' },
-  { id: 'Ecstar', label: 'Ecstar' },
-  { id: 'Hayabusa', label: 'Hayabusa' },
-  { id: 'Swift Sport', label: 'Swift Sport' },
   { id: 'Jimny', label: 'Jimny' },
-  { id: 'Marine', label: 'Marine' },
   { id: 'Lifestyle', label: 'Lifestyle' },
 ];
 

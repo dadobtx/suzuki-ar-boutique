@@ -48,6 +48,12 @@ export interface GarmentSelectedEvent extends BaseEvent {
   category?: string;
 }
 
+export interface GarmentVariantSelectedEvent extends BaseEvent {
+  type: 'garment_variant_selected';
+  sku: string;
+  variantId: string;
+}
+
 export interface GarmentWishlistEvent extends BaseEvent {
   type: 'garment_wishlisted' | 'garment_unwishlisted';
   sku: string;
@@ -122,6 +128,7 @@ export type AnalyticsEvent =
   | SessionEndedEvent
   | StateTransitionEvent
   | GarmentSelectedEvent
+  | GarmentVariantSelectedEvent
   | GarmentWishlistEvent
   | FilterAppliedEvent
   | PhotoInitiatedEvent

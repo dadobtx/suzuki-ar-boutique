@@ -1,11 +1,15 @@
 export type GarmentLine =
+  // Líneas reales de la boutique (catálogo 2026)
+  | 'Team Black'
+  | 'Team Blue'
   | 'GSX-R'
+  | 'Jimny'
+  | 'Lifestyle'
+  // Líneas del catálogo de demo anterior (sin stock actual)
   | 'Ecstar'
   | 'Hayabusa'
   | 'Swift Sport'
-  | 'Jimny'
-  | 'Marine'
-  | 'Lifestyle';
+  | 'Marine';
 
 export type GarmentCategory = 'top' | 'bottom' | 'full' | 'cap' | 'accessory';
 
@@ -28,6 +32,18 @@ export interface GarmentAnchor {
   offset: { x: number; y: number };
 }
 
+export interface GarmentVariant {
+  /** Clave estable de la variante, p.ej. 'roja' | 'negra' */
+  id: string;
+  /** Etiqueta corta para el botón del kiosko */
+  label: string;
+  /** Color hex para el chip */
+  color: string;
+  overlayUrl: string;
+  anchorsUrl: string;
+  thumbnailUrl: string;
+}
+
 export interface Garment {
   id: string;
   line: GarmentLine;
@@ -40,6 +56,10 @@ export interface Garment {
   overlayUrl: string; // path to PNG in /public/garments/
   anchorsUrl: string; // path to .anchors.json in /public/garments/
   thumbnailUrl?: string;
+  /** Caras/variantes de una misma prenda (p.ej. chompa reversible).
+   *  Si existe, variants[0] es la variante por defecto y coincide con
+   *  overlayUrl/anchorsUrl/thumbnailUrl de la prenda. */
+  variants?: GarmentVariant[];
   badges?: ('NEW' | 'RACING' | 'LIMITED')[];
 }
 

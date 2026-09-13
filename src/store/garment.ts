@@ -14,6 +14,7 @@ export interface GarmentFilters {
 
 interface GarmentState {
   activeGarmentId: string | null;
+  activeVariantId: string | null;
   catalog: Garment[];
   loading: boolean;
   error: string | null;
@@ -31,6 +32,7 @@ interface GarmentState {
   ) => void;
   loadCatalog: () => Promise<void>;
   selectGarment: (id: string | null) => void;
+  selectVariant: (variantId: string | null) => void;
   clearGarment: () => void;
 
   // Filters
@@ -63,6 +65,7 @@ export const useGarmentStore = create<GarmentState>()(
   persist(
     (set) => ({
       activeGarmentId: null,
+      activeVariantId: null,
       catalog: [],
       loading: false,
       error: null,
@@ -105,10 +108,14 @@ export const useGarmentStore = create<GarmentState>()(
       },
 
       selectGarment: (id: string | null) => {
+        let initialVariantId: string | null = null;
         // Analytics: track which garment was picked (interest signal).
         if (id) {
           const garment = useGarmentStore.getState().catalog.find((g) => g.id === id);
           if (garment) {
+            if (garment.variants && garment.variants.length > 0) {
+              initialVariantId = garment.variants[0]?.id ?? null;
+            }
             useAnalyticsStore.getState().track({
               type: 'garment_selected',
               sku: garment.sku,
@@ -134,9 +141,23 @@ export const useGarmentStore = create<GarmentState>()(
             }
           }
         }
-        set({ activeGarmentId: id });
+        set({ activeGarmentId: id, activeVariantId: initialVariantId });
       },
-      clearGarment: () => set({ activeGarmentId: null }),
+      selectVariant: (variantId: string | null) => {
+        const { activeGarmentId, catalog } = useGarmentStore.getState();
+        if (activeGarmentId && variantId) {
+          const garment = catalog.find((g) => g.id === activeGarmentId);
+          if (garment) {
+            useAnalyticsStore.getState().track({
+              type: 'garment_variant_selected',
+              sku: garment.sku,
+              variantId,
+            });
+          }
+        }
+        set({ activeVariantId: variantId });
+      },
+      clearGarment: () => set({ activeGarmentId: null, activeVariantId: null }),
 
       filters: initialFilters,
       setFilter: (key, value) => {
@@ -209,8 +230,9 @@ export const useGarmentStore = create<GarmentState>()(
       storage: createJSONStorage(() => sessionStorage),
       partialize: (state) => ({
         activeGarmentId: state.activeGarmentId,
+        activeVariantId: state.activeVariantId,
         filters: state.filters,
-      }), // Persist activeGarmentId and filters to sessionStorage
+      }), // Persist activeGarmentId, activeVariantId and filters to sessionStorage
     },
   ),
 );

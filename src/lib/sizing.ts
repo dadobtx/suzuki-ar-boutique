@@ -48,6 +48,8 @@ export const SIZE_TABLES: Record<string, TablaTallas> = {
 };
 
 export const LINE_TO_TABLE: Record<string, string> = {
+  'Team Black': 'tt_eu_std',
+  'Team Blue': 'tt_eu_std',
   'GSX-R': 'tt_eu_std',
   Ecstar: 'tt_eu_std',
   Hayabusa: 'tt_eu_std',

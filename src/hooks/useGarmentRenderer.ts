@@ -1,7 +1,7 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import type { RefObject } from 'react';
 import type { NormalizedLandmark } from '@/types/pose';
-import type { Garment, GarmentAnchorsFile } from '@/types/garment';
+import type { GarmentAnchorsFile } from '@/types/garment';
 import type { Point } from '@/lib/garment-warping';
 import { warpGarment, computeAffineTransform } from '@/lib/garment-warping';
 import {
@@ -11,6 +11,7 @@ import {
   videoToCssContain,
 } from '@/lib/center-crop';
 import { useGarmentStore } from '@/store/garment';
+import { resolveGarmentAssets } from '@/lib/garment-assets';
 
 // ── Cache for loaded garment assets ──
 interface CachedGarment {
@@ -18,19 +19,28 @@ interface CachedGarment {
   anchors: GarmentAnchorsFile;
 }
 
-const garmentCache = new Map<string, CachedGarment>();
-const loadingSkus = new Set<string>();
+interface LoadGarmentAssetsParams {
+  key: string;
+  overlayUrl: string;
+  anchorsUrl: string;
+}
 
-async function loadGarmentAssets(garment: Garment): Promise<CachedGarment> {
-  const cached = garmentCache.get(garment.sku);
+const garmentCache = new Map<string, CachedGarment>();
+const loadingKeys = new Set<string>();
+
+async function loadGarmentAssets(
+  params: LoadGarmentAssetsParams,
+): Promise<CachedGarment> {
+  const { key, overlayUrl, anchorsUrl } = params;
+  const cached = garmentCache.get(key);
   if (cached) return cached;
 
   // Prevent duplicate loads
-  if (loadingSkus.has(garment.sku)) {
+  if (loadingKeys.has(key)) {
     // Wait for existing load
     return new Promise((resolve) => {
       const check = setInterval(() => {
-        const c = garmentCache.get(garment.sku);
+        const c = garmentCache.get(key);
         if (c) {
           clearInterval(check);
           resolve(c);
@@ -39,7 +49,7 @@ async function loadGarmentAssets(garment: Garment): Promise<CachedGarment> {
     });
   }
 
-  loadingSkus.add(garment.sku);
+  loadingKeys.add(key);
 
   const base = import.meta.env.BASE_URL;
 
@@ -50,17 +60,17 @@ async function loadGarmentAssets(garment: Garment): Promise<CachedGarment> {
       image.crossOrigin = 'anonymous';
       image.onload = () => resolve(image);
       image.onerror = (e) => reject(new Error(`Failed to load garment image: ${e}`));
-      image.src = `${base}garments/${garment.sku}.png`;
+      image.src = `${base}${overlayUrl.replace(/^\//, '')}`;
     }),
-    fetch(`${base}garments/${garment.sku}.anchors.json`).then((r) => {
+    fetch(`${base}${anchorsUrl.replace(/^\//, '')}`).then((r) => {
       if (!r.ok) throw new Error(`Failed to load anchors: ${r.statusText}`);
       return r.json() as Promise<GarmentAnchorsFile>;
     }),
   ]);
 
   const result: CachedGarment = { img, anchors: anchorsData };
-  garmentCache.set(garment.sku, result);
-  loadingSkus.delete(garment.sku);
+  garmentCache.set(key, result);
+  loadingKeys.delete(key);
   return result;
 }
 
@@ -95,7 +105,7 @@ export function useGarmentRenderer(
   const [error, setError] = useState<string | null>(null);
 
   const cachedRef = useRef<CachedGarment | null>(null);
-  const activeSkuRef = useRef<string | null>(null);
+  const activeKeyRef = useRef<string | null>(null);
   const callbackIdRef = useRef(0);
   const activeRef = useRef(false);
 
@@ -123,15 +133,20 @@ export function useGarmentRenderer(
 
   // Subscribe to store
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
+  const activeVariantId = useGarmentStore((s) => s.activeVariantId);
   const catalog = useGarmentStore((s) => s.catalog);
 
-  // Load garment assets when active garment changes
+  // Load garment assets when active garment or active variant changes
   const activeGarment = catalog.find((g) => g.id === activeGarmentId) ?? null;
+  const assets = useMemo(
+    () => (activeGarment ? resolveGarmentAssets(activeGarment, activeVariantId) : null),
+    [activeGarment, activeVariantId],
+  );
 
   const loadAssets = useCallback(async () => {
-    if (!activeGarment) {
+    if (!assets) {
       cachedRef.current = null;
-      activeSkuRef.current = null;
+      activeKeyRef.current = null;
       setIsLoading(false);
       setError(null);
       setValidAnchors(0);
@@ -140,24 +155,28 @@ export function useGarmentRenderer(
       return;
     }
 
-    if (activeSkuRef.current === activeGarment.sku && cachedRef.current) {
+    if (activeKeyRef.current === assets.key && cachedRef.current) {
       return; // Already loaded
     }
 
     setIsLoading(true);
     setError(null);
     try {
-      const assets = await loadGarmentAssets(activeGarment);
-      cachedRef.current = assets;
-      activeSkuRef.current = activeGarment.sku;
-      setTotalAnchors(assets.anchors.anchors.length);
+      const loaded = await loadGarmentAssets({
+        key: assets.key,
+        overlayUrl: assets.overlayUrl,
+        anchorsUrl: assets.anchorsUrl,
+      });
+      cachedRef.current = loaded;
+      activeKeyRef.current = assets.key;
+      setTotalAnchors(loaded.anchors.anchors.length);
       setIsLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setIsLoading(false);
       cachedRef.current = null;
     }
-  }, [activeGarment]);
+  }, [assets]);
 
   useEffect(() => {
     loadAssets();

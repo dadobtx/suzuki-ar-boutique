@@ -11,6 +11,7 @@ import {
   createNewStylizeController,
 } from '@/lib/ai-stylize-client';
 import { categorizeError } from '@/lib/analytics-events';
+import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { Loader2 } from 'lucide-react';
 
 const PHRASES = [
@@ -24,7 +25,7 @@ export function AIProcessing() {
   const { t } = useTranslation();
   const transition = useKioskStore((s) => s.transition);
   const { currentPhotoClean, setAiData } = usePhotoStore();
-  const { catalog, activeGarmentId } = useGarmentStore();
+  const { catalog, activeGarmentId, activeVariantId } = useGarmentStore();
 
   const [phraseIndex, setPhraseIndex] = useState(0);
   const hasStartedRef = useRef(false);
@@ -52,7 +53,13 @@ export function AIProcessing() {
       }
 
       const activeGarment = catalog.find((g) => g.id === activeGarmentId);
-      if (!activeGarment || !activeGarment.overlayUrl) {
+      if (!activeGarment) {
+        transition('SHARE_QR_FALLBACK');
+        return;
+      }
+
+      const assets = resolveGarmentAssets(activeGarment, activeVariantId);
+      if (!assets.overlayUrl) {
         transition('SHARE_QR_FALLBACK');
         return;
       }
@@ -75,12 +82,16 @@ export function AIProcessing() {
 
       try {
         const baseUrl = import.meta.env.BASE_URL;
-        const fullOverlayUrl = `${baseUrl}${activeGarment.overlayUrl.replace(/^\//, '')}`;
+        const fullOverlayUrl = `${baseUrl}${assets.overlayUrl.replace(/^\//, '')}`;
+
+        const garmentDescription = assets.variant
+          ? `${activeGarment.line} ${activeGarment.name} (cara ${assets.variant.label})`
+          : `${activeGarment.line} ${activeGarment.name}`;
 
         const result = await generateTryOnPhoto(
           currentPhotoClean,
           fullOverlayUrl,
-          `${activeGarment.line} ${activeGarment.name}`,
+          garmentDescription,
         );
 
         if (result.status === 'success' && result.imageUrl) {
@@ -191,7 +202,14 @@ export function AIProcessing() {
     };
 
     processAI();
-  }, [currentPhotoClean, catalog, activeGarmentId, transition, setAiData]);
+  }, [
+    currentPhotoClean,
+    catalog,
+    activeGarmentId,
+    activeVariantId,
+    transition,
+    setAiData,
+  ]);
 
   return (
     <div className="absolute inset-0 z-[60] bg-bg/90 backdrop-blur-md flex flex-col items-center justify-center">

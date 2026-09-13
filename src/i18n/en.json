@@ -160,5 +160,8 @@
       "3": "APPLYING LIGHTING...",
       "4": "ALMOST READY..."
     }
+  },
+  "variant": {
+    "title": "Side"
   }
 }

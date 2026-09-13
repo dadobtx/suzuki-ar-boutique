@@ -25,7 +25,8 @@ export function CatalogCard({ garment }: CatalogCardProps) {
   const isWishlisted = wishlist.includes(garment.sku);
   const baseUrl = import.meta.env.BASE_URL;
 
-  const imageUrl = `${baseUrl}${garment.overlayUrl.replace(/^\//, '')}`;
+  const src = garment.thumbnailUrl ?? garment.overlayUrl;
+  const imageUrl = `${baseUrl}${src.replace(/^\//, '')}`;
 
   const toggleSize = (size: string) => {
     const newSizes = filters.sizes.includes(size)

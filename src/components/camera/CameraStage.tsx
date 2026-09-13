@@ -19,7 +19,13 @@ import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
 import { LiveTryOnManager } from '@/lib/liveTryon';
 import { SizingOnboardingModal } from '@/components/SizingOnboarding';
 import { SizingControls } from './SizingControls';
+import { VariantControls } from './VariantControls';
 import { useSizingStore } from '@/store/sizing';
+import { resolveGarmentAssets } from '@/lib/garment-assets';
+
+const PUBLIC_ASSETS_BASE =
+  import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
+  'https://dadobtx.github.io/suzuki-ar-boutique/';
 
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
@@ -68,6 +74,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const loadCatalog = useGarmentStore((s) => s.loadCatalog);
   const catalog = useGarmentStore((s) => s.catalog);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
+  const activeVariantId = useGarmentStore((s) => s.activeVariantId);
   const selectGarment = useGarmentStore((s) => s.selectGarment);
   const clearGarment = useGarmentStore((s) => s.clearGarment);
 
@@ -172,9 +179,14 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
   useEffect(() => {
     if (isLiveActive && liveManager && activeGarment) {
-      liveManager.sendGarment(activeGarment.sku);
+      const assets = resolveGarmentAssets(activeGarment, activeVariantId);
+      const referenceImageUrl = new URL(
+        assets.overlayUrl.replace(/^\//, ''),
+        PUBLIC_ASSETS_BASE,
+      ).href;
+      liveManager.sendGarment(referenceImageUrl);
     }
-  }, [activeGarment, isLiveActive, liveManager]);
+  }, [activeGarment, activeVariantId, isLiveActive, liveManager]);
 
   useEffect(() => {
     if (!isLiveActive || liveCountdown === null || liveCountdown <= 0) return;
@@ -231,12 +243,18 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
       const stream = camera.videoRef.current.srcObject as MediaStream;
 
+      const assets = resolveGarmentAssets(activeGarment, activeVariantId);
+      const referenceImageUrl = new URL(
+        assets.overlayUrl.replace(/^\//, ''),
+        PUBLIC_ASSETS_BASE,
+      ).href;
+
       const manager = new LiveTryOnManager({
         token: data.token,
         maxSeconds: data.max_seconds,
         liveId: data.live_id,
         stream,
-        sku: activeGarment.sku,
+        referenceImageUrl,
         onUpdate: (remoteStream) => {
           sessionStartTimeRef.current = Date.now();
           setLiveStream(remoteStream);
@@ -282,7 +300,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
       setLiveToast('Error al iniciar prueba en vivo');
       setTimeout(() => setLiveToast(null), 3000);
     }
-  }, [activeGarment, camera, sessionId, handleStopLiveTryon]);
+  }, [activeGarment, activeVariantId, camera, sessionId, handleStopLiveTryon]);
 
   return (
     <div
@@ -493,8 +511,13 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           />
         )}
 
-        {/* Sizing Controls HUD (z-index 40) */}
-        {garmentActiveWithProfile && <SizingControls pose={pose} />}
+        {/* Sizing & Variant Controls HUD (z-index 40) */}
+        {garmentActiveWithProfile && (
+          <>
+            <SizingControls pose={pose} />
+            <VariantControls />
+          </>
+        )}
 
         {/* Sizing Onboarding Modal (z-index 60) */}
         {!hasProfile && presence !== 'absent' && <SizingOnboardingModal />}
