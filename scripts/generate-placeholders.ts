@@ -3,6 +3,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
 
+// El catálogo real se mantiene a mano en public/catalog.json y las imágenes
+// viven versionadas en public/garments/. Este script pertenece al catálogo demo
+// y solo debe ejecutarse intencionalmente.
+if (!process.env.ALLOW_LEGACY_CATALOG_WRITE) {
+  console.error(
+    'Este script pertenece al catálogo demo y SOBRESCRIBE public/catalog.json, ' +
+      'que hoy contiene el catálogo real de la boutique (10 prendas con número de ' +
+      'parte). Si de verdad lo necesitás: ALLOW_LEGACY_CATALOG_WRITE=1 npm run legacy:generate-placeholders',
+  );
+  process.exit(1);
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const PUBLIC_DIR = path.resolve(__dirname, '../public');

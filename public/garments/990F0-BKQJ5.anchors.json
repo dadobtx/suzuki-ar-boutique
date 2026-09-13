@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/990F0-BKQJ5.png",
+  "overlayWidth": 2048,
+  "overlayHeight": 2048,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 509,
+      "overlayY": 485,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 1460,
+      "overlayY": 485,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 675,
+      "overlayY": 1388,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 1389,
+      "overlayY": 1388,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

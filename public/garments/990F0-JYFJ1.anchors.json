@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/990F0-JYFJ1.png",
+  "overlayWidth": 2048,
+  "overlayHeight": 2048,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 523,
+      "overlayY": 417,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 1518,
+      "overlayY": 417,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 651,
+      "overlayY": 1362,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 1398,
+      "overlayY": 1362,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

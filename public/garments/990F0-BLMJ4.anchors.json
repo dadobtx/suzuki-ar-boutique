@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/990F0-BLMJ4.png",
+  "overlayWidth": 2048,
+  "overlayHeight": 2048,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 437,
+      "overlayY": 575,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 1441,
+      "overlayY": 575,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 626,
+      "overlayY": 1417,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 1379,
+      "overlayY": 1417,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

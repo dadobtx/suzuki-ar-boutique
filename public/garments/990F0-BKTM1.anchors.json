@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/990F0-BKTM1.png",
+  "overlayWidth": 2048,
+  "overlayHeight": 2048,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 407,
+      "overlayY": 383,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 1606,
+      "overlayY": 383,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 577,
+      "overlayY": 1418,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 1477,
+      "overlayY": 1418,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

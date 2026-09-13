@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "npm run generate-placeholders && npm run integrate-real-garments && tsc -b && vite build",
+    "build": "tsc -b && vite build",
     "preview": "vite preview",
     "lint": "eslint .",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
@@ -15,8 +15,8 @@
     "storybook": "storybook dev -p 6006",
     "build-storybook": "storybook build",
     "download-models": "tsx scripts/download-models.ts",
-    "generate-placeholders": "tsx scripts/generate-placeholders.ts",
-    "integrate-real-garments": "tsx scripts/integrate-real-garments.ts",
+    "legacy:generate-placeholders": "tsx scripts/generate-placeholders.ts",
+    "legacy:integrate-real-garments": "tsx scripts/integrate-real-garments.ts",
     "prepare": "husky"
   },
   "dependencies": {

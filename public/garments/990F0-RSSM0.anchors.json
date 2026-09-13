@@ -1,0 +1,47 @@
+{
+  "overlay": "/garments/990F0-RSSM0.png",
+  "overlayWidth": 2048,
+  "overlayHeight": 2048,
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 480,
+      "overlayY": 508,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 1457,
+      "overlayY": 508,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 650,
+      "overlayY": 1421,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 1382,
+      "overlayY": 1421,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}
