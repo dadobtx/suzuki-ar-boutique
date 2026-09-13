@@ -144,7 +144,10 @@ export const useGarmentStore = create<GarmentState>()(
         set({ activeGarmentId: id, activeVariantId: initialVariantId });
       },
       selectVariant: (variantId: string | null) => {
-        const { activeGarmentId, catalog } = useGarmentStore.getState();
+        const { activeGarmentId, activeVariantId, catalog } = useGarmentStore.getState();
+        // Tocar el chip que ya está activo no es un cambio de cara: si se
+        // trackea igual, infla el conteo de preferencia roja/negra.
+        if (variantId === activeVariantId) return;
         if (activeGarmentId && variantId) {
           const garment = catalog.find((g) => g.id === activeGarmentId);
           if (garment) {

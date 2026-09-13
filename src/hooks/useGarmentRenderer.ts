@@ -38,12 +38,20 @@ async function loadGarmentAssets(
   // Prevent duplicate loads
   if (loadingKeys.has(key)) {
     // Wait for existing load
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       const check = setInterval(() => {
         const c = garmentCache.get(key);
         if (c) {
           clearInterval(check);
           resolve(c);
+          return;
+        }
+        // La otra carga terminó y no dejó nada en caché => falló. Sin esta
+        // salida, un 404 deja a quien espera en un polling infinito que no
+        // resuelve ni rechaza, y la prenda se queda "cargando" para siempre.
+        if (!loadingKeys.has(key)) {
+          clearInterval(check);
+          reject(new Error(`Failed to load garment assets: ${key}`));
         }
       }, 50);
     });
@@ -53,25 +61,31 @@ async function loadGarmentAssets(
 
   const base = import.meta.env.BASE_URL;
 
-  // Load image and anchors in parallel
-  const [img, anchorsData] = await Promise.all([
-    new Promise<HTMLImageElement>((resolve, reject) => {
-      const image = new Image();
-      image.crossOrigin = 'anonymous';
-      image.onload = () => resolve(image);
-      image.onerror = (e) => reject(new Error(`Failed to load garment image: ${e}`));
-      image.src = `${base}${overlayUrl.replace(/^\//, '')}`;
-    }),
-    fetch(`${base}${anchorsUrl.replace(/^\//, '')}`).then((r) => {
-      if (!r.ok) throw new Error(`Failed to load anchors: ${r.statusText}`);
-      return r.json() as Promise<GarmentAnchorsFile>;
-    }),
-  ]);
+  try {
+    // Load image and anchors in parallel
+    const [img, anchorsData] = await Promise.all([
+      new Promise<HTMLImageElement>((resolve, reject) => {
+        const image = new Image();
+        image.crossOrigin = 'anonymous';
+        image.onload = () => resolve(image);
+        image.onerror = (e) => reject(new Error(`Failed to load garment image: ${e}`));
+        image.src = `${base}${overlayUrl.replace(/^\//, '')}`;
+      }),
+      fetch(`${base}${anchorsUrl.replace(/^\//, '')}`).then((r) => {
+        if (!r.ok) throw new Error(`Failed to load anchors: ${r.statusText}`);
+        return r.json() as Promise<GarmentAnchorsFile>;
+      }),
+    ]);
 
-  const result: CachedGarment = { img, anchors: anchorsData };
-  garmentCache.set(key, result);
-  loadingKeys.delete(key);
-  return result;
+    const result: CachedGarment = { img, anchors: anchorsData };
+    garmentCache.set(key, result);
+    return result;
+  } finally {
+    // La key sale de loadingKeys SIEMPRE, también cuando la carga falla:
+    // si se queda adentro, cualquier intento posterior con esa misma prenda
+    // o cara entra al polling de arriba y nunca sale.
+    loadingKeys.delete(key);
+  }
 }
 
 // ── Exported result type ──
