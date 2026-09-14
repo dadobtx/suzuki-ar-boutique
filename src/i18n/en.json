@@ -54,7 +54,11 @@
     "color": "Color",
     "apply": "Apply",
     "addWishlist": "Add to wishlist",
-    "removeWishlist": "Remove from wishlist"
+    "removeWishlist": "Remove from wishlist",
+    "viewBack": "Back",
+    "viewFront": "Front",
+    "viewBackAria": "View back of garment",
+    "viewFrontAria": "Return to front view"
   },
   "tryon": {
     "ready": "Ready to ride",

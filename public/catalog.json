@@ -10,7 +10,10 @@
     "priceCents": 3529,
     "overlayUrl": "/garments/990F0-BKTM1.png",
     "anchorsUrl": "/garments/990F0-BKTM1.anchors.json",
-    "thumbnailUrl": "/garments/990F0-BKTM1.thumb.png"
+    "thumbnailUrl": "/garments/990F0-BKTM1.thumb.png",
+    "backImageUrl": "/garments/990F0-BKTM1.back.png",
+    "backThumbnailUrl": "/garments/990F0-BKTM1.back.thumb.png",
+    "flip": true
   },
   {
     "id": "990F0-BKPM5",
@@ -23,7 +26,10 @@
     "priceCents": 5029,
     "overlayUrl": "/garments/990F0-BKPM5.png",
     "anchorsUrl": "/garments/990F0-BKPM5.anchors.json",
-    "thumbnailUrl": "/garments/990F0-BKPM5.thumb.png"
+    "thumbnailUrl": "/garments/990F0-BKPM5.thumb.png",
+    "backImageUrl": "/garments/990F0-BKPM5.back.png",
+    "backThumbnailUrl": "/garments/990F0-BKPM5.back.thumb.png",
+    "flip": true
   },
   {
     "id": "990F0-BKHM0",
@@ -36,7 +42,10 @@
     "priceCents": 8113,
     "overlayUrl": "/garments/990F0-BKHM0.png",
     "anchorsUrl": "/garments/990F0-BKHM0.anchors.json",
-    "thumbnailUrl": "/garments/990F0-BKHM0.thumb.png"
+    "thumbnailUrl": "/garments/990F0-BKHM0.thumb.png",
+    "backImageUrl": "/garments/990F0-BKHM0.back.png",
+    "backThumbnailUrl": "/garments/990F0-BKHM0.back.thumb.png",
+    "flip": true
   },
   {
     "id": "990F0-BKBW5",
@@ -93,7 +102,10 @@
     "priceCents": 16210,
     "overlayUrl": "/garments/990F0-BLMJ4.png",
     "anchorsUrl": "/garments/990F0-BLMJ4.anchors.json",
-    "thumbnailUrl": "/garments/990F0-BLMJ4.thumb.png"
+    "thumbnailUrl": "/garments/990F0-BLMJ4.thumb.png",
+    "backImageUrl": "/garments/990F0-BLMJ4.back.png",
+    "backThumbnailUrl": "/garments/990F0-BLMJ4.back.thumb.png",
+    "flip": true
   },
   {
     "id": "990F0-BLPK0",
@@ -106,7 +118,10 @@
     "priceCents": 31486,
     "overlayUrl": "/garments/990F0-BLPK0.png",
     "anchorsUrl": "/garments/990F0-BLPK0.anchors.json",
-    "thumbnailUrl": "/garments/990F0-BLPK0.thumb.png"
+    "thumbnailUrl": "/garments/990F0-BLPK0.thumb.png",
+    "backImageUrl": "/garments/990F0-BLPK0.back.png",
+    "backThumbnailUrl": "/garments/990F0-BLPK0.back.thumb.png",
+    "flip": true
   },
   {
     "id": "990F0-RSSM0",
@@ -132,7 +147,10 @@
     "priceCents": 11740,
     "overlayUrl": "/garments/990F0-JYFJ1.png",
     "anchorsUrl": "/garments/990F0-JYFJ1.anchors.json",
-    "thumbnailUrl": "/garments/990F0-JYFJ1.thumb.png"
+    "thumbnailUrl": "/garments/990F0-JYFJ1.thumb.png",
+    "backImageUrl": "/garments/990F0-JYFJ1.back.png",
+    "backThumbnailUrl": "/garments/990F0-JYFJ1.back.thumb.png",
+    "flip": true
   },
   {
     "id": "990F0-FCHJ0",
@@ -145,6 +163,9 @@
     "priceCents": 8113,
     "overlayUrl": "/garments/990F0-FCHJ0.png",
     "anchorsUrl": "/garments/990F0-FCHJ0.anchors.json",
-    "thumbnailUrl": "/garments/990F0-FCHJ0.thumb.png"
+    "thumbnailUrl": "/garments/990F0-FCHJ0.thumb.png",
+    "backImageUrl": "/garments/990F0-FCHJ0.back.png",
+    "backThumbnailUrl": "/garments/990F0-FCHJ0.back.thumb.png",
+    "flip": true
   }
 ]

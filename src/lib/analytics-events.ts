@@ -54,6 +54,12 @@ export interface GarmentVariantSelectedEvent extends BaseEvent {
   variantId: string;
 }
 
+export interface GarmentBackViewedEvent extends BaseEvent {
+  type: 'garment_back_viewed';
+  sku: string;
+  variantId?: string;
+}
+
 export interface GarmentWishlistEvent extends BaseEvent {
   type: 'garment_wishlisted' | 'garment_unwishlisted';
   sku: string;
@@ -129,6 +135,7 @@ export type AnalyticsEvent =
   | StateTransitionEvent
   | GarmentSelectedEvent
   | GarmentVariantSelectedEvent
+  | GarmentBackViewedEvent
   | GarmentWishlistEvent
   | FilterAppliedEvent
   | PhotoInitiatedEvent

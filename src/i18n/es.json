@@ -54,7 +54,11 @@
     "color": "Color",
     "apply": "Aplicar",
     "addWishlist": "Agregar a favoritos",
-    "removeWishlist": "Quitar de favoritos"
+    "removeWishlist": "Quitar de favoritos",
+    "viewBack": "Atrás",
+    "viewFront": "Frente",
+    "viewBackAria": "Ver la prenda por detrás",
+    "viewFrontAria": "Volver a la vista de frente"
   },
   "tryon": {
     "ready": "Listo para rodar",

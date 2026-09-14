@@ -42,6 +42,9 @@ export interface GarmentVariant {
   overlayUrl: string;
   anchorsUrl: string;
   thumbnailUrl: string;
+  backImageUrl?: string;
+  backThumbnailUrl?: string;
+  flip?: boolean;
 }
 
 export interface Garment {
@@ -56,6 +59,14 @@ export interface Garment {
   overlayUrl: string; // path to PNG in /public/garments/
   anchorsUrl: string; // path to .anchors.json in /public/garments/
   thumbnailUrl?: string;
+  /** Foto de la ESPALDA. Solo catálogo: nunca se manda al overlay AR,
+   *  a FASHN ni a Lucy 2, que esperan la vista frontal. */
+  backImageUrl?: string;
+  backThumbnailUrl?: string;
+  /** true si el par frente/espalda pasó la comprobación de encuadre y
+   *  aguanta la animación de volteo. Lo calcula scripts/normalize_back_views.py;
+   *  no se pone a mano. */
+  flip?: boolean;
   /** Caras/variantes de una misma prenda (p.ej. chompa reversible).
    *  Si existe, variants[0] es la variante por defecto y coincide con
    *  overlayUrl/anchorsUrl/thumbnailUrl de la prenda. */
