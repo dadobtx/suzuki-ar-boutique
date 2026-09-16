@@ -138,6 +138,9 @@
     },
     "recovery": {
       "message": "RESTARTING..."
+    },
+    "guide": {
+      "reposition": "POSITION YOURSELF IN FRONT OF THE CAMERA"
     }
   },
   "photo": {

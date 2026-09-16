@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración: la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). El anchor neck (landmarkIndex: -1) es referencia de calibración de la abertura del cuello; MediaPipe no posee landmark directo de cuello.",
+  "overlay": "/garments/illustrations/990F0-BKPM5.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 60,
+  "bottomClipY": 1194,
+  "headExclusion": {
+    "rx": 0.8,
+    "ryUp": 1.05,
+    "ryDown": 1.28
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 298,
+      "overlayY": 223,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 957,
+      "overlayY": 223,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 627,
+      "overlayY": 140,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 345,
+      "overlayY": 880,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 910,
+      "overlayY": 880,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

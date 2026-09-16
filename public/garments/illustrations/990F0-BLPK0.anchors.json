@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración: la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). Capucha alta de parka (ratio 0.42); ryDown calibrado en 1.35 para despejar el mentón.",
+  "overlay": "/garments/illustrations/990F0-BLPK0.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 56,
+  "bottomClipY": 1208,
+  "headExclusion": {
+    "rx": 0.85,
+    "ryUp": 1.1,
+    "ryDown": 1.35
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 365,
+      "overlayY": 274,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 886,
+      "overlayY": 274,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 625,
+      "overlayY": 285,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 350,
+      "overlayY": 920,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 900,
+      "overlayY": 920,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

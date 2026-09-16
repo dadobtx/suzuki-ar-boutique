@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración: la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). Capucha dibujada baja y plana detrás del cuello (ratio 0.28); probado con enabled: false.",
+  "overlay": "/garments/illustrations/990F0-FCHJ0.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 26,
+  "bottomClipY": 1203,
+  "headExclusion": {
+    "rx": 0.8,
+    "ryUp": 1.05,
+    "ryDown": 1.28
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 287,
+      "overlayY": 216,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 965,
+      "overlayY": 216,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 626,
+      "overlayY": 170,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 325,
+      "overlayY": 890,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 935,
+      "overlayY": 890,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

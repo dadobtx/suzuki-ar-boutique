@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración: la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). Cuello alto de polar sin capucha (ratio 0.27); probado inicialmente con enabled: false.",
+  "overlay": "/garments/illustrations/990F0-JYFJ1.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 56,
+  "bottomClipY": 1197,
+  "headExclusion": {
+    "rx": 0.8,
+    "ryUp": 1.05,
+    "ryDown": 1.28
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 298,
+      "overlayY": 233,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 953,
+      "overlayY": 233,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 625,
+      "overlayY": 175,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 335,
+      "overlayY": 890,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 925,
+      "overlayY": 890,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

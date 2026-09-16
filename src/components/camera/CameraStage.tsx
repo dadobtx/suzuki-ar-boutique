@@ -334,7 +334,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           landmarks={pose.landmarks}
           mask={pose.mask}
           layout={layout}
-          active={garmentActiveWithProfile && !isLiveActive}
+          active={garmentActiveWithProfile && !isLiveActive && !isLiveLoading}
+          presence={presence}
         />
 
         {/* Live Try-On Video Overlay (z-index 15) */}

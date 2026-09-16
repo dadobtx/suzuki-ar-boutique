@@ -138,6 +138,9 @@
     },
     "recovery": {
       "message": "REINICIANDO..."
+    },
+    "guide": {
+      "reposition": "ACOMODATE FRENTE A LA CÁMARA"
     }
   },
   "photo": {

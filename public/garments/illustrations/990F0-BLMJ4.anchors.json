@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración: la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). Prenda de capucha más alta (ratio 0.43); ryDown calibrado en 1.35 para despejar el mentón sin cortar el cierre.",
+  "overlay": "/garments/illustrations/990F0-BLMJ4.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 36,
+  "bottomClipY": 1220,
+  "headExclusion": {
+    "rx": 0.85,
+    "ryUp": 1.1,
+    "ryDown": 1.35
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 303,
+      "overlayY": 307,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 938,
+      "overlayY": 307,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 620,
+      "overlayY": 315,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 320,
+      "overlayY": 920,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 930,
+      "overlayY": 920,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

@@ -12,6 +12,16 @@ import {
 } from '@/lib/center-crop';
 import { useGarmentStore } from '@/store/garment';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
+import { resolveGarmentIllustration } from '@/lib/garment-illustration';
+import { OneEuroFilter } from '@/lib/one-euro-filter';
+import type { PresenceState } from '@/hooks/usePresence';
+import {
+  computeSimilarityTransform,
+  computeHeadExclusion,
+  renderHeadExclusion,
+  HEAD_VISIBILITY_THRESHOLD,
+} from '@/lib/illustration-transform';
+import type { SimilarityTransform, HeadExclusion } from '@/lib/illustration-transform';
 
 // ── Cache for loaded garment assets ──
 interface CachedGarment {
@@ -95,6 +105,7 @@ export interface GarmentRendererResult {
   totalAnchors: number;
   isLoading: boolean;
   error: string | null;
+  isIllustration: boolean;
 }
 
 // ── Critical anchor IDs that must be present for rendering ──
@@ -111,6 +122,7 @@ export function useGarmentRenderer(
   layout: 'landscape' | 'portrait',
   landmarks: NormalizedLandmark[] | null,
   mask: Uint8ClampedArray | null,
+  presence?: PresenceState,
 ): GarmentRendererResult {
   const [warpLatencyMs, setWarpLatencyMs] = useState<number | null>(null);
   const [validAnchors, setValidAnchors] = useState(0);
@@ -125,6 +137,44 @@ export function useGarmentRenderer(
 
   // FIX 2: Rolling visibility buffer (5 frames) per landmark index
   const visibilityBufferRef = useRef<Map<number, number[]>>(new Map());
+
+  // Illustration state, filters and tracking refs
+  const illustLoadedAtRef = useRef<number>(0);
+  const isIllustrationRef = useRef<boolean>(false);
+  const lostTrackingSinceRef = useRef<number | null>(null);
+  const lastValidAnchorsDstRef = useRef<Point[] | null>(null);
+  const lastValidAnchorsSrcRef = useRef<Point[] | null>(null);
+  const referenceScaleRef = useRef<number | null>(null);
+  const lastValidTransformRef = useRef<SimilarityTransform | null>(null);
+  const lastValidMsRef = useRef<Point | null>(null);
+  const lastValidHeadExclusionRef = useRef<HeadExclusion | null>(null);
+
+  const shoulderMidXFilter = useRef(new OneEuroFilter({ fcmin: 1.5, beta: 0.01 }));
+  const shoulderMidYFilter = useRef(new OneEuroFilter({ fcmin: 1.5, beta: 0.01 }));
+  const shoulderWidthFilter = useRef(new OneEuroFilter({ fcmin: 1.5, beta: 0.01 }));
+  const shoulderToEarRatioRef = useRef<number | null>(null);
+  const lastTrackingLostSustainedRef = useRef<boolean>(false);
+
+  // Reset when user is absent
+  useEffect(() => {
+    if (presence === 'absent') {
+      visibilityBufferRef.current.clear();
+      lostTrackingSinceRef.current = null;
+      illustLoadedAtRef.current = 0;
+      lastValidAnchorsDstRef.current = null;
+      lastValidAnchorsSrcRef.current = null;
+      referenceScaleRef.current = null;
+      shoulderToEarRatioRef.current = null;
+      lastValidTransformRef.current = null;
+      lastValidMsRef.current = null;
+      lastValidHeadExclusionRef.current = null;
+      shoulderMidXFilter.current.reset();
+      shoulderMidYFilter.current.reset();
+      shoulderWidthFilter.current.reset();
+      lastTrackingLostSustainedRef.current = false;
+      useGarmentStore.getState().setRuntime(null, 0, 0, 0, false);
+    }
+  }, [presence]);
 
   function smoothedVisibility(landmarkIndex: number, current: number): number {
     let buf = visibilityBufferRef.current.get(landmarkIndex);
@@ -150,17 +200,44 @@ export function useGarmentRenderer(
   const activeVariantId = useGarmentStore((s) => s.activeVariantId);
   const catalog = useGarmentStore((s) => s.catalog);
 
-  // Load garment assets when active garment or active variant changes
+  // Load garment assets or illustration when active garment or active variant changes
   const activeGarment = catalog.find((g) => g.id === activeGarmentId) ?? null;
   const assets = useMemo(
     () => (activeGarment ? resolveGarmentAssets(activeGarment, activeVariantId) : null),
     [activeGarment, activeVariantId],
   );
+  const illustration = useMemo(() => {
+    const isRecortablesEnabled = import.meta.env.VITE_AR_RECORTABLES === 'on';
+    return isRecortablesEnabled && activeGarment
+      ? resolveGarmentIllustration(activeGarment, activeVariantId)
+      : null;
+  }, [activeGarment, activeVariantId]);
+
+  const targetAsset = useMemo(() => {
+    if (illustration) {
+      return {
+        key: illustration.key,
+        overlayUrl: illustration.illustrationUrl,
+        anchorsUrl: illustration.illustrationAnchorsUrl,
+        isIllustration: true,
+      };
+    }
+    if (assets) {
+      return {
+        key: assets.key,
+        overlayUrl: assets.overlayUrl,
+        anchorsUrl: assets.anchorsUrl,
+        isIllustration: false,
+      };
+    }
+    return null;
+  }, [illustration, assets]);
 
   const loadAssets = useCallback(async () => {
-    if (!assets) {
+    if (!targetAsset) {
       cachedRef.current = null;
       activeKeyRef.current = null;
+      isIllustrationRef.current = false;
       setIsLoading(false);
       setError(null);
       setValidAnchors(0);
@@ -169,7 +246,7 @@ export function useGarmentRenderer(
       return;
     }
 
-    if (activeKeyRef.current === assets.key && cachedRef.current) {
+    if (activeKeyRef.current === targetAsset.key && cachedRef.current) {
       return; // Already loaded
     }
 
@@ -177,12 +254,16 @@ export function useGarmentRenderer(
     setError(null);
     try {
       const loaded = await loadGarmentAssets({
-        key: assets.key,
-        overlayUrl: assets.overlayUrl,
-        anchorsUrl: assets.anchorsUrl,
+        key: targetAsset.key,
+        overlayUrl: targetAsset.overlayUrl,
+        anchorsUrl: targetAsset.anchorsUrl,
       });
       cachedRef.current = loaded;
-      activeKeyRef.current = assets.key;
+      activeKeyRef.current = targetAsset.key;
+      isIllustrationRef.current = targetAsset.isIllustration;
+      if (targetAsset.isIllustration) {
+        illustLoadedAtRef.current = performance.now();
+      }
       setTotalAnchors(loaded.anchors.anchors.length);
       setIsLoading(false);
     } catch (err) {
@@ -190,7 +271,7 @@ export function useGarmentRenderer(
       setIsLoading(false);
       cachedRef.current = null;
     }
-  }, [assets]);
+  }, [targetAsset]);
 
   useEffect(() => {
     loadAssets();
@@ -254,14 +335,6 @@ export function useGarmentRenderer(
       const anchorsData = cached.anchors;
       const crop = computeCropOffset(videoWidth, videoHeight, cssWidth, cssHeight);
 
-      // a. Filter anchors by visibility
-      const validAnchorsList: Array<{
-        srcPt: Point;
-        dstPt: Point;
-        anchorId: string;
-        isCritical: boolean;
-      }> = [];
-
       // FIX 1: Compute contain fit for landscape
       const containFit = computeContainOffset(
         videoWidth,
@@ -269,6 +342,346 @@ export function useGarmentRenderer(
         cssWidth,
         cssHeight,
       );
+
+      // Store updates (throttled to 10Hz, but immediate on tracking status change)
+      const updateStore = (
+        latency: number | null,
+        valid: number,
+        estimated: number,
+        trackingLostSustained: boolean,
+      ) => {
+        const statusChanged =
+          trackingLostSustained !== lastTrackingLostSustainedRef.current;
+        const timeNow = performance.now();
+        if (statusChanged || timeNow % 100 < 16) {
+          lastTrackingLostSustainedRef.current = trackingLostSustained;
+          useGarmentStore
+            .getState()
+            .setRuntime(
+              latency,
+              valid,
+              cached.anchors.anchors.length,
+              estimated,
+              trackingLostSustained,
+            );
+        }
+      };
+
+      // ── BIFURCACIÓN: MODO ILUSTRACIÓN (RECORTABLES) ──
+      // Similitud rígida (traslación, rotación acotada a ±15°, escala uniforme) + exclusión facial.
+      // Sin deformación por caderas, sin máscara de persona (destination-in), sin blur.
+      if (isIllustrationRef.current) {
+        const anchorL = anchorsData.anchors.find((a) => a.id === 'shoulderL');
+        const anchorR = anchorsData.anchors.find((a) => a.id === 'shoulderR');
+
+        const vis11 = smoothedVisibility(11, lm[11]?.visibility ?? 0);
+        const vis12 = smoothedVisibility(12, lm[12]?.visibility ?? 0);
+        const vis7 = smoothedVisibility(7, lm[7]?.visibility ?? 0);
+        const vis8 = smoothedVisibility(8, lm[8]?.visibility ?? 0);
+        const vis15 = smoothedVisibility(15, lm[15]?.visibility ?? 0);
+        const vis16 = smoothedVisibility(16, lm[16]?.visibility ?? 0);
+
+        const hasShoulders = Boolean(
+          anchorL &&
+            anchorR &&
+            lm[11] &&
+            lm[12] &&
+            vis11 >= VISIBILITY_THRESHOLD &&
+            vis12 >= VISIBILITY_THRESHOLD,
+        );
+
+        const areEarsReliable = Boolean(
+          lm[7] &&
+            lm[8] &&
+            vis7 >= HEAD_VISIBILITY_THRESHOLD &&
+            vis8 >= HEAD_VISIBILITY_THRESHOLD,
+        );
+
+        const yShoulder = lm[11] && lm[12] ? (lm[11].y + lm[12].y) / 2 : 0;
+
+        // Helper para proyectar coordenadas de video a coordenadas de pantalla (espejadas a mano)
+        const mapToScreen = (normX: number, normY: number, offX = 0, offY = 0) => {
+          const vx = (normX + offX) * videoWidth;
+          const vy = (normY + offY) * videoHeight;
+          const css =
+            layoutRef.current === 'portrait'
+              ? videoToCss(vx, vy, crop)
+              : videoToCssContain(vx, vy, containFit);
+          return { x: cssWidth - css.x, y: css.y };
+        };
+
+        // Zona de exclusión de cabeza estimada a partir de orejas en pantalla
+        let headExclusion: HeadExclusion | null = null;
+        let dEar = 0;
+        if (lm[7] && lm[8]) {
+          const screenEar7 = {
+            ...mapToScreen(lm[7].x, lm[7].y),
+            visibility: vis7,
+          };
+          const screenEar8 = {
+            ...mapToScreen(lm[8].x, lm[8].y),
+            visibility: vis8,
+          };
+          dEar = Math.hypot(screenEar8.x - screenEar7.x, screenEar8.y - screenEar7.y);
+          headExclusion = computeHeadExclusion(
+            { 7: screenEar7, 8: screenEar8 },
+            anchorsData.headExclusion,
+            HEAD_VISIBILITY_THRESHOLD,
+          );
+        }
+
+        // Fundido de proximidad por distancia entre orejas
+        let proximityAlpha = 1.0;
+        if (lm[7] && lm[8]) {
+          const exDx = (lm[7].x - lm[8].x) * videoWidth;
+          const exDy = (lm[7].y - lm[8].y) * videoHeight;
+          const earDistNormalized =
+            Math.hypot(exDx, exDy) / Math.max(videoWidth, videoHeight);
+          const FADE_START = 0.1;
+          const FADE_END = 0.16;
+          if (earDistNormalized > FADE_START) {
+            const t = Math.min(
+              1,
+              (earDistNormalized - FADE_START) / (FADE_END - FADE_START),
+            );
+            proximityAlpha = 1 - t;
+          }
+        }
+
+        // Tracking válido: para prendas sin exclusión facial (enabled: false) no se exige cabeza;
+        // para prendas con capucha/cuello alto se exige elipse de exclusión válida.
+        const isHeadValid =
+          anchorsData.headExclusion?.enabled === false ? true : Boolean(headExclusion);
+
+        const isTrackingValid = Boolean(
+          hasShoulders && isHeadValid && proximityAlpha > 0,
+        );
+
+        if (!isTrackingValid || !anchorL || !anchorR || !lm[11] || !lm[12]) {
+          const now = performance.now();
+          if (lostTrackingSinceRef.current === null) {
+            lostTrackingSinceRef.current = now;
+          }
+          const lostElapsed = now - lostTrackingSinceRef.current;
+          const SUSTAINED_THRESHOLD_MS = 330;
+          const FADE_DURATION_MS = 200;
+          const sustained = lostElapsed >= SUSTAINED_THRESHOLD_MS;
+
+          setValidAnchors(hasShoulders ? 2 : 0);
+          updateStore(null, hasShoulders ? 2 : 0, 0, sustained);
+
+          // NOTA: referenceScale y shoulderToEarRatio no se resetean aquí; son proporciones
+          // anatómicas de la persona y su reset se gestiona únicamente en presence === 'absent'.
+
+          if (lastValidTransformRef.current && lastValidMsRef.current) {
+            let opacity = 1.0;
+            if (sustained) {
+              const fadeElapsed = lostElapsed - SUSTAINED_THRESHOLD_MS;
+              opacity = Math.max(0, 1 - fadeElapsed / FADE_DURATION_MS);
+            }
+            opacity *= proximityAlpha;
+
+            if (opacity > 0) {
+              const t = lastValidTransformRef.current;
+              const ms = lastValidMsRef.current;
+              ctx.save();
+              ctx.globalAlpha = opacity;
+              ctx.translate(t.tx, t.ty);
+              ctx.rotate(t.rotation);
+              ctx.scale(t.scale, t.scale);
+              ctx.drawImage(cached.img, -ms.x, -ms.y);
+              ctx.restore();
+
+              if (lastValidHeadExclusionRef.current) {
+                renderHeadExclusion(ctx, lastValidHeadExclusionRef.current);
+              }
+            }
+          }
+
+          if (activeRef.current) {
+            callbackIdRef.current = v.requestVideoFrameCallback(onFrame);
+          }
+          return;
+        }
+
+        // Tracking activo
+        lostTrackingSinceRef.current = null;
+
+        const screen11 = mapToScreen(
+          lm[11].x,
+          lm[11].y,
+          anchorR.offset?.x ?? 0,
+          anchorR.offset?.y ?? 0,
+        );
+        const screen12 = mapToScreen(
+          lm[12].x,
+          lm[12].y,
+          anchorL.offset?.x ?? 0,
+          anchorL.offset?.y ?? 0,
+        );
+
+        // En pantalla, dstShoulderL es el que aparece a la izquierda (menor x)
+        // y dstShoulderR es el que aparece a la derecha (mayor x)
+        const dstL = screen11.x <= screen12.x ? screen11 : screen12;
+        const dstR = screen11.x <= screen12.x ? screen12 : screen11;
+
+        // Suavizado de posición y ancho con OneEuroFilter
+        const rawMidX = (dstL.x + dstR.x) / 2;
+        const rawMidY = (dstL.y + dstR.y) / 2;
+        const rawDx = dstR.x - dstL.x;
+        const rawDy = dstR.y - dstL.y;
+        const rawWidth = Math.hypot(rawDx, rawDy);
+        const rawAngle = Math.atan2(rawDy, rawDx);
+
+        const Ds = Math.hypot(
+          anchorR.overlayX - anchorL.overlayX,
+          anchorR.overlayY - anchorL.overlayY,
+        );
+
+        let isPostureReliable = false;
+
+        if (shoulderToEarRatioRef.current === null) {
+          // Aprendizaje inicial de k: exige ver ambas muñecas por debajo de los hombros
+          const hasWristsBelow = Boolean(
+            lm[15] &&
+              lm[16] &&
+              vis15 >= VISIBILITY_THRESHOLD &&
+              vis16 >= VISIBILITY_THRESHOLD &&
+              lm[15].y > yShoulder &&
+              lm[16].y > yShoulder,
+          );
+          if (hasShoulders && hasWristsBelow && areEarsReliable && dEar > 0) {
+            shoulderToEarRatioRef.current = rawWidth / dEar;
+            isPostureReliable = true;
+          }
+        } else {
+          // Una vez aprendido k: evaluación anatómica independiente de las muñecas
+          const k = shoulderToEarRatioRef.current;
+          if (areEarsReliable && dEar > 0) {
+            const currentRatio = rawWidth / dEar;
+            const ratioDev = Math.abs(currentRatio - k) / k;
+            if (ratioDev <= 0.15) {
+              isPostureReliable = true;
+              shoulderToEarRatioRef.current = k * 0.95 + currentRatio * 0.05;
+            } else {
+              // |rawWidth/dEar - k| / k > 0.15: hombros no fiables (ej. brazos en alto o torso de perfil)
+              isPostureReliable = false;
+            }
+          } else {
+            // Orejas no fiables (cabeza girada, gorra, etc.): no se puede verificar con dEar
+            isPostureReliable = false;
+          }
+        }
+
+        let effectiveWidth = rawWidth;
+
+        if (isPostureReliable) {
+          effectiveWidth = rawWidth;
+        } else {
+          // Postura no fiable (brazos arriba, torso girado o postura no contrastable)
+          if (areEarsReliable && dEar > 0 && shoulderToEarRatioRef.current !== null) {
+            effectiveWidth = shoulderToEarRatioRef.current * dEar;
+          } else if (referenceScaleRef.current !== null && Ds > 0) {
+            effectiveWidth = referenceScaleRef.current * Ds;
+          } else {
+            effectiveWidth = rawWidth;
+          }
+        }
+
+        const tNow = performance.now();
+        const fMidX = shoulderMidXFilter.current.filter(rawMidX, tNow);
+        const fMidY = shoulderMidYFilter.current.filter(rawMidY, tNow);
+        const fWidth = shoulderWidthFilter.current.filter(effectiveWidth, tNow);
+
+        const halfW = fWidth / 2;
+        const hx = Math.cos(rawAngle) * halfW;
+        const hy = Math.sin(rawAngle) * halfW;
+
+        const smoothedDstShoulderL = { x: fMidX - hx, y: fMidY - hy };
+        const smoothedDstShoulderR = { x: fMidX + hx, y: fMidY + hy };
+
+        const transform = computeSimilarityTransform({
+          srcShoulderL: { x: anchorL.overlayX, y: anchorL.overlayY },
+          srcShoulderR: { x: anchorR.overlayX, y: anchorR.overlayY },
+          dstShoulderL: smoothedDstShoulderL,
+          dstShoulderR: smoothedDstShoulderR,
+          referenceScale: referenceScaleRef.current,
+          fitFactor: 1.0,
+        });
+
+        // Actualizar referenceScale ÚNICAMENTE mientras la postura sea fiable
+        if (isPostureReliable) {
+          const currentRawScale = Ds > 0 ? fWidth / Ds : 1.0;
+          if (referenceScaleRef.current === null) {
+            referenceScaleRef.current = currentRawScale;
+          } else {
+            referenceScaleRef.current =
+              referenceScaleRef.current * 0.98 + currentRawScale * 0.02;
+          }
+        }
+
+        // Rebote de colocación aplicado sobre scale
+        let finalScale = transform.scale;
+        if (illustLoadedAtRef.current > 0) {
+          const elapsed = performance.now() - illustLoadedAtRef.current;
+          const BOUNCE_DURATION_MS = 350;
+          const prefersReducedMotion =
+            typeof window !== 'undefined' &&
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+          if (!prefersReducedMotion && elapsed < BOUNCE_DURATION_MS) {
+            const t = elapsed / BOUNCE_DURATION_MS;
+            const bounceFactor =
+              1.0 - 0.1 * Math.cos(t * Math.PI * 2.5) * Math.exp(-3 * t);
+            finalScale *= bounceFactor;
+          }
+        }
+
+        const Ms = {
+          x: (anchorL.overlayX + anchorR.overlayX) / 2,
+          y: (anchorL.overlayY + anchorR.overlayY) / 2,
+        };
+
+        // Renderizado del recortable en coordenadas de pantalla directas (sin espejo exterior)
+        ctx.save();
+        ctx.globalAlpha = proximityAlpha;
+        ctx.translate(transform.tx, transform.ty);
+        ctx.rotate(transform.rotation);
+        ctx.scale(finalScale, finalScale);
+        ctx.drawImage(cached.img, -Ms.x, -Ms.y);
+        ctx.restore();
+
+        // Exclusión de cabeza mediante destination-out con borde radial suave si está activa
+        if (headExclusion) {
+          renderHeadExclusion(ctx, headExclusion);
+        }
+
+        lastValidTransformRef.current = { ...transform, scale: finalScale };
+        lastValidMsRef.current = Ms;
+        lastValidHeadExclusionRef.current = headExclusion;
+
+        setValidAnchors(2);
+
+        const elapsedTotal = performance.now() - start;
+        const roundedElapsed = Math.round(elapsedTotal * 100) / 100;
+        setWarpLatencyMs(roundedElapsed);
+
+        updateStore(roundedElapsed, 2, 0, false);
+
+        if (activeRef.current) {
+          callbackIdRef.current = v.requestVideoFrameCallback(onFrame);
+        }
+        return;
+      }
+
+      // ── MODO FOTOGRÁFICO: WARP DE DELAUNAY Y MÁSCARA ──
+      // a. Filter anchors by visibility
+      const validAnchorsList: Array<{
+        srcPt: Point;
+        dstPt: Point;
+        anchorId: string;
+        isCritical: boolean;
+      }> = [];
 
       for (const anchor of anchorsData.anchors) {
         const landmark = lm[anchor.landmarkIndex];
@@ -306,16 +719,6 @@ export function useGarmentRenderer(
           isCritical: CRITICAL_ANCHORS.has(anchor.id),
         });
       }
-
-      // Throttle store updates to 10Hz
-      const updateStore = (latency: number | null, valid: number, estimated: number) => {
-        const timeNow = performance.now();
-        if (timeNow % 100 < 16) {
-          useGarmentStore
-            .getState()
-            .setRuntime(latency, valid, cached.anchors.anchors.length, estimated);
-        }
-      };
 
       // b. Check minimum critical anchors and apply fallback estimates
       const criticalsById: Record<string, { srcPt: Point; dstPt: Point } | null> = {
@@ -395,14 +798,23 @@ export function useGarmentRenderer(
 
       const allCriticals = Object.values(criticalsById).filter((v) => v !== null);
       if (allCriticals.length < 4) {
+        const now = performance.now();
+        if (lostTrackingSinceRef.current === null) {
+          lostTrackingSinceRef.current = now;
+        }
+        const lostElapsed = now - lostTrackingSinceRef.current;
+        const SUSTAINED_THRESHOLD_MS = 330; // ~10 frames at 30fps
+        const sustained = lostElapsed >= SUSTAINED_THRESHOLD_MS;
         setValidAnchors(allCriticals.length);
-        updateStore(null, allCriticals.length, estimatedAnchors);
+        updateStore(null, allCriticals.length, estimatedAnchors, sustained);
+
         if (activeRef.current) {
           callbackIdRef.current = v.requestVideoFrameCallback(onFrame);
         }
         return;
       }
 
+      lostTrackingSinceRef.current = null;
       setValidAnchors(validAnchorsList.length + estimatedAnchors);
 
       // Widen the hip destination points outward from their midpoint. MediaPipe's
@@ -484,6 +896,9 @@ export function useGarmentRenderer(
         }
       }
 
+      // Save unscaled valid anchors for soft fade retention in illustration mode
+      const renderDst = anchorsDst;
+
       // e. Apply mirror via canvas transform
       ctx.save();
       ctx.translate(cssWidth, 0);
@@ -513,7 +928,7 @@ export function useGarmentRenderer(
       }
 
       // f. Warp garment
-      warpGarment(ctx, cached.img, anchorsSrc, anchorsDst);
+      warpGarment(ctx, cached.img, anchorsSrc, renderDst);
 
       ctx.restore();
 
@@ -587,6 +1002,7 @@ export function useGarmentRenderer(
         roundedElapsed,
         validAnchorsList.length + estimatedAnchors,
         estimatedAnchors,
+        false,
       );
 
       if (activeRef.current) {
@@ -610,5 +1026,6 @@ export function useGarmentRenderer(
     totalAnchors,
     isLoading,
     error,
+    isIllustration: isIllustrationRef.current,
   };
 }

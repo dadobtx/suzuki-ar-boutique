@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración (cara roja): la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). El anchor neck (landmarkIndex: -1) calibra la base del cuello donde la capucha se une al cuerpo.",
+  "overlay": "/garments/illustrations/990F0-BKQJ5.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 37,
+  "bottomClipY": 1220,
+  "headExclusion": {
+    "rx": 0.85,
+    "ryUp": 1.1,
+    "ryDown": 1.3
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 318,
+      "overlayY": 264,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 929,
+      "overlayY": 264,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 623,
+      "overlayY": 275,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 330,
+      "overlayY": 910,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 925,
+      "overlayY": 910,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}

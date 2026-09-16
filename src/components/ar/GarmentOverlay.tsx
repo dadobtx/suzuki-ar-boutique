@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import type { NormalizedLandmark } from '@/types/pose';
+import type { PresenceState } from '@/hooks/usePresence';
 import { useDprCanvas } from '@/hooks/useDprCanvas';
 import { useGarmentRenderer } from '@/hooks/useGarmentRenderer';
 import type { GarmentRendererResult } from '@/hooks/useGarmentRenderer';
@@ -13,6 +14,7 @@ interface GarmentOverlayProps {
   layout: 'landscape' | 'portrait';
   /** Only render when camera is granted and user is present */
   active: boolean;
+  presence?: PresenceState;
 }
 
 /**
@@ -28,6 +30,7 @@ export function GarmentOverlay({
   mask,
   layout,
   active,
+  presence,
 }: GarmentOverlayProps): JSX.Element | null {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
 
@@ -57,6 +60,7 @@ export function GarmentOverlay({
     layout,
     active ? landmarks : null,
     active ? mask : null,
+    presence,
   );
 
   // Expose renderer result via data attributes for DiagPage consumption
@@ -69,8 +73,9 @@ export function GarmentOverlay({
       style={{
         zIndex: 10, // Between video (0) and skeleton debug (20)
         // 0.5px Gaussian softens visible Delaunay triangle seams along sleeves
-        // and shoulders without making the garment look blurry overall.
-        filter: 'blur(0.5px)',
+        // and shoulders in photographic mode. In illustration mode, no blur:
+        // the PNG has its own anti-aliased sticker edge and global blur softens sleeves.
+        filter: renderer.isIllustration ? 'none' : 'blur(0.5px)',
         // Hide immediately when inactive. The clearRect in the useEffect above
         // handles freeing the pixel buffer, but due to a race with pending
         // requestVideoFrameCallback frames it can briefly flash the last

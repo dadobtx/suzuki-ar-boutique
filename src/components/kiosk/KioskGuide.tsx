@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ArrowRight, ArrowDown, Camera, Users } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
@@ -19,8 +20,10 @@ interface KioskGuideProps {
  * that guesswork by always showing exactly one next action.
  */
 export function KioskGuide({ presence, layout }: KioskGuideProps) {
+  const { t } = useTranslation();
   const kioskState = useKioskStore((s) => s.state);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
+  const trackingLostSustained = useGarmentStore((s) => s.runtime.trackingLostSustained);
 
   // Only show during the interactive try-on phase. Other states have their
   // own dedicated UIs (attract loop, calibration guide, countdown, etc.).
@@ -33,6 +36,10 @@ export function KioskGuide({ presence, layout }: KioskGuideProps) {
 
   if (presence === 'absent' || presence === 'arriving') {
     message = 'PARATE FRENTE A LA CÁMARA';
+    icon = Users;
+    pulse = true;
+  } else if (presence === 'present' && activeGarmentId && trackingLostSustained) {
+    message = t('kiosk.guide.reposition', 'ACOMODATE FRENTE A LA CÁMARA');
     icon = Users;
     pulse = true;
   } else if (presence === 'present' && !activeGarmentId) {

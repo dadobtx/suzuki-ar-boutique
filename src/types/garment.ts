@@ -45,6 +45,12 @@ export interface GarmentVariant {
   backImageUrl?: string;
   backThumbnailUrl?: string;
   flip?: boolean;
+  /** Ilustración tipo recortable para el adelanto AR local. Nunca se manda a
+   *  FASHN ni a Lucy 2, que siguen recibiendo overlayUrl (foto real). Los
+   *  anchors están calibrados sobre la resolución NATIVA de la ilustración
+   *  (1254x1254 en este lote): no reusar ni escalar los anchors fotográficos. */
+  illustrationUrl?: string;
+  illustrationAnchorsUrl?: string;
 }
 
 export interface Garment {
@@ -67,6 +73,12 @@ export interface Garment {
    *  aguanta la animación de volteo. Lo calcula scripts/normalize_back_views.py;
    *  no se pone a mano. */
   flip?: boolean;
+  /** Ilustración tipo recortable para el adelanto AR local. Nunca se manda a
+   *  FASHN ni a Lucy 2, que siguen recibiendo overlayUrl (foto real). Los
+   *  anchors están calibrados sobre la resolución NATIVA de la ilustración
+   *  (1254x1254 en este lote): no reusar ni escalar los anchors fotográficos. */
+  illustrationUrl?: string;
+  illustrationAnchorsUrl?: string;
   /** Caras/variantes de una misma prenda (p.ej. chompa reversible).
    *  Si existe, variants[0] es la variante por defecto y coincide con
    *  overlayUrl/anchorsUrl/thumbnailUrl de la prenda. */
@@ -97,6 +109,17 @@ export interface GarmentAnchorsFile {
    * hip landmarks.
    */
   bottomClipY?: number;
+  /**
+   * Configuración de exclusión de cabeza en modo ilustración.
+   * Multiplicadores de la distancia entre orejas dEar para una elipse asimétrica:
+   * rx (horizontal), ryUp (hacia arriba), ryDown (hacia abajo, mentón/cuello).
+   */
+  headExclusion?: {
+    rx?: number;
+    ryUp?: number;
+    ryDown?: number;
+    enabled?: boolean;
+  };
   /** Anchor points: pixel position in overlay → MediaPipe landmark */
   anchors: Array<
     GarmentAnchor & {

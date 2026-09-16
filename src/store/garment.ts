@@ -23,12 +23,14 @@ interface GarmentState {
     lastValidAnchors: number;
     lastTotalAnchors: number;
     lastEstimatedAnchors: number;
+    trackingLostSustained: boolean;
   };
   setRuntime: (
     latency: number | null,
     valid: number,
     total: number,
     estimated: number,
+    trackingLostSustained?: boolean,
   ) => void;
   loadCatalog: () => Promise<void>;
   selectGarment: (id: string | null) => void;
@@ -74,12 +76,14 @@ export const useGarmentStore = create<GarmentState>()(
         lastValidAnchors: 0,
         lastTotalAnchors: 0,
         lastEstimatedAnchors: 0,
+        trackingLostSustained: false,
       },
       setRuntime: (
         lastWarpLatencyMs,
         lastValidAnchors,
         lastTotalAnchors,
         lastEstimatedAnchors,
+        trackingLostSustained = false,
       ) =>
         set({
           runtime: {
@@ -87,6 +91,7 @@ export const useGarmentStore = create<GarmentState>()(
             lastValidAnchors,
             lastTotalAnchors,
             lastEstimatedAnchors,
+            trackingLostSustained,
           },
         }),
 

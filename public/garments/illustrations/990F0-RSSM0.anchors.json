@@ -1,0 +1,65 @@
+{
+  "_comment": "Modo ilustración: la colocación y escala usa exclusivamente shoulderL y shoulderR con sus offsets. hipL/hipR, topClipY y bottomClipY quedan sin efecto en este modo (similitud rígida). Cuello alto sin capucha (ratio 0.31); probado inicialmente con enabled: false para máxima robustez.",
+  "overlay": "/garments/illustrations/990F0-RSSM0.png",
+  "overlayWidth": 1254,
+  "overlayHeight": 1254,
+  "topClipY": 19,
+  "bottomClipY": 1216,
+  "headExclusion": {
+    "rx": 0.82,
+    "ryUp": 1.05,
+    "ryDown": 1.32
+  },
+  "anchors": [
+    {
+      "id": "shoulderL",
+      "landmarkIndex": 11,
+      "overlayX": 313,
+      "overlayY": 212,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "shoulderR",
+      "landmarkIndex": 12,
+      "overlayX": 926,
+      "overlayY": 212,
+      "offset": {
+        "x": 0,
+        "y": -0.02
+      }
+    },
+    {
+      "id": "neck",
+      "landmarkIndex": -1,
+      "overlayX": 620,
+      "overlayY": 160,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipL",
+      "landmarkIndex": 23,
+      "overlayX": 330,
+      "overlayY": 890,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    },
+    {
+      "id": "hipR",
+      "landmarkIndex": 24,
+      "overlayX": 920,
+      "overlayY": 890,
+      "offset": {
+        "x": 0,
+        "y": 0
+      }
+    }
+  ]
+}
