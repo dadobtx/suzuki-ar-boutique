@@ -94,9 +94,9 @@ export function PoseDebug({
             ctx.drawImage(
               offscreen,
               crop.cropX,
-              0,
+              crop.cropY,
               crop.visibleWidth,
-              videoHeight, // Source
+              crop.visibleHeight, // Source
               0,
               0,
               cssWidth,

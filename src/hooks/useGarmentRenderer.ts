@@ -964,9 +964,9 @@ export function useGarmentRenderer(
             ctx.drawImage(
               offscreen,
               crop.cropX,
-              0,
+              crop.cropY,
               crop.visibleWidth,
-              videoHeight,
+              crop.visibleHeight,
               0,
               0,
               cssWidth,
