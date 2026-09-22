@@ -2,8 +2,43 @@ import { useEffect, useState } from 'react';
 
 const STORAGE_KEY = 'suzuki-debug-skeleton';
 
+function hasSkeletonUrlFlag(): boolean {
+  if (typeof window === 'undefined' || !window.location) {
+    return false;
+  }
+
+  // 1. Check window.location.search (?skeleton=1)
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('skeleton') === '1') {
+      return true;
+    }
+  } catch {
+    // Ignore URL parsing errors
+  }
+
+  // 2. Check window.location.hash (#/...?...&skeleton=1)
+  try {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(qIndex));
+      if (hashParams.get('skeleton') === '1') {
+        return true;
+      }
+    }
+  } catch {
+    // Ignore URL parsing errors
+  }
+
+  return false;
+}
+
 export function useDebugToggle() {
   const [showDebug, setShowDebug] = useState(() => {
+    if (hasSkeletonUrlFlag()) {
+      return true;
+    }
     return sessionStorage.getItem(STORAGE_KEY) === 'true';
   });
 
