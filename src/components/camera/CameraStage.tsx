@@ -51,7 +51,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
   // Phase 3: Pose & Presence
   const pose = usePose(camera.videoRef);
-  const presence = usePresence(pose.landmarks);
+  const presence = usePresence(pose.landmarks, pose.frameId);
 
   // Profile state
   const resetProfile = useSizingStore((s) => s.reset);

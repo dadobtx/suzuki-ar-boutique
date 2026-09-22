@@ -3,7 +3,12 @@
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
-import { usePresence } from '@/hooks/usePresence';
+import {
+  usePresence,
+  PRESENCE_ARRIVING_DELAY_MS,
+  PRESENCE_LEAVING_DELAY_MS,
+  PRESENCE_ABSENT_DELAY_MS,
+} from '@/hooks/usePresence';
 
 describe('usePresence', () => {
   beforeEach(() => {
@@ -205,5 +210,66 @@ describe('usePresence', () => {
     }
 
     expect(result.current).toBe('arriving');
+  });
+
+  it('transitions present -> leaving -> absent when landmarks are null and frameId increments', () => {
+    let currentFrameId = 1;
+    const { result, rerender } = renderHook(
+      (props) => usePresence(props.landmarks, props.frameId),
+      {
+        initialProps: {
+          landmarks: createLandmarks(0.8),
+          frameId: currentFrameId,
+        },
+      },
+    );
+
+    // 1. Establish 'present' state: 10 frames with good visibility, then 1s delay
+    for (let i = 0; i < 10; i++) {
+      currentFrameId++;
+      act(() => {
+        rerender({
+          landmarks: createLandmarks(0.8),
+          frameId: currentFrameId,
+        });
+      });
+    }
+    act(() => {
+      vi.advanceTimersByTime(PRESENCE_ARRIVING_DELAY_MS);
+    });
+    expect(result.current).toBe('present');
+
+    // 2. Person leaves: MediaPipe returns null in subsequent frames with incrementing frameId
+    for (let i = 0; i < 10; i++) {
+      currentFrameId++;
+      act(() => {
+        rerender({
+          landmarks: null,
+          frameId: currentFrameId,
+        });
+      });
+    }
+
+    // After 10 null frames, rolling visibility average is 0 (< PRESENCE_LEAVING_THRESHOLD = 0.3)
+    // Advance by PRESENCE_LEAVING_DELAY_MS (1500ms)
+    act(() => {
+      vi.advanceTimersByTime(PRESENCE_LEAVING_DELAY_MS);
+    });
+    expect(result.current).toBe('leaving');
+
+    // 3. Keep feeding null frames while leaving, and advance by PRESENCE_ABSENT_DELAY_MS (5000ms)
+    for (let i = 0; i < 10; i++) {
+      currentFrameId++;
+      act(() => {
+        rerender({
+          landmarks: null,
+          frameId: currentFrameId,
+        });
+      });
+    }
+    act(() => {
+      vi.advanceTimersByTime(PRESENCE_ABSENT_DELAY_MS);
+    });
+    expect(result.current).toBe('absent');
   });
 });

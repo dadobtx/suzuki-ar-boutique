@@ -18,6 +18,7 @@ export interface UsePoseResult {
   backend: 'WebGL2' | 'CPU' | null;
   inferring: boolean;
   error: string | null;
+  frameId: number;
 }
 
 // Singleton landmarker (initialized once per page lifetime)
@@ -95,6 +96,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
   const [modelVersion, setModelVersion] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [inferring, setInferring] = useState(false);
+  const [frameId, setFrameId] = useState(0);
 
   const filterRef = useRef<Point3DFilter[]>([]);
   const callbackId = useRef(0);
@@ -167,6 +169,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
         const start = performance.now();
         try {
           const result = landmarker.detectForVideo(video, metadata.presentationTime);
+          setFrameId((prev) => prev + 1);
           const lat = performance.now() - start;
           latencyHistory.current.push(lat);
           if (latencyHistory.current.length > 30) {
@@ -263,5 +266,6 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
     backend,
     inferring,
     error,
+    frameId,
   };
 }

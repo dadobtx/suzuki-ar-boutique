@@ -83,7 +83,7 @@ function DiagnosticOverlayInner() {
 
       {/* Main panel */}
       {!isCollapsed && (
-        <div className="pointer-events-none mt-1 w-full max-h-[45vh] bg-black/75 backdrop-blur-md border border-zinc-700/70 rounded-md text-white text-[12px] leading-snug flex flex-col overflow-hidden shadow-2xl">
+        <div className="pointer-events-none mt-1 w-full max-h-[45vh] bg-black/75 border border-zinc-700/70 rounded-md text-white text-[12px] leading-snug flex flex-col overflow-hidden shadow-2xl">
           {/* Top telemetry grid */}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-2 p-2 border-b border-zinc-800/80 overflow-y-auto">
             {/* 1. Camera Info */}

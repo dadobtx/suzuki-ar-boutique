@@ -1,4 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
 import { isDebugMode } from '@/lib/debug-mode';
 import {
   initDebugLogger,
@@ -111,6 +113,21 @@ describe('Diagnostic Overlay & Debug Mode', () => {
 
       expect(logs[1].level).toBe('warn');
       expect(logs[1].message).toBe('warning message');
+    });
+  });
+
+  describe('main.tsx early debug logger initialization', () => {
+    it('has import "./debug-init" as its very first statement', () => {
+      const mainPath = path.resolve(__dirname, '../../src/main.tsx');
+      const content = fs.readFileSync(mainPath, 'utf-8');
+      const firstNonEmptyLine = content
+        .split('\n')
+        .map((line) => line.trim())
+        .find(
+          (line) => line.length > 0 && !line.startsWith('//') && !line.startsWith('/*'),
+        );
+
+      expect(firstNonEmptyLine).toMatch(/^import\s+['"]\.\/debug-init['"];?$/);
     });
   });
 });

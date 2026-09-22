@@ -1,8 +1,4 @@
-import { initDebugLogger } from './lib/debug-logger';
-
-// Initialize early diagnostic capture (strictly no-op unless ?debug=1)
-initDebugLogger();
-
+import './debug-init';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './i18n';

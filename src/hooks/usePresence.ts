@@ -19,7 +19,10 @@ export const PRESENCE_ARRIVING_DELAY_MS = 1000;
 export const PRESENCE_LEAVING_DELAY_MS = 1500;
 export const PRESENCE_ABSENT_DELAY_MS = 5000;
 
-export function usePresence(landmarks: NormalizedLandmark[] | null): PresenceState {
+export function usePresence(
+  landmarks: NormalizedLandmark[] | null,
+  frameId?: number,
+): PresenceState {
   const [state, setState] = useState<PresenceState>('absent');
   const stateRef = useRef<PresenceState>('absent');
   const visibilityHistory = useRef<number[]>([]);
@@ -35,24 +38,52 @@ export function usePresence(landmarks: NormalizedLandmark[] | null): PresenceSta
   };
 
   const lastLandmarks = useRef<NormalizedLandmark[] | null>(null);
+  const lastFrameId = useRef<number | undefined>(undefined);
 
   useEffect(() => {
+    let shouldUpdateHistory = false;
     let avgVis = 0;
-    // 1. Calculate average visibility and update history ONLY if landmarks changed
-    if (landmarks !== lastLandmarks.current) {
-      lastLandmarks.current = landmarks;
 
-      if (landmarks && landmarks.length > 0) {
-        const relevantLandmarks = PRESENCE_LANDMARK_INDICES.map(
-          (idx) => landmarks[idx],
-        ).filter((lm): lm is NormalizedLandmark => Boolean(lm));
-        if (relevantLandmarks.length > 0) {
-          avgVis =
-            relevantLandmarks.reduce((sum, lm) => sum + (lm.visibility ?? 0), 0) /
-            relevantLandmarks.length;
+    if (frameId !== undefined) {
+      if (frameId !== lastFrameId.current) {
+        lastFrameId.current = frameId;
+        shouldUpdateHistory = true;
+
+        if (landmarks && landmarks.length > 0) {
+          const relevantLandmarks = PRESENCE_LANDMARK_INDICES.map(
+            (idx) => landmarks[idx],
+          ).filter((lm): lm is NormalizedLandmark => Boolean(lm));
+          if (relevantLandmarks.length > 0) {
+            avgVis =
+              relevantLandmarks.reduce((sum, lm) => sum + (lm.visibility ?? 0), 0) /
+              relevantLandmarks.length;
+          }
+        } else {
+          avgVis = 0;
         }
       }
+    } else {
+      // Fallback: reference change behavior when frameId is not provided
+      if (landmarks !== lastLandmarks.current) {
+        lastLandmarks.current = landmarks;
+        shouldUpdateHistory = true;
 
+        if (landmarks && landmarks.length > 0) {
+          const relevantLandmarks = PRESENCE_LANDMARK_INDICES.map(
+            (idx) => landmarks[idx],
+          ).filter((lm): lm is NormalizedLandmark => Boolean(lm));
+          if (relevantLandmarks.length > 0) {
+            avgVis =
+              relevantLandmarks.reduce((sum, lm) => sum + (lm.visibility ?? 0), 0) /
+              relevantLandmarks.length;
+          }
+        } else {
+          avgVis = 0;
+        }
+      }
+    }
+
+    if (shouldUpdateHistory) {
       // Keep rolling history of last 10 frames to smooth out single-frame glitches
       visibilityHistory.current.push(avgVis);
       if (visibilityHistory.current.length > PRESENCE_ROLLING_FRAMES) {
@@ -141,7 +172,7 @@ export function usePresence(landmarks: NormalizedLandmark[] | null): PresenceSta
         }
       }
     }
-  }, [landmarks, state]);
+  }, [landmarks, frameId, state]);
 
   // Cleanup timers on unmount
   useEffect(() => {
