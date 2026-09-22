@@ -177,4 +177,33 @@ describe('usePresence', () => {
 
     expect(result.current).toBe('present');
   });
+
+  it('transitions absent -> arriving when head, shoulders, and hips are visible while legs have 0 visibility', () => {
+    // 33 landmarks with default visibility 0 (legs/feet invisible)
+    const landmarks = Array.from({ length: 33 }, () => ({
+      x: 0.5,
+      y: 0.5,
+      z: 0,
+      visibility: 0,
+    }));
+
+    // Upper body keypoints visible: nose (0), shoulders (11, 12), hips (23, 24)
+    landmarks[0].visibility = 0.9;
+    landmarks[11].visibility = 0.9;
+    landmarks[12].visibility = 0.9;
+    landmarks[23].visibility = 0.9;
+    landmarks[24].visibility = 0.9;
+
+    const { result, rerender } = renderHook((props) => usePresence(props.landmarks), {
+      initialProps: { landmarks: null as unknown as NormalizedLandmark[] },
+    });
+
+    for (let i = 0; i < 10; i++) {
+      act(() => {
+        rerender({ landmarks });
+      });
+    }
+
+    expect(result.current).toBe('arriving');
+  });
 });

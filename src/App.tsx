@@ -9,6 +9,7 @@ import { KioskReportsPage } from './pages/KioskReportsPage';
 import { MobileGalleryPage } from './pages/MobileGalleryPage';
 import { useKioskFlag } from './hooks/useKioskFlag';
 import { setupAutoRecovery } from './lib/auto-recovery';
+import { DiagnosticOverlay } from './components/debug/DiagnosticOverlay';
 
 // Setup auto recovery before React renders if possible, or here.
 setupAutoRecovery();
@@ -26,22 +27,25 @@ export default function App() {
   }, [setPro]);
 
   return (
-    <HashRouter
-      future={{
-        v7_startTransition: true,
-        v7_relativeSplatPath: true,
-      }}
-    >
-      <div className="min-h-screen bg-bg text-fg overflow-hidden relative">
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/diag" element={<DiagPage />} />
-          <Route path="/analytics" element={<AnalyticsPage />} />
-          <Route path="/kiosk" element={<KioskPage />} />
-          <Route path="/kiosk/reports" element={<KioskReportsPage />} />
-          <Route path="/gallery" element={<MobileGalleryPage />} />
-        </Routes>
-      </div>
-    </HashRouter>
+    <>
+      <DiagnosticOverlay />
+      <HashRouter
+        future={{
+          v7_startTransition: true,
+          v7_relativeSplatPath: true,
+        }}
+      >
+        <div className="min-h-screen bg-bg text-fg overflow-hidden relative">
+          <Routes>
+            <Route path="/" element={<HomePage />} />
+            <Route path="/diag" element={<DiagPage />} />
+            <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/kiosk" element={<KioskPage />} />
+            <Route path="/kiosk/reports" element={<KioskReportsPage />} />
+            <Route path="/gallery" element={<MobileGalleryPage />} />
+          </Routes>
+        </div>
+      </HashRouter>
+    </>
   );
 }

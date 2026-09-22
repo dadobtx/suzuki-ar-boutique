@@ -54,7 +54,6 @@ export function useKioskPresenceSync(
       if (presence === 'absent') {
         if (absentTimerRef.current === null) {
           absentTimerRef.current = window.setTimeout(() => {
-            console.log('TIMER FIRED!');
             startCooldown();
           }, 25000);
         }
@@ -84,7 +83,6 @@ export function useKioskPresenceSync(
 
     return () => {
       if (absentTimerRef.current !== null) {
-        console.log('CLEANUP FIRED! CLEARING TIMER');
         window.clearTimeout(absentTimerRef.current);
         absentTimerRef.current = null;
       }

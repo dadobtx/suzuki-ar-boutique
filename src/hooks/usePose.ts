@@ -5,6 +5,8 @@ import { Point3DFilter } from '@/lib/one-euro-filter';
 import { POSE_MODEL_VERSION } from '@/lib/model-version';
 
 import type { NormalizedLandmark } from '@/types/pose';
+import { isDebugMode } from '@/lib/debug-mode';
+import { debugTelemetry, setMediaPipeStatus } from '@/lib/debug-mediapipe';
 
 export interface UsePoseResult {
   landmarks: NormalizedLandmark[] | null;
@@ -28,38 +30,57 @@ let initPromise: Promise<{
 async function initLandmarker() {
   if (initPromise) return initPromise;
 
-  initPromise = (async () => {
-    const resolver = await FilesetResolver.forVisionTasks(
-      `${import.meta.env.BASE_URL}mediapipe/wasm`,
-    );
+  if (isDebugMode()) {
+    setMediaPipeStatus('loading');
+  }
 
-    let backend: 'WebGL2' | 'CPU' = 'WebGL2';
-    let lm: PoseLandmarker;
+  initPromise = (async () => {
     try {
-      lm = await PoseLandmarker.createFromOptions(resolver, {
-        baseOptions: {
-          modelAssetPath: `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`,
-          delegate: 'GPU',
-        },
-        runningMode: 'VIDEO',
-        outputSegmentationMasks: true,
-        numPoses: 1,
-      });
-    } catch (e) {
-      console.warn('[usePose] WebGL2 failed, falling back to CPU', e);
-      lm = await PoseLandmarker.createFromOptions(resolver, {
-        baseOptions: {
-          modelAssetPath: `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`,
-          delegate: 'CPU',
-        },
-        runningMode: 'VIDEO',
-        outputSegmentationMasks: true,
-        numPoses: 1,
-      });
-      backend = 'CPU';
+      const resolver = await FilesetResolver.forVisionTasks(
+        `${import.meta.env.BASE_URL}mediapipe/wasm`,
+      );
+
+      let backend: 'WebGL2' | 'CPU' = 'WebGL2';
+      let lm: PoseLandmarker;
+      try {
+        lm = await PoseLandmarker.createFromOptions(resolver, {
+          baseOptions: {
+            modelAssetPath: `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`,
+            delegate: 'GPU',
+          },
+          runningMode: 'VIDEO',
+          outputSegmentationMasks: true,
+          numPoses: 1,
+        });
+      } catch (e) {
+        console.warn('[usePose] WebGL2 failed, falling back to CPU', e);
+        lm = await PoseLandmarker.createFromOptions(resolver, {
+          baseOptions: {
+            modelAssetPath: `${import.meta.env.BASE_URL}mediapipe/pose_landmarker_full.task`,
+            delegate: 'CPU',
+          },
+          runningMode: 'VIDEO',
+          outputSegmentationMasks: true,
+          numPoses: 1,
+        });
+        backend = 'CPU';
+      }
+      landmarker = lm;
+      if (isDebugMode()) {
+        setMediaPipeStatus('ready', backend === 'WebGL2' ? 'GPU' : 'CPU');
+      }
+      return { landmarker: lm, backend };
+    } catch (err) {
+      console.warn('[usePose] initLandmarker failed:', err);
+      if (isDebugMode()) {
+        setMediaPipeStatus(
+          'error',
+          null,
+          err instanceof Error ? err.message : String(err),
+        );
+      }
+      throw err;
     }
-    landmarker = lm;
-    return { landmarker: lm, backend };
   })();
   return initPromise;
 }
@@ -99,6 +120,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
       })
       .catch((err) => {
         if (cancelled) return;
+        console.warn('[usePose] initLandmarker caught error:', err);
         setError(err instanceof Error ? err.message : String(err));
       });
     return () => {
@@ -161,6 +183,14 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
           const worldPose =
             (result.worldLandmarks[0] as NormalizedLandmark[] | undefined) ?? null;
 
+          if (isDebugMode()) {
+            debugTelemetry.mediapipe.fps = Math.round(1000 / lat);
+            debugTelemetry.mediapipe.latency = lat;
+            debugTelemetry.mediapipe.landmarksCount = pose ? pose.length : 0;
+            debugTelemetry.mediapipe.modelVersion = POSE_MODEL_VERSION;
+            debugTelemetry.mediapipe.error = null;
+          }
+
           if (pose) {
             const filtered = pose.map((lm, i) => {
               const f = filterRef.current[i];
@@ -178,7 +208,11 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
           if (maskInfo) {
             const raw = maskInfo.getAsUint8Array();
             setMask(new Uint8ClampedArray(raw));
-            maskInfo.close();
+            try {
+              maskInfo.close();
+            } catch (closeErr) {
+              console.warn('[usePose] maskInfo.close() failed:', closeErr);
+            }
           } else {
             setMask(null);
           }
@@ -187,11 +221,20 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             'close' in result &&
             typeof (result as unknown as Record<string, unknown>).close === 'function'
           ) {
-            ((result as unknown as Record<string, unknown>).close as () => void)();
+            try {
+              ((result as unknown as Record<string, unknown>).close as () => void)();
+            } catch (closeErr) {
+              console.warn('[usePose] result.close() failed:', closeErr);
+            }
           }
         } catch (err) {
+          console.warn('[usePose] Inference error caught:', err);
           console.error('[usePose] Inference error:', err);
           setError(err instanceof Error ? err.message : String(err));
+          if (isDebugMode()) {
+            debugTelemetry.mediapipe.error =
+              err instanceof Error ? err.message : String(err);
+          }
         }
       }
 

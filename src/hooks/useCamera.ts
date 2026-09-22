@@ -1,5 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { useCameraStore } from '@/store/camera';
+import { selectCamera } from '@/lib/camera-selector';
 
 /**
  * Camera hook with 5-phase bootstrap:
@@ -19,12 +20,17 @@ export function useCamera() {
 
   const {
     status,
+    phase,
+    phaseError,
+    availableDevices,
     deviceId,
     deviceLabel,
     capabilities,
     settings,
     error,
     setStatus,
+    setPhase,
+    setAvailableDevices,
     setDevice,
     setCapabilities,
     setSettings,
@@ -39,25 +45,41 @@ export function useCamera() {
     }
   }, []);
 
-  const assignStream = useCallback((stream: MediaStream) => {
-    streamRef.current = stream;
-    if (videoRef.current) {
-      videoRef.current.srcObject = stream;
-      videoRef.current.play().catch((e) => {
-        console.warn('[useCamera] video.play() rejected:', e);
-      });
-    }
-  }, []);
+  const assignStream = useCallback(
+    (stream: MediaStream) => {
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.onplaying = () => {
+          setPhase('ready');
+        };
+        videoRef.current
+          .play()
+          .then(() => {
+            setPhase('ready');
+          })
+          .catch((e) => {
+            console.warn('[useCamera] video.play() rejected:', e);
+          });
+      }
+    },
+    [setPhase],
+  );
 
   const start = useCallback(async () => {
     // Check API availability
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('unsupported');
       setError('navigator.mediaDevices.getUserMedia not available');
+      setPhase('error', {
+        name: 'NotSupportedError',
+        message: 'navigator.mediaDevices.getUserMedia not available',
+      });
       return;
     }
 
     setStatus('requesting');
+    setPhase('requesting');
     setError(null);
 
     try {
@@ -69,12 +91,15 @@ export function useCamera() {
 
       // ── Phase 2: Read capabilities & settings ──
       const track = tempStream.getVideoTracks()[0];
+      let phase1DeviceId: string | undefined = undefined;
       if (track) {
         if (typeof track.getCapabilities === 'function') {
           setCapabilities(track.getCapabilities());
         }
         if (typeof track.getSettings === 'function') {
-          setSettings(track.getSettings());
+          const trackSettings = track.getSettings();
+          setSettings(trackSettings);
+          phase1DeviceId = trackSettings.deviceId;
         }
       }
 
@@ -82,24 +107,45 @@ export function useCamera() {
       tempStream.getTracks().forEach((t) => t.stop());
 
       // ── Phase 4: Enumerate devices (labels now available) ──
+      setPhase('enumerating');
       const devices = await navigator.mediaDevices.enumerateDevices();
       const videoDevices = devices.filter((d) => d.kind === 'videoinput');
-      const selected = videoDevices[0]; // MVP: first camera
+      const deviceList = videoDevices.map((d) => ({
+        deviceId: d.deviceId,
+        label: d.label || 'Unknown Camera',
+      }));
+      setAvailableDevices(deviceList);
+      setPhase('selecting');
+
+      const envCameraLabel = import.meta.env.VITE_CAMERA_LABEL as string | undefined;
+      const selection = selectCamera(deviceList, envCameraLabel, phase1DeviceId);
+      const selected = selection.device;
       const selectedId = selected?.deviceId ?? undefined;
       const selectedLabel = selected?.label ?? 'Unknown';
+
+      console.info(
+        `[useCamera] Camera selected via rule "${selection.rule}": "${selectedLabel}" (id: ${selectedId ?? 'none'}) [exact=${selection.useExact}]`,
+      );
 
       if (selectedId) {
         setDevice(selectedId, selectedLabel);
       }
 
       // ── Phase 5: Final getUserMedia with ideal constraints ──
+      setPhase('requesting');
       let finalStream: MediaStream | null = null;
+
+      const deviceIdConstraint = selectedId
+        ? selection.useExact
+          ? { exact: selectedId }
+          : { ideal: selectedId }
+        : undefined;
 
       // Attempt 1: Full ideal constraints
       try {
         finalStream = await navigator.mediaDevices.getUserMedia({
           video: {
-            deviceId: selectedId ? { exact: selectedId } : undefined,
+            deviceId: deviceIdConstraint,
             facingMode: 'user',
             width: { ideal: 1280 },
             height: { ideal: 720 },
@@ -114,7 +160,7 @@ export function useCamera() {
         try {
           finalStream = await navigator.mediaDevices.getUserMedia({
             video: {
-              deviceId: selectedId ? { exact: selectedId } : undefined,
+              deviceId: deviceIdConstraint,
               facingMode: 'user',
             },
             audio: false,
@@ -137,6 +183,7 @@ export function useCamera() {
 
       if (finalStream) {
         assignStream(finalStream);
+        setPhase('playing');
 
         // Update settings with final stream's actual settings
         const finalTrack = finalStream.getVideoTracks()[0];
@@ -151,18 +198,33 @@ export function useCamera() {
       }
     } catch (err) {
       const e = err as DOMException;
+      const errName = e?.name || 'Error';
+      const errMsg = e?.message || 'Unknown camera error';
+      console.warn('[useCamera] Camera error caught:', err);
       if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
         setStatus('denied');
         setError(e.message);
+        setPhase('error', { name: errName, message: errMsg });
       } else if (e.name === 'NotFoundError' || e.name === 'DevicesNotFoundError') {
         setStatus('unsupported');
         setError('No camera found');
+        setPhase('error', { name: errName, message: 'No camera found' });
       } else {
         setStatus('error');
         setError(e.message || 'Unknown camera error');
+        setPhase('error', { name: errName, message: errMsg });
       }
     }
-  }, [setStatus, setError, setCapabilities, setSettings, setDevice, assignStream]);
+  }, [
+    setStatus,
+    setError,
+    setPhase,
+    setAvailableDevices,
+    setCapabilities,
+    setSettings,
+    setDevice,
+    assignStream,
+  ]);
 
   const retry = useCallback(() => {
     stopTracks();
@@ -176,6 +238,7 @@ export function useCamera() {
     return () => {
       stopTracks();
       useCameraStore.getState().setStatus('idle');
+      useCameraStore.getState().setPhase('idle');
     };
   }, [start, stopTracks]);
 
@@ -221,6 +284,9 @@ export function useCamera() {
   return {
     videoRef,
     status,
+    phase,
+    phaseError,
+    availableDevices,
     error,
     capabilities,
     settings,

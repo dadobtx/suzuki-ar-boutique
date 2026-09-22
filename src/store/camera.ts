@@ -9,10 +9,35 @@ export type CameraStatus =
   | 'unsupported'
   | 'error';
 
+export type CameraPhase =
+  | 'idle'
+  | 'enumerating'
+  | 'selecting'
+  | 'requesting'
+  | 'playing'
+  | 'ready'
+  | 'error';
+
+export interface CameraDeviceInfo {
+  deviceId: string;
+  label: string;
+}
+
+export interface CameraPhaseError {
+  name: string;
+  message: string;
+}
+
 interface CameraState {
   // ── Session state (cleared on cleanup) ──
   status: CameraStatus;
   error: string | null;
+
+  // ── Diagnostic / phase state ──
+  phase: CameraPhase;
+  phaseStartTime: number;
+  phaseError: CameraPhaseError | null;
+  availableDevices: CameraDeviceInfo[];
 
   // ── Device info (persists between camera lifecycles) ──
   deviceId: string | null;
@@ -22,6 +47,8 @@ interface CameraState {
 
   // ── Actions ──
   setStatus: (status: CameraStatus) => void;
+  setPhase: (phase: CameraPhase, error?: CameraPhaseError | null) => void;
+  setAvailableDevices: (devices: CameraDeviceInfo[]) => void;
   setDevice: (id: string, label: string) => void;
   setCapabilities: (caps: MediaTrackCapabilities) => void;
   setSettings: (s: MediaTrackSettings) => void;
@@ -42,6 +69,12 @@ export const useCameraStore = create<CameraState>()(
       status: 'idle',
       error: null,
 
+      // Diagnostic / phase state
+      phase: 'idle',
+      phaseStartTime: Date.now(),
+      phaseError: null,
+      availableDevices: [],
+
       // Device info
       deviceId: null,
       deviceLabel: null,
@@ -50,17 +83,39 @@ export const useCameraStore = create<CameraState>()(
 
       // Actions
       setStatus: (status) => set({ status }),
+      setPhase: (phase, error = null) =>
+        set({
+          phase,
+          phaseStartTime: Date.now(),
+          phaseError:
+            error ??
+            (phase === 'error'
+              ? { name: 'CameraError', message: 'Unknown error' }
+              : null),
+        }),
+      setAvailableDevices: (availableDevices) => set({ availableDevices }),
       setDevice: (deviceId, deviceLabel) => set({ deviceId, deviceLabel }),
       setCapabilities: (capabilities) => set({ capabilities }),
       setSettings: (settings) => set({ settings }),
       setError: (error) => set({ error, status: error ? 'error' : 'idle' }),
 
-      resetSession: () => set({ status: 'idle', error: null }),
+      resetSession: () =>
+        set({
+          status: 'idle',
+          error: null,
+          phase: 'idle',
+          phaseStartTime: Date.now(),
+          phaseError: null,
+        }),
 
       resetAll: () =>
         set({
           status: 'idle',
           error: null,
+          phase: 'idle',
+          phaseStartTime: Date.now(),
+          phaseError: null,
+          availableDevices: [],
           deviceId: null,
           deviceLabel: null,
           capabilities: null,
