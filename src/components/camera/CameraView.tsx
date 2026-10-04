@@ -13,6 +13,7 @@ interface CameraViewProps {
   /** 'cover' for portrait center-crop, 'contain' for landscape full view */
   objectFit?: 'cover' | 'contain';
   className?: string;
+  fog?: boolean;
 }
 
 /**
@@ -26,6 +27,7 @@ export function CameraView({
   retry,
   objectFit = 'contain',
   className = '',
+  fog = false,
 }: CameraViewProps) {
   const { t } = useTranslation();
 
@@ -54,6 +56,8 @@ export function CameraView({
           transform: 'scaleX(-1)',
           objectFit,
           visibility: status === 'granted' ? 'visible' : 'hidden',
+          filter: fog ? 'blur(28px) brightness(0.5) saturate(0.7)' : 'none',
+          transition: 'filter 600ms cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         aria-label={t('a11y.cameraFeed')}
       />

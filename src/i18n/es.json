@@ -70,7 +70,9 @@
   },
   "kiosk": {
     "attract": {
-      "cta": "ACÉRCATE PARA EMPEZAR"
+      "cta": "ACÉRCATE PARA EMPEZAR",
+      "title": "PRUÉBATE LA COLECCIÓN SUZUKI",
+      "standOnMark": "PÁRATE EN LA MARCA DEL PISO"
     },
     "awakening": {
       "greeting": "¡VAMOS!"

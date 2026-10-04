@@ -70,7 +70,9 @@
   },
   "kiosk": {
     "attract": {
-      "cta": "STEP CLOSER TO START"
+      "cta": "STEP CLOSER TO START",
+      "title": "TRY THE SUZUKI COLLECTION",
+      "standOnMark": "STAND ON THE FLOOR MARK"
     },
     "awakening": {
       "greeting": "LET'S GO!"

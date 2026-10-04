@@ -14,7 +14,7 @@ import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
 import { Camera as CameraIcon, Sparkles, X as XIcon } from 'lucide-react';
-import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
+import { PhotoCountdown, KioskGuide, AttractLoop } from '@/components/kiosk';
 import { LiveTryOnManager } from '@/lib/liveTryon';
 import { StagePanel } from './StagePanel';
 import { SizingControls } from './SizingControls';
@@ -325,7 +325,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           error={camera.error}
           retry={camera.retry}
           objectFit={isPortrait ? 'cover' : 'contain'}
+          fog={kioskState === 'ATTRACT' && presence === 'absent'}
         />
+
+        {/* Attract Loop (headline in mirror cell) */}
+        {kioskState === 'ATTRACT' && <AttractLoop />}
 
         {/* Garment Overlay (z-index 10) */}
         <GarmentOverlay

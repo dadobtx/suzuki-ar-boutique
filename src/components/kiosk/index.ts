@@ -7,3 +7,4 @@ export * from './PhotoShare';
 export * from './AIProcessing';
 export * from './AIError';
 export * from './KioskGuide';
+export * from './AttractPanel';

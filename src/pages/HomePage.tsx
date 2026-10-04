@@ -1,7 +1,6 @@
 import { CameraStage } from '@/components/camera';
 import { useKioskStore } from '@/store/kiosk';
 import {
-  AttractLoop,
   AwakeningSplash,
   CalibrationGuide,
   CooldownCountdown,
@@ -22,7 +21,6 @@ export function HomePage() {
       <CameraStage />
 
       {/* Kiosk Overlays */}
-      {kioskState === 'ATTRACT' && <AttractLoop />}
       {kioskState === 'AWAKENING' && <AwakeningSplash />}
       {kioskState === 'CALIBRATING' && <CalibrationGuide />}
       {kioskState === 'AI_PROCESSING' && <AIProcessing />}

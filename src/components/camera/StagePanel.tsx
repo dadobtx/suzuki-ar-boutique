@@ -1,7 +1,8 @@
 import { useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { CatalogPanel } from '@/components/catalog';
-import { SizingOnboardingModal } from '@/components/SizingOnboarding';
+import { SizingOnboardingPanel } from '@/components/SizingOnboarding';
+import { AttractPanel } from '@/components/kiosk';
 import { useGarmentStore } from '@/store/garment';
 import { useSizingStore } from '@/store/sizing';
 import type { KioskState } from '@/store/kiosk';
@@ -63,16 +64,15 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
           data-testid="panel-onboarding"
           className="w-full h-full flex items-center justify-center"
         >
-          <SizingOnboardingModal />
+          <SizingOnboardingPanel />
         </div>
       )}
 
-      {/* 2. AttractPanel (Fase 1: panel vacío con bg-surface) */}
+      {/* 2. AttractPanel */}
       {activeView === 'attract' && (
-        <div
-          data-testid="panel-attract"
-          className="w-full h-full bg-surface flex items-center justify-center text-fg-muted"
-        />
+        <div data-testid="panel-attract" className="w-full h-full bg-surface">
+          <AttractPanel />
+        </div>
       )}
 
       {/* 3. StatusPanel: una línea, «MANTENTE EN EL MARCO» */}
