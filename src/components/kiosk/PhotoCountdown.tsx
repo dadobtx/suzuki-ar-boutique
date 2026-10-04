@@ -105,29 +105,30 @@ export function PhotoCountdown({ videoRef, overlayCanvasRef }: PhotoCountdownPro
   }, [transition, catalog, activeGarmentId, videoRef, overlayCanvasRef, setPhoto]);
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center pointer-events-none">
-      <AnimatePresence>
-        {countdown > 0 && (
-          <motion.div
-            key={countdown}
-            initial={{ scale: 0.5, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            exit={{ scale: 1.5, opacity: 0 }}
-            transition={{ duration: 0.5 }}
-            className="absolute flex flex-col items-center"
-          >
-            <div
-              className="font-mono text-white glow-cyan"
-              style={{ fontSize: '480px', lineHeight: 1 }}
+    <div className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none select-none">
+      <div className="relative flex items-center justify-center">
+        <AnimatePresence>
+          {countdown > 0 && (
+            <motion.div
+              key={countdown}
+              initial={{ scale: 0.5, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 1.5, opacity: 0 }}
+              transition={{ duration: 0.4 }}
+              className="absolute font-mono text-white glow-cyan"
+              style={{ fontSize: '420px', lineHeight: 1 }}
             >
               {countdown}
-            </div>
-            <div className="font-display text-4xl tracking-widest text-white mt-8 bg-black/50 px-8 py-2 rounded">
-              {t('photo.countdown.message', 'MANTENTE QUIETO')}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      {countdown > 0 && (
+        <div className="absolute bottom-28 font-display text-4xl md:text-5xl tracking-widest text-white bg-black/60 backdrop-blur-sm px-10 py-4 rounded-xl border border-line clip-hud">
+          {t('photo.countdown.message', 'MANTENTE QUIETO')}
+        </div>
+      )}
 
       {flash && (
         <div

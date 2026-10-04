@@ -130,6 +130,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Only allow garment interaction if they have a profile
   const garmentActiveWithProfile = garmentActive && hasProfile;
 
+  const tallasElegidas = useSizingStore((s) => s.tallasElegidas);
+  const chosenSize = activeGarment
+    ? (tallasElegidas[activeGarment.sku] ?? activeGarment.sizes?.[0] ?? 'M')
+    : null;
+
   const isLiveTryOnEnabled = import.meta.env.VITE_LIVE_TRYON === 'on';
   const showLiveButton =
     isLiveTryOnEnabled && activeGarment?.category === 'top' && garmentActiveWithProfile;
@@ -330,6 +335,16 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
         {/* Attract Loop (headline in mirror cell) */}
         {kioskState === 'ATTRACT' && <AttractLoop />}
+
+        {/* Active Garment Plaque (Top-Left of mirror, display ~32px) */}
+        {activeGarment &&
+          (kioskState === 'TRYON' || kioskState === 'PHOTO_COUNTDOWN') && (
+            <div className="absolute top-6 left-6 z-20 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-lg border border-line shadow-lg">
+              <span className="font-display text-2xl md:text-[32px] tracking-wider text-fg uppercase leading-tight">
+                {activeGarment.name} · TALLA {chosenSize}
+              </span>
+            </div>
+          )}
 
         {/* Garment Overlay (z-index 10) */}
         <GarmentOverlay
