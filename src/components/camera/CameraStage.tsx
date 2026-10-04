@@ -478,7 +478,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             {!isLiveActive && (
               <button
                 onClick={() => transition('PHOTO_COUNTDOWN')}
-                className="w-[144px] h-[144px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
+                className="w-[144px] h-[144px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-2xl hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
               >
                 <CameraIcon size={52} />
                 <span className="font-display tracking-widest text-lg mt-1 uppercase">
@@ -489,9 +489,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
             {showLiveButton && (
               <button
+                type="button"
                 onClick={handleStartLiveTryon}
                 disabled={isLiveLoading || isLiveActive}
-                className={`w-[144px] h-[144px] rounded-full bg-purple-600 flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(147,51,234,0.6)] transition-transform border-4 border-white/20 ${
+                className={`w-[144px] h-[144px] rounded-full bg-surface/90 border-2 border-fg text-fg flex flex-col items-center justify-center shadow-2xl transition-transform ${
                   isLiveLoading
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
@@ -503,7 +504,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                   <span className="text-6xl font-display">{liveCountdown}</span>
                 ) : (
                   <>
-                    <Sparkles size={44} className={isLiveLoading ? 'animate-spin' : ''} />
+                    <Sparkles
+                      size={44}
+                      className={`text-brand-red ${isLiveLoading ? 'animate-spin' : ''}`}
+                    />
                     <span className="font-display tracking-widest text-lg mt-1 uppercase text-center leading-tight">
                       {isLiveLoading ? (
                         t('live.connecting', 'CONECTANDO…')

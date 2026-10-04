@@ -135,8 +135,8 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
   };
 
   return (
-    <div className="absolute top-20 right-4 bg-black/60 backdrop-blur-md border border-zinc-700 rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-white w-[220px] shadow-2xl">
-      <span className="text-lg font-bold text-zinc-400 uppercase tracking-widest text-center">
+    <div className="absolute top-20 right-4 bg-surface/90 backdrop-blur-md border border-line rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-fg w-[220px] shadow-2xl">
+      <span className="text-lg font-bold text-fg-muted uppercase tracking-widest text-center">
         {t('sizing.yourSize', 'Tu Talla')}
       </span>
       <div className="flex items-center justify-between w-full">
@@ -144,18 +144,18 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
           type="button"
           onClick={handlePrev}
           disabled={currentIndex <= 0}
-          className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-center"
+          className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-surface-2 border border-line hover:border-fg-muted disabled:opacity-30 disabled:hover:border-line transition-colors cursor-pointer flex items-center justify-center text-fg"
         >
           <Minus size={28} />
         </button>
-        <span className="font-display text-[64px] font-black text-cyan-400 drop-shadow-md leading-none select-none">
+        <span className="font-display text-[64px] font-black text-accent-cyan drop-shadow-md leading-none select-none">
           {elegida}
         </span>
         <button
           type="button"
           onClick={handleNext}
           disabled={currentIndex === -1 || currentIndex >= garment.sizes.length - 1}
-          className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-center"
+          className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-surface-2 border border-line hover:border-fg-muted disabled:opacity-30 disabled:hover:border-line transition-colors cursor-pointer flex items-center justify-center text-fg"
         >
           <Plus size={28} />
         </button>
@@ -163,17 +163,17 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
 
       <div className="text-center w-full mt-1">
         {elegida === recomendada ? (
-          <span className="text-[18px] font-bold text-green-400 leading-tight block">
+          <span className="text-[18px] font-bold text-success leading-tight block">
             {t('sizing.matchesRecommended', '✓ Es tu talla recomendada')}
           </span>
         ) : (
           <button
             type="button"
             onClick={() => setTallaElegida(garment.sku, recomendada)}
-            className="text-[18px] text-zinc-400 hover:text-white transition-colors leading-tight cursor-pointer"
+            className="text-[18px] text-fg-muted hover:text-fg transition-colors leading-tight cursor-pointer"
           >
             {t('sizing.recommended', 'Recomendada')}:{' '}
-            <span className="font-bold text-cyan-400">{recomendada}</span>
+            <span className="font-bold text-accent-cyan">{recomendada}</span>
             <br />
             <span className="text-[18px] underline opacity-70">
               {t('sizing.tapToUse', 'Toca para usarla')}
@@ -183,22 +183,22 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
       </div>
 
       {isOperatorMode() && (estimatedChest || estimatedWaist || estimatedHeight) && (
-        <div className="mt-2 pt-2 border-t border-zinc-700/50 w-full text-center">
-          <span className="text-xs text-zinc-500 uppercase tracking-wide block">
+        <div className="mt-2 pt-2 border-t border-line/50 w-full text-center">
+          <span className="text-xs text-fg-muted/60 uppercase tracking-wide block">
             AR INFO
           </span>
           {estimatedChest && (
-            <span className="text-xs text-zinc-400 font-mono block">
+            <span className="text-xs text-fg-muted font-mono block">
               Pecho aprox: ~{estimatedChest} cm
             </span>
           )}
           {estimatedWaist && (
-            <span className="text-xs text-zinc-400 font-mono block">
+            <span className="text-xs text-fg-muted font-mono block">
               Cintura aprox: ~{estimatedWaist} cm
             </span>
           )}
           {estimatedHeight && (
-            <span className="text-xs text-zinc-400 font-mono block">
+            <span className="text-xs text-fg-muted font-mono block">
               Altura aprox: ~{estimatedHeight} cm
             </span>
           )}

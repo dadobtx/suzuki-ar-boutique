@@ -6,21 +6,22 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        bg: '#07080F',
-        surface: '#11141C',
-        'surface-2': '#1A1F2E',
-        fg: '#F5F7FA',
-        'fg-muted': '#9CA3AF',
-        'brand-red': '#E60012',
-        'accent-cyan': '#00E5FF',
+        bg: 'rgb(var(--color-bg) / <alpha-value>)',
+        surface: 'rgb(var(--color-surface) / <alpha-value>)',
+        'surface-2': 'rgb(var(--color-surface-2) / <alpha-value>)',
+        line: 'rgb(var(--color-line) / <alpha-value>)',
+        fg: 'rgb(var(--color-fg) / <alpha-value>)',
+        'fg-muted': 'rgb(var(--color-fg-muted) / <alpha-value>)',
+        'brand-red': 'rgb(var(--color-brand-red) / <alpha-value>)',
+        'accent-cyan': 'rgb(var(--color-accent-cyan) / <alpha-value>)',
         'accent-yellow': '#FFD400',
-        success: '#00FF87',
+        success: 'rgb(var(--color-success) / <alpha-value>)',
         danger: '#FF3B30',
       },
       fontFamily: {
         display: ['"Bebas Neue"', 'Impact', 'sans-serif'],
-        sans: ['Inter', 'system-ui', 'sans-serif'],
-        mono: ['"JetBrains Mono"', 'Consolas', 'monospace'],
+        sans: ['"Inter Variable"', 'Inter', 'system-ui', 'sans-serif'],
+        mono: ['"JetBrains Mono Variable"', '"JetBrains Mono"', 'Consolas', 'monospace'],
       },
       fontSize: {
         'hud-xs': ['0.625rem', { lineHeight: '1', letterSpacing: '0.1em' }],

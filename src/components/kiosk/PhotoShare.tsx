@@ -112,7 +112,7 @@ export function PhotoShare() {
         <div
           className={`relative flex-1 aspect-square ${
             showThumbnails ? 'max-h-[70%]' : 'max-h-[85%]'
-          } border border-accent-cyan/50 p-2 clip-hud`}
+          } border border-line p-2 clip-hud`}
         >
           <img
             src={displayImage}
@@ -159,8 +159,8 @@ export function PhotoShare() {
               onClick={() => handleSelectStyle('original')}
               className={`relative w-16 h-16 border transition-all duration-200 clip-hud overflow-hidden bg-surface flex flex-col items-center justify-center shrink-0 ${
                 selectedStyleId === 'original'
-                  ? 'border-accent-cyan shadow-[0_0_10px_rgba(0,255,244,0.4)] scale-105'
-                  : 'border-white/20 hover:border-white/50 hover:scale-102'
+                  ? 'border-accent-cyan shadow-lg scale-105'
+                  : 'border-line hover:border-fg-muted hover:scale-102'
               }`}
             >
               <img
@@ -187,11 +187,11 @@ export function PhotoShare() {
                   disabled={isPending}
                   onClick={() => handleSelectStyle(catItem.id)}
                   className={`relative w-16 h-16 border transition-all duration-200 clip-hud overflow-hidden bg-surface flex flex-col items-center justify-center shrink-0 ${
-                    isPending ? 'opacity-70 cursor-wait border-white/10' : ''
+                    isPending ? 'opacity-70 cursor-wait border-line' : ''
                   } ${
                     isSelected
-                      ? 'border-accent-cyan shadow-[0_0_10px_rgba(0,255,244,0.4)] scale-105'
-                      : 'border-white/20 hover:border-white/50 hover:scale-102'
+                      ? 'border-accent-cyan shadow-lg scale-105'
+                      : 'border-line hover:border-fg-muted hover:scale-102'
                   }`}
                 >
                   {isPending ? (
@@ -216,7 +216,7 @@ export function PhotoShare() {
       </div>
 
       {/* Bottom Section: Controls */}
-      <div className="w-full flex flex-col items-center justify-center p-8 gap-6 bg-surface border-t border-white/5 shrink-0">
+      <div className="w-full flex flex-col items-center justify-center p-8 gap-6 bg-surface border-t border-line shrink-0">
         <div className="text-center">
           <h2 className="font-display text-4xl text-white mb-2 tracking-wide">
             {t('photo.share.title', 'TU LOOK ESTÁ LISTO')}
@@ -236,7 +236,7 @@ export function PhotoShare() {
 
         <div className="flex items-center gap-12">
           {/* QR Code */}
-          <div className="bg-white p-4 rounded-lg shadow-[0_0_20px_rgba(230,0,18,0.3)] w-[192px] h-[192px] flex items-center justify-center">
+          <div className="bg-white p-4 rounded-lg shadow-2xl w-[192px] h-[192px] flex items-center justify-center">
             {qrUrl ? (
               <QRCodeSVG
                 value={qrUrl}
@@ -261,7 +261,7 @@ export function PhotoShare() {
           </div>
 
           <div className="flex flex-col gap-4">
-            <div className="bg-surface-2 p-4 border border-white/10 text-center">
+            <div className="bg-surface-2 p-4 border border-line text-center">
               <div className="font-mono text-4xl text-brand-red tracking-widest font-bold">
                 {wishlistCode}
               </div>
@@ -287,7 +287,7 @@ export function PhotoShare() {
                     cancelStylizeRequests();
                     transition('TRYON');
                   }}
-                  className="flex-1 py-3 bg-surface-3 text-white font-display text-lg tracking-wide border border-white/10 hover:bg-surface-4 active:scale-95 transition-all"
+                  className="flex-1 py-3 bg-surface-2 text-fg font-display text-lg tracking-wide border border-line hover:bg-surface-2/80 hover:text-white active:scale-95 transition-all"
                 >
                   {t('photo.share.again', 'OTRA PRENDA')}
                 </button>
@@ -296,7 +296,7 @@ export function PhotoShare() {
                     cancelStylizeRequests();
                     transition('ATTRACT');
                   }}
-                  className="flex-1 py-3 bg-surface-3 text-white font-display text-lg tracking-wide border border-white/10 hover:bg-surface-4 active:scale-95 transition-all"
+                  className="flex-1 py-3 bg-surface-2 text-fg font-display text-lg tracking-wide border border-line hover:bg-surface-2/80 hover:text-white active:scale-95 transition-all"
                 >
                   {t('photo.share.finish', 'FINALIZAR')}
                 </button>

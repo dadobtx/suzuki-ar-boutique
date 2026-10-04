@@ -19,10 +19,10 @@ export function SizingOnboardingModal() {
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-zinc-950 p-4">
-      <div className="bg-zinc-900 border border-zinc-800 rounded-3xl p-8 max-w-2xl w-full text-white shadow-2xl relative overflow-hidden">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-bg/95 p-4">
+      <div className="bg-surface border border-line rounded-3xl p-8 max-w-2xl w-full text-fg shadow-2xl relative overflow-hidden">
         {/* Decoración superior */}
-        <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
+        <div className="absolute top-0 left-0 right-0 h-1 bg-brand-red"></div>
 
         <div className="space-y-8 mt-4">
           <div>
@@ -37,8 +37,8 @@ export function SizingOnboardingModal() {
                   className={`flex-1 min-w-[80px] py-4 rounded-xl border-2 font-bold transition-all text-lg
                     ${
                       talla === s
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-[0_0_15px_rgba(37,99,235,0.5)] scale-105'
-                        : 'border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:bg-zinc-800'
+                        ? 'bg-brand-red border-brand-red text-white scale-105'
+                        : 'border-line hover:border-fg-muted text-fg-muted hover:text-white hover:bg-surface-2'
                     }`}
                 >
                   {s}
@@ -63,8 +63,8 @@ export function SizingOnboardingModal() {
                   className={`py-4 rounded-xl border-2 font-bold transition-all text-lg
                     ${
                       fit === f.id
-                        ? 'bg-cyan-600 border-cyan-500 text-white shadow-[0_0_15px_rgba(8,145,178,0.5)] scale-105'
-                        : 'border-zinc-700 hover:border-zinc-500 text-zinc-300 hover:bg-zinc-800'
+                        ? 'bg-surface-2 border-fg text-white scale-105'
+                        : 'border-line hover:border-fg-muted text-fg-muted hover:text-white hover:bg-surface-2'
                     }`}
                 >
                   {f.label}

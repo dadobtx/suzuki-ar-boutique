@@ -8,15 +8,16 @@
 
 @layer base {
   :root {
-    --color-bg: 7 8 15;
-    --color-surface: 17 20 28;
-    --color-surface-2: 26 31 46;
-    --color-fg: 245 247 250;
-    --color-fg-muted: 156 163 175;
-    --color-brand-red: 230 0 18;
-    --color-accent-cyan: 0 229 255;
+    --color-bg: 14 15 18; /* #0E0F12 Asfalto profundo */
+    --color-surface: 23 25 30; /* #17191E Acero oscuro */
+    --color-surface-2: 32 35 41; /* #202329 Grafito */
+    --color-line: 42 45 51; /* #2A2D33 Línea sutil */
+    --color-fg: 244 244 242; /* #F4F4F2 Blanco cálido */
+    --color-fg-muted: 154 157 163; /* #9A9DA3 Gris técnico */
+    --color-brand-red: 230 0 18; /* #E60012 Rojo Suzuki */
+    --color-accent-cyan: 201 206 214; /* #C9CED6 Plata (en lugar de cian neón) */
     --color-accent-yellow: 255 212 0;
-    --color-success: 0 255 135;
+    --color-success: 61 214 140; /* #3DD68C */
     --color-danger: 255 59 48;
   }
 
@@ -27,18 +28,23 @@
   }
 
   html {
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: 'Inter Variable', 'Inter', system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
 
   body {
     margin: 0;
-    background-color: #07080f;
-    color: #f5f7fa;
+    background-color: rgb(var(--color-bg));
+    color: rgb(var(--color-fg));
     overflow-x: hidden;
     min-height: 100vh;
     min-height: 100dvh;
+  }
+
+  ::selection {
+    background-color: rgb(var(--color-brand-red) / 0.3);
+    color: rgb(var(--color-fg));
   }
 
   body.kiosk-mode {
@@ -51,7 +57,7 @@
   }
 
   :focus-visible {
-    outline: 2px solid #00e5ff;
+    outline: 2px solid rgb(var(--color-fg));
     outline-offset: 2px;
   }
 
@@ -61,16 +67,16 @@
   }
 
   ::-webkit-scrollbar-track {
-    background: #11141c;
+    background: rgb(var(--color-surface));
   }
 
   ::-webkit-scrollbar-thumb {
-    background: #1a1f2e;
+    background: rgb(var(--color-surface-2));
     border-radius: 3px;
   }
 
   ::-webkit-scrollbar-thumb:hover {
-    background: #9ca3af;
+    background: rgb(var(--color-fg-muted));
   }
 }
 
@@ -89,15 +95,11 @@
   }
 
   .glow-cyan {
-    box-shadow:
-      0 0 12px rgba(0, 229, 255, 0.3),
-      0 0 24px rgba(0, 229, 255, 0.1);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
   }
 
   .glow-red {
-    box-shadow:
-      0 0 12px rgba(230, 0, 18, 0.3),
-      0 0 24px rgba(230, 0, 18, 0.1);
+    box-shadow: 0 8px 24px rgb(0 0 0 / 0.35);
   }
 
   @keyframes ripple {
