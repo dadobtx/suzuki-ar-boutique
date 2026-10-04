@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'fs';
 import path from 'path';
-import { isDebugMode } from '@/lib/debug-mode';
+import { isDebugMode, isOperatorMode } from '@/lib/debug-mode';
 import {
   initDebugLogger,
   getDebugLogs,
@@ -66,6 +66,38 @@ describe('Diagnostic Overlay & Debug Mode', () => {
 
       setMockLocation('?debug=true', '');
       expect(isDebugMode()).toBe(false);
+    });
+  });
+
+  describe('isOperatorMode()', () => {
+    it('returns false when neither dev=1 nor debug=1 are present', () => {
+      setMockLocation('', '');
+      expect(isOperatorMode()).toBe(false);
+
+      setMockLocation('?pro=1', '#/kiosk');
+      expect(isOperatorMode()).toBe(false);
+    });
+
+    it('returns true when debug=1 or dev=1 is in search', () => {
+      setMockLocation('?debug=1', '');
+      expect(isOperatorMode()).toBe(true);
+
+      setMockLocation('?dev=1', '');
+      expect(isOperatorMode()).toBe(true);
+
+      setMockLocation('?foo=bar&dev=1', '');
+      expect(isOperatorMode()).toBe(true);
+    });
+
+    it('returns true when debug=1 or dev=1 is in hash', () => {
+      setMockLocation('', '#/?debug=1');
+      expect(isOperatorMode()).toBe(true);
+
+      setMockLocation('', '#/?dev=1');
+      expect(isOperatorMode()).toBe(true);
+
+      setMockLocation('', '#/catalog?item=1&dev=1');
+      expect(isOperatorMode()).toBe(true);
     });
   });
 

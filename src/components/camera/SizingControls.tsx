@@ -4,6 +4,7 @@ import { useGarmentStore } from '@/store/garment';
 import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 import { useEffect, useState } from 'react';
 import type { UsePoseResult } from '@/hooks/usePose';
+import { isOperatorMode } from '@/lib/debug-mode';
 const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
 
 export function SizingControls({ pose }: { pose?: UsePoseResult }) {
@@ -132,64 +133,67 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
   };
 
   return (
-    <div className="absolute top-20 right-4 bg-black/60 backdrop-blur-md border border-zinc-700 rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-white w-[140px] shadow-2xl">
-      <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest text-center">
+    <div className="absolute top-20 right-4 bg-black/60 backdrop-blur-md border border-zinc-700 rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-white w-[220px] shadow-2xl">
+      <span className="text-lg font-bold text-zinc-400 uppercase tracking-widest text-center">
         Tu Talla
       </span>
       <div className="flex items-center justify-between w-full">
         <button
+          type="button"
           onClick={handlePrev}
           disabled={currentIndex <= 0}
-          className="p-2 rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-center"
         >
-          <Minus size={16} />
+          <Minus size={28} />
         </button>
-        <span className="font-display text-3xl font-black text-cyan-400 drop-shadow-md">
+        <span className="font-display text-[64px] font-black text-cyan-400 drop-shadow-md leading-none select-none">
           {elegida}
         </span>
         <button
+          type="button"
           onClick={handleNext}
           disabled={currentIndex === -1 || currentIndex >= garment.sizes.length - 1}
-          className="p-2 rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 transition-colors cursor-pointer"
+          className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-zinc-800 hover:bg-zinc-700 disabled:opacity-30 disabled:hover:bg-zinc-800 transition-colors cursor-pointer flex items-center justify-center"
         >
-          <Plus size={16} />
+          <Plus size={28} />
         </button>
       </div>
 
       <div className="text-center w-full mt-1">
         {elegida === recomendada ? (
-          <span className="text-[11px] font-bold text-green-400 leading-tight block">
+          <span className="text-[18px] font-bold text-green-400 leading-tight block">
             ✓ Coincide con la recomendada
           </span>
         ) : (
           <button
+            type="button"
             onClick={() => setTallaElegida(garment.sku, recomendada)}
-            className="text-[11px] text-zinc-400 hover:text-white transition-colors leading-tight cursor-pointer"
+            className="text-[18px] text-zinc-400 hover:text-white transition-colors leading-tight cursor-pointer"
           >
             Recomendada: <span className="font-bold text-cyan-400">{recomendada}</span>
             <br />
-            <span className="text-[9px] underline opacity-70">· tocar para usarla</span>
+            <span className="text-[18px] underline opacity-70">· tocar para usarla</span>
           </button>
         )}
       </div>
 
-      {(estimatedChest || estimatedWaist || estimatedHeight) && (
+      {isOperatorMode() && (estimatedChest || estimatedWaist || estimatedHeight) && (
         <div className="mt-2 pt-2 border-t border-zinc-700/50 w-full text-center">
-          <span className="text-[9px] text-zinc-500 uppercase tracking-wide block">
+          <span className="text-xs text-zinc-500 uppercase tracking-wide block">
             AR INFO
           </span>
           {estimatedChest && (
-            <span className="text-[10px] text-zinc-400 font-mono block">
+            <span className="text-xs text-zinc-400 font-mono block">
               Pecho aprox: ~{estimatedChest} cm
             </span>
           )}
           {estimatedWaist && (
-            <span className="text-[10px] text-zinc-400 font-mono block">
+            <span className="text-xs text-zinc-400 font-mono block">
               Cintura aprox: ~{estimatedWaist} cm
             </span>
           )}
           {estimatedHeight && (
-            <span className="text-[10px] text-zinc-400 font-mono block">
+            <span className="text-xs text-zinc-400 font-mono block">
               Altura aprox: ~{estimatedHeight} cm
             </span>
           )}

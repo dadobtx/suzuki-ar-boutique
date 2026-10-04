@@ -13,7 +13,7 @@ import { PoseDebug } from '@/components/ar/PoseDebug';
 import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
-import { Camera as CameraIcon, RefreshCw, Sparkles, X as XIcon } from 'lucide-react';
+import { Camera as CameraIcon, Sparkles, X as XIcon } from 'lucide-react';
 import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
 import { LiveTryOnManager } from '@/lib/liveTryon';
 import { StagePanel } from './StagePanel';
@@ -21,6 +21,7 @@ import { SizingControls } from './SizingControls';
 import { VariantControls } from './VariantControls';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
+import { isOperatorMode } from '@/lib/debug-mode';
 
 const PUBLIC_ASSETS_BASE =
   import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
@@ -84,10 +85,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     }
   }, [catalog.length, loadCatalog]);
 
-  // Dev drawer visibility
+  // Dev drawer visibility (operator mode only)
   const showDevDrawer = useMemo(() => {
-    if (typeof window === 'undefined') return false;
-    return new URLSearchParams(window.location.search).get('dev') === '1';
+    return isOperatorMode();
   }, []);
 
   // Active garment SKU
@@ -349,16 +349,16 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             />
             <button
               onClick={handleStopLiveTryon}
-              className="absolute bottom-8 right-8 px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-full font-bold shadow-lg flex items-center gap-2"
+              className="absolute bottom-8 right-8 px-8 py-4 min-h-[64px] bg-red-600 hover:bg-red-700 text-white rounded-full font-bold shadow-lg flex items-center gap-2 text-xl"
             >
-              <XIcon size={20} /> Salir
+              <XIcon size={24} /> Salir
             </button>
           </div>
         )}
 
         {/* Toast Notification (z-index 60) */}
         {liveToast && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-6 py-3 rounded-xl font-bold shadow-lg z-50 transition-opacity">
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-8 py-4 rounded-xl font-bold shadow-lg z-50 transition-opacity text-xl">
             {liveToast}
           </div>
         )}
@@ -385,8 +385,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           <HudCorners variant="cyan" />
         </div>
 
-        {/* Presence HUD (z-index 30) */}
-        {camera.status === 'granted' && (
+        {/* Presence HUD (z-index 30, only in operator mode) */}
+        {isOperatorMode() && camera.status === 'granted' && (
           <div
             className="absolute top-4 right-4 pointer-events-none"
             style={{ zIndex: 30 }}
@@ -404,8 +404,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           <KioskGuide presence={presence} layout={layout} />
         )}
 
-        {/* Resolution badge (dev info, z-index 30) */}
-        {camera.status === 'granted' && camera.settings && (
+        {/* Resolution badge (dev info, z-index 30, only in operator mode) */}
+        {isOperatorMode() && camera.status === 'granted' && camera.settings && (
           <div
             className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded"
             style={{ zIndex: 30 }}
@@ -416,6 +416,20 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           </div>
         )}
 
+        {/* Degraded camera indicator: 12px amber dot if height < expected (always visible if degraded, without text) */}
+        {camera.status === 'granted' &&
+          camera.settings &&
+          camera.settings.height !== undefined &&
+          camera.settings.height <
+            Number(import.meta.env.VITE_EXPECTED_CAMERA_HEIGHT || 0) && (
+            <div
+              className="absolute bottom-3 left-3 w-3 h-3 rounded-full bg-amber-500 pointer-events-none"
+              style={{ zIndex: 30 }}
+              role="status"
+              aria-label="Cámara en resolución reducida"
+            />
+          )}
+
         {/* Dev Drawer — only with ?dev=1 (z-index 40) */}
         {showDevDrawer && (
           <div
@@ -424,7 +438,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           >
             <button
               onClick={handlePrev}
-              className="font-mono text-xs text-accent-cyan hover:text-white transition-colors px-2 py-1"
+              className="font-mono text-xs text-accent-cyan hover:text-white transition-colors px-3 py-2 min-h-[64px] min-w-[64px] flex items-center justify-center"
             >
               ◀ Prev
             </button>
@@ -433,19 +447,19 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             </span>
             <button
               onClick={handleRandom}
-              className="font-mono text-xs text-accent-yellow hover:text-white transition-colors px-2 py-1"
+              className="font-mono text-xs text-accent-yellow hover:text-white transition-colors px-3 py-2 min-h-[64px] min-w-[64px] flex items-center justify-center"
             >
               Random
             </button>
             <button
               onClick={handleNext}
-              className="font-mono text-xs text-accent-cyan hover:text-white transition-colors px-2 py-1"
+              className="font-mono text-xs text-accent-cyan hover:text-white transition-colors px-3 py-2 min-h-[64px] min-w-[64px] flex items-center justify-center"
             >
               Next ▶
             </button>
             <button
               onClick={clearGarment}
-              className="font-mono text-xs text-brand-red hover:text-white transition-colors px-2 py-1"
+              className="font-mono text-xs text-brand-red hover:text-white transition-colors px-3 py-2 min-h-[64px] min-w-[64px] flex items-center justify-center"
             >
               ✗ Clear
             </button>
@@ -458,10 +472,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             {!isLiveActive && (
               <button
                 onClick={() => transition('PHOTO_COUNTDOWN')}
-                className="w-[120px] h-[120px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
+                className="w-[144px] h-[144px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(230,0,18,0.6)] hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
               >
-                <CameraIcon size={48} />
-                <span className="font-display tracking-widest text-sm mt-1 uppercase">
+                <CameraIcon size={52} />
+                <span className="font-display tracking-widest text-lg mt-1 uppercase">
                   {t('photo.shoot', 'DISPARAR')}
                 </span>
               </button>
@@ -471,7 +485,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               <button
                 onClick={handleStartLiveTryon}
                 disabled={isLiveLoading || isLiveActive}
-                className={`w-[120px] h-[120px] rounded-full bg-purple-600 flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(147,51,234,0.6)] transition-transform border-4 border-white/20 ${
+                className={`w-[144px] h-[144px] rounded-full bg-purple-600 flex flex-col items-center justify-center text-white shadow-[0_0_30px_rgba(147,51,234,0.6)] transition-transform border-4 border-white/20 ${
                   isLiveLoading
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
@@ -480,11 +494,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                 }`}
               >
                 {isLiveActive ? (
-                  <span className="text-5xl font-display">{liveCountdown}</span>
+                  <span className="text-6xl font-display">{liveCountdown}</span>
                 ) : (
                   <>
-                    <Sparkles size={40} className={isLiveLoading ? 'animate-spin' : ''} />
-                    <span className="font-display tracking-widest text-xs mt-2 uppercase text-center leading-tight">
+                    <Sparkles size={44} className={isLiveLoading ? 'animate-spin' : ''} />
+                    <span className="font-display tracking-widest text-lg mt-1 uppercase text-center leading-tight">
                       {isLiveLoading ? (
                         'CARGANDO...'
                       ) : (
@@ -520,17 +534,6 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
         {/* Ocultar la cámara durante ATTRACT (z-index 55) */}
         {kioskState === 'ATTRACT' && <div className="absolute inset-0 bg-bg z-[55]" />}
-
-        {/* Manual Reset Button (z-index 40) */}
-        {kioskState === 'TRYON' && hasProfile && (
-          <button
-            onClick={() => resetProfile()}
-            className="absolute top-4 left-4 flex items-center gap-2 px-4 py-2 bg-black/50 backdrop-blur rounded-full text-white hover:bg-black/80 transition-colors z-40 border border-zinc-700"
-          >
-            <RefreshCw size={16} />
-            <span className="font-bold text-sm">Nuevo usuario</span>
-          </button>
-        )}
       </div>
 
       {/* ── Panel area ── */}
