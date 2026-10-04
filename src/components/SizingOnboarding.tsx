@@ -1,7 +1,9 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSizingStore } from '../store/sizing';
 
 export function SizingOnboardingModal() {
+  const { t } = useTranslation();
   const { hasProfile, setProfile } = useSizingStore();
   const [talla, setTalla] = useState<string | null>(null);
   const [fit, setFit] = useState<'ajustado' | 'regular' | 'holgado'>('regular');
@@ -22,13 +24,11 @@ export function SizingOnboardingModal() {
         {/* Decoración superior */}
         <div className="absolute top-0 left-0 right-0 h-2 bg-gradient-to-r from-blue-500 to-cyan-400"></div>
 
-        <h2 className="text-4xl font-black mb-8 text-center mt-4">
-          Personaliza tu Prueba
-        </h2>
-
-        <div className="space-y-8">
+        <div className="space-y-8 mt-4">
           <div>
-            <h3 className="text-xl font-bold mb-4">¿Qué talla usas normalmente?</h3>
+            <h2 className="text-3xl font-black mb-4">
+              {t('onboarding.questionSize', '¿QUÉ TALLA USAS?')}
+            </h2>
             <div className="flex flex-wrap gap-3">
               {['XS', 'S', 'M', 'L', 'XL', 'No sé'].map((s) => (
                 <button
@@ -48,14 +48,14 @@ export function SizingOnboardingModal() {
           </div>
 
           <div>
-            <h3 className="text-xl font-bold mb-4">
-              ¿Cómo prefieres que te quede la ropa?
+            <h3 className="text-2xl font-bold mb-4">
+              {t('onboarding.questionFit', '¿CÓMO TE GUSTA QUE TE QUEDE?')}
             </h3>
             <div className="grid grid-cols-3 gap-3">
               {[
-                { id: 'ajustado', label: 'Ajustado' },
-                { id: 'regular', label: 'Regular' },
-                { id: 'holgado', label: 'Holgado' },
+                { id: 'ajustado', label: t('sizing.fit.tight', 'Ajustado') },
+                { id: 'regular', label: t('sizing.fit.regular', 'Regular') },
+                { id: 'holgado', label: t('sizing.fit.loose', 'Holgado') },
               ].map((f) => (
                 <button
                   key={f.id}
@@ -80,12 +80,14 @@ export function SizingOnboardingModal() {
             disabled={!talla || submitting}
             className="w-full py-5 rounded-2xl bg-white text-black text-2xl font-black uppercase tracking-widest hover:bg-zinc-200 transition-colors disabled:opacity-50 disabled:bg-zinc-700 disabled:text-zinc-500"
           >
-            {submitting ? 'Iniciando...' : 'Comenzar'}
+            {submitting
+              ? t('onboarding.submitting', 'EMPEZANDO…')
+              : t('onboarding.start', 'EMPEZAR')}
           </button>
         </div>
 
         <p className="text-center text-zinc-500 text-sm mt-6">
-          Tus datos son 100% anónimos.
+          {t('onboarding.anonymousNote', 'Es anónimo: no te pedimos nombre ni contacto.')}
         </p>
       </div>
     </div>

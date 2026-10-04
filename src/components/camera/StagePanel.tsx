@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { CatalogPanel } from '@/components/catalog';
 import { SizingOnboardingModal } from '@/components/SizingOnboarding';
 import { useGarmentStore } from '@/store/garment';
@@ -13,6 +14,7 @@ interface StagePanelProps {
 }
 
 export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps) {
+  const { t } = useTranslation();
   const catalogRef = useRef<HTMLDivElement>(null);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
   const catalog = useGarmentStore((s) => s.catalog);
@@ -80,7 +82,7 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
           className="w-full h-full bg-surface flex flex-col items-center justify-center p-6 text-center"
         >
           <span className="font-display text-4xl text-white tracking-widest uppercase">
-            MANTENTE EN EL MARCO
+            {t('kiosk.calibration.instruction', 'MANTENTE EN EL MARCO')}
           </span>
         </div>
       )}

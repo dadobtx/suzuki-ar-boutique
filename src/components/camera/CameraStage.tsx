@@ -228,8 +228,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
       if (res.status === 429) {
         const msg =
           data.limit === 'user'
-            ? 'Ya usaste tus 3 pruebas en vivo'
-            : 'Prueba en vivo no disponible por hoy';
+            ? t('live.userLimit', 'Ya usaste tus 3 pruebas en vivo')
+            : t('live.dayLimit', 'Prueba en vivo no disponible por hoy');
         setLiveToast(msg);
         setTimeout(() => setLiveToast(null), 3000);
         setIsLiveLoading(false);
@@ -296,10 +296,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     } catch (err) {
       console.error(err);
       setIsLiveLoading(false);
-      setLiveToast('Error al iniciar prueba en vivo');
+      setLiveToast(
+        t('live.error', 'No pudimos iniciar la prueba en vivo. Intenta otra vez.'),
+      );
       setTimeout(() => setLiveToast(null), 3000);
     }
-  }, [activeGarment, activeVariantId, camera, sessionId, handleStopLiveTryon]);
+  }, [activeGarment, activeVariantId, camera, sessionId, handleStopLiveTryon, t]);
 
   return (
     <div
@@ -401,7 +403,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
         {/* Context-aware user guidance banner (z-index 35) */}
         {camera.status === 'granted' && (
-          <KioskGuide presence={presence} layout={layout} />
+          <KioskGuide
+            presence={presence}
+            layout={layout}
+            showLiveButton={showLiveButton}
+          />
         )}
 
         {/* Resolution badge (dev info, z-index 30, only in operator mode) */}
@@ -500,12 +506,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                     <Sparkles size={44} className={isLiveLoading ? 'animate-spin' : ''} />
                     <span className="font-display tracking-widest text-lg mt-1 uppercase text-center leading-tight">
                       {isLiveLoading ? (
-                        'CARGANDO...'
+                        t('live.connecting', 'CONECTANDO…')
                       ) : (
                         <>
-                          VERME
+                          {t('live.seeLiveUpper', 'VERME')}
                           <br />
-                          EN VIVO
+                          {t('live.seeLiveLower', 'EN VIVO')}
                         </>
                       )}
                     </span>

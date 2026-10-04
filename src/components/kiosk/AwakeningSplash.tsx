@@ -18,7 +18,7 @@ export function AwakeningSplash() {
       <div className="absolute inset-4 border-2 border-accent-cyan/30 clip-hud transition-all duration-1000 animate-[pulse_1s_ease-in-out_infinite]" />
 
       <h1 className="font-display text-8xl tracking-widest text-white animate-[pulse_1s_ease-in-out_infinite] glow-cyan">
-        {t('kiosk.awakening.greeting', 'TE VEO')}
+        {t('kiosk.awakening.greeting', '¡VAMOS!')}
       </h1>
     </div>
   );

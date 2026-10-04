@@ -9,6 +9,7 @@ import type { PresenceState } from '@/hooks/usePresence';
 interface KioskGuideProps {
   presence: PresenceState;
   layout: 'landscape' | 'portrait';
+  showLiveButton?: boolean;
 }
 
 /**
@@ -19,7 +20,11 @@ interface KioskGuideProps {
  * button) that aren't obvious to a stranger walking up. This banner removes
  * that guesswork by always showing exactly one next action.
  */
-export function KioskGuide({ presence, layout }: KioskGuideProps) {
+export function KioskGuide({
+  presence,
+  layout,
+  showLiveButton = false,
+}: KioskGuideProps) {
   const { t } = useTranslation();
   const kioskState = useKioskStore((s) => s.state);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
@@ -35,19 +40,21 @@ export function KioskGuide({ presence, layout }: KioskGuideProps) {
   let pulse = false;
 
   if (presence === 'absent' || presence === 'arriving') {
-    message = 'PARATE FRENTE A LA CÁMARA';
+    message = t('kiosk.guide.standFront', 'PÁRATE FRENTE A LA CÁMARA');
     icon = Users;
     pulse = true;
   } else if (presence === 'present' && activeGarmentId && trackingLostSustained) {
-    message = t('kiosk.guide.reposition', 'ACOMODATE FRENTE A LA CÁMARA');
+    message = t('kiosk.guide.reposition', 'UBÍCATE FRENTE A LA CÁMARA');
     icon = Users;
     pulse = true;
   } else if (presence === 'present' && !activeGarmentId) {
-    message = 'ELEGÍ UNA PRENDA';
+    message = t('kiosk.guide.chooseGarment', 'ELIGE UNA PRENDA');
     showArrow = layout === 'portrait' ? 'down' : 'right';
     pulse = true;
   } else if (presence === 'present' && activeGarmentId) {
-    message = 'ELIGE TOMAR UNA FOTO O PRUEBA EN VIVO';
+    message = showLiveButton
+      ? t('kiosk.guide.activeLive', 'TÓMATE UNA FOTO O PRUÉBALA EN VIVO')
+      : t('kiosk.guide.activeFoto', 'TÓMATE UNA FOTO');
     icon = Camera;
     showArrow = 'down';
   }

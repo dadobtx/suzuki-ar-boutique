@@ -27,7 +27,7 @@
     "requesting": "Activando cámara…",
     "initializing": "Preparando cámara…",
     "denied": "Acceso a cámara denegado. Necesitamos tu cámara para el probador virtual.",
-    "grantHint": "Abrí la configuración del navegador y habilitá la cámara para este sitio.",
+    "grantHint": "Abre la configuración del navegador y habilita la cámara para este sitio.",
     "unsupported": "Tu navegador no soporta acceso a cámara",
     "error": "Error al acceder a la cámara",
     "retry": "Reintentar",
@@ -62,20 +62,42 @@
   },
   "tryon": {
     "ready": "Listo para rodar",
-    "tryThis": "Probá esta",
+    "tryThis": "Prueba esta",
     "takePhoto": "Disparar foto",
     "turboMode": "Modo turbo",
     "countdown": "{{count}}",
     "flash": "¡Captura!"
   },
   "kiosk": {
-    "attract": "Acércate para probarte prendas Suzuki",
-    "awakening": "¡Te vemos!",
-    "calibrating": "Calibrando…",
-    "cooldown": "¿Sigues ahí?",
-    "stayButton": "Quedate",
-    "resetIn": "Reset en {{seconds}}s",
-    "restarting": "REINICIANDO…"
+    "attract": {
+      "cta": "ACÉRCATE PARA EMPEZAR"
+    },
+    "awakening": {
+      "greeting": "¡VAMOS!"
+    },
+    "calibration": {
+      "instruction": "MANTENTE EN EL MARCO"
+    },
+    "cooldown": {
+      "title": "¿SIGUES AHÍ?",
+      "stay": "SIGO AQUÍ"
+    },
+    "recovery": {
+      "message": "REINICIANDO…"
+    },
+    "guide": {
+      "standFront": "PÁRATE FRENTE A LA CÁMARA",
+      "reposition": "UBÍCATE FRENTE A LA CÁMARA",
+      "chooseGarment": "ELIGE UNA PRENDA",
+      "activeLive": "TÓMATE UNA FOTO O PRUÉBALA EN VIVO",
+      "activeFoto": "TÓMATE UNA FOTO",
+      "photoOrLive": "TÓMATE UNA FOTO O PRUÉBALA EN VIVO",
+      "photoOnly": "TÓMATE UNA FOTO"
+    },
+    "terminate": {
+      "idle": "TERMINAR",
+      "confirm": "TOCA OTRA VEZ PARA TERMINAR"
+    }
   },
   "share": {
     "title": "Tu look Suzuki",
@@ -122,27 +144,6 @@
     "garmentOverlay": "Superposición de prenda",
     "catalogGrid": "Grilla de catálogo de prendas"
   },
-  "kiosk": {
-    "attract": {
-      "cta": "ACÉRCATE PARA EMPEZAR"
-    },
-    "awakening": {
-      "greeting": "TE VEO"
-    },
-    "calibration": {
-      "instruction": "MANTENTE EN EL MARCO"
-    },
-    "cooldown": {
-      "title": "¿SIGUES AHÍ?",
-      "stay": "QUEDATE"
-    },
-    "recovery": {
-      "message": "REINICIANDO..."
-    },
-    "guide": {
-      "reposition": "ACOMODATE FRENTE A LA CÁMARA"
-    }
-  },
   "photo": {
     "shoot": "Disparar foto",
     "countdown": {
@@ -150,14 +151,15 @@
     },
     "share": {
       "title": "Tu look está listo",
-      "subtitle": "Escaneá el QR para llevártela al móvil",
-      "subtitleFallback": "Vista previa demo · escaneá QR no disponible",
-      "wishlistHint": "Código wishlist · dictalo al asesor",
+      "subtitle": "Escanea el código QR para llevarte la foto a tu celular",
+      "subtitleFallback": "Vista previa demo · escaneo de QR no disponible",
+      "wishlistHint": "Código de favoritos · díctaselo al asesor",
       "again": "Otra prenda",
       "download": "Descargar PNG",
       "noQrFallback": "QR no disponible en modo demo",
-      "useDownload": "Usá el botón Descargar para guardar la foto",
-      "finish": "Finalizar"
+      "useDownload": "Usa el botón Descargar para guardar la foto",
+      "finish": "Finalizar",
+      "fallback_badge": "VISTA PREVIA DEMO"
     }
   },
   "ai": {
@@ -166,7 +168,45 @@
       "2": "AJUSTANDO COSTURAS DIGITALES...",
       "3": "APLICANDO ILUMINACIÓN...",
       "4": "CASI LISTO..."
+    },
+    "error": {
+      "networkTitle": "SE NOS CAYÓ LA CONEXIÓN",
+      "networkHint": "No fue tu foto. Inténtalo otra vez en unos segundos.",
+      "poseTitle": "NO VEMOS BIEN TU POSE",
+      "poseHint": "Párate de frente, con los brazos abajo y el torso completo dentro del marco.",
+      "contentTitle": "NO PUDIMOS PROCESAR LA FOTO",
+      "contentHint": "Busca buena luz, deja el torso visible y que no haya nada delante.",
+      "retryButton": "INTENTAR DE NUEVO",
+      "retakeButton": "TOMAR LA FOTO DE NUEVO",
+      "finishButton": "TERMINAR",
+      "autoCloseHint": "ESTA PANTALLA SE CIERRA AUTOMÁTICAMENTE EN 30 SEGUNDOS"
     }
+  },
+  "sizing": {
+    "yourSize": "Tu Talla",
+    "matchesRecommended": "✓ Es tu talla recomendada",
+    "recommended": "Recomendada",
+    "tapToUse": "Toca para usarla",
+    "fit": {
+      "tight": "Ajustado",
+      "regular": "Regular",
+      "loose": "Holgado"
+    }
+  },
+  "onboarding": {
+    "questionSize": "¿QUÉ TALLA USAS?",
+    "questionFit": "¿CÓMO TE GUSTA QUE TE QUEDE?",
+    "start": "EMPEZAR",
+    "submitting": "EMPEZANDO…",
+    "anonymousNote": "Es anónimo: no te pedimos nombre ni contacto."
+  },
+  "live": {
+    "connecting": "CONECTANDO…",
+    "start": "PROBAR EN VIVO",
+    "exit": "SALIR DE LIVE",
+    "errorToast": "Live no disponible en este momento. Inténtalo de nuevo.",
+    "fallbackToast": "Modo estático activo",
+    "readyToast": "¡Probador en vivo activo!"
   },
   "variant": {
     "title": "Cara"

@@ -69,13 +69,35 @@
     "flash": "Captured!"
   },
   "kiosk": {
-    "attract": "Step up to try on Suzuki gear",
-    "awakening": "We see you!",
-    "calibrating": "Calibrating…",
-    "cooldown": "Still there?",
-    "stayButton": "Stay",
-    "resetIn": "Reset in {{seconds}}s",
-    "restarting": "RESTARTING…"
+    "attract": {
+      "cta": "STEP CLOSER TO START"
+    },
+    "awakening": {
+      "greeting": "LET'S GO!"
+    },
+    "calibration": {
+      "instruction": "STAY IN THE FRAME"
+    },
+    "cooldown": {
+      "title": "ARE YOU STILL THERE?",
+      "stay": "STAY"
+    },
+    "recovery": {
+      "message": "RESTARTING…"
+    },
+    "guide": {
+      "standFront": "STAND IN FRONT OF THE CAMERA",
+      "reposition": "POSITION YOURSELF IN FRONT OF THE CAMERA",
+      "chooseGarment": "CHOOSE A GARMENT",
+      "activeLive": "TAKE A PHOTO OR TRY IT LIVE",
+      "activeFoto": "TAKE A PHOTO",
+      "photoOrLive": "TAKE A PHOTO OR TRY IT LIVE",
+      "photoOnly": "TAKE A PHOTO"
+    },
+    "terminate": {
+      "idle": "FINISH",
+      "confirm": "TAP AGAIN TO FINISH"
+    }
   },
   "share": {
     "title": "Your Suzuki Look",
@@ -122,27 +144,6 @@
     "garmentOverlay": "Garment overlay",
     "catalogGrid": "Garment catalog grid"
   },
-  "kiosk": {
-    "attract": {
-      "cta": "STEP CLOSER TO START"
-    },
-    "awakening": {
-      "greeting": "I SEE YOU"
-    },
-    "calibration": {
-      "instruction": "STAY IN THE FRAME"
-    },
-    "cooldown": {
-      "title": "ARE YOU STILL THERE?",
-      "stay": "STAY"
-    },
-    "recovery": {
-      "message": "RESTARTING..."
-    },
-    "guide": {
-      "reposition": "POSITION YOURSELF IN FRONT OF THE CAMERA"
-    }
-  },
   "photo": {
     "shoot": "Take photo",
     "countdown": {
@@ -150,14 +151,15 @@
     },
     "share": {
       "title": "Your look is ready",
-      "subtitle": "Scan the QR to save to your phone",
-      "subtitleFallback": "Demo preview · QR scan unavailable",
-      "wishlistHint": "Wishlist code · show to the staff",
+      "subtitle": "Scan the QR code to save the photo to your phone",
+      "subtitleFallback": "Demo preview · QR scanning unavailable",
+      "wishlistHint": "Wishlist code · show to the advisor",
       "again": "Try another",
       "download": "Download PNG",
       "noQrFallback": "QR unavailable in demo mode",
       "useDownload": "Use the Download button to save the photo",
-      "finish": "Finish"
+      "finish": "Finish",
+      "fallback_badge": "DEMO PREVIEW"
     }
   },
   "ai": {
@@ -166,7 +168,45 @@
       "2": "ADJUSTING DIGITAL SEAMS...",
       "3": "APPLYING LIGHTING...",
       "4": "ALMOST READY..."
+    },
+    "error": {
+      "networkTitle": "CONNECTION LOST",
+      "networkHint": "It wasn't your photo. Try again in a few seconds.",
+      "poseTitle": "WE CANNOT CLEARLY SEE YOUR POSE",
+      "poseHint": "Stand facing forward, keep arms down and torso inside frame.",
+      "contentTitle": "COULD NOT PROCESS PHOTO",
+      "contentHint": "Ensure good lighting, keep torso visible and unobstructed.",
+      "retryButton": "TRY AGAIN",
+      "retakeButton": "TAKE PHOTO AGAIN",
+      "finishButton": "FINISH",
+      "autoCloseHint": "THIS SCREEN CLOSES AUTOMATICALLY IN 30 SECONDS"
     }
+  },
+  "sizing": {
+    "yourSize": "Your Size",
+    "matchesRecommended": "✓ Matches your recommended size",
+    "recommended": "Recommended",
+    "tapToUse": "Tap to select",
+    "fit": {
+      "tight": "Fitted",
+      "regular": "Regular",
+      "loose": "Relaxed"
+    }
+  },
+  "onboarding": {
+    "questionSize": "WHAT SIZE DO YOU WEAR?",
+    "questionFit": "HOW DO YOU LIKE IT TO FIT?",
+    "start": "START",
+    "submitting": "STARTING…",
+    "anonymousNote": "It is anonymous: no name or contact info requested."
+  },
+  "live": {
+    "connecting": "CONNECTING…",
+    "start": "TRY LIVE",
+    "exit": "EXIT LIVE",
+    "errorToast": "Live mode unavailable right now. Try again.",
+    "fallbackToast": "Static mode active",
+    "readyToast": "Live try-on active!"
   },
   "variant": {
     "title": "Side"

@@ -1,4 +1,5 @@
 import { Plus, Minus } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useSizingStore } from '@/store/sizing';
 import { useGarmentStore } from '@/store/garment';
 import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
@@ -8,6 +9,7 @@ import { isOperatorMode } from '@/lib/debug-mode';
 const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
 
 export function SizingControls({ pose }: { pose?: UsePoseResult }) {
+  const { t } = useTranslation();
   const profile = useSizingStore();
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
   const catalog = useGarmentStore((s) => s.catalog);
@@ -135,7 +137,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
   return (
     <div className="absolute top-20 right-4 bg-black/60 backdrop-blur-md border border-zinc-700 rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-white w-[220px] shadow-2xl">
       <span className="text-lg font-bold text-zinc-400 uppercase tracking-widest text-center">
-        Tu Talla
+        {t('sizing.yourSize', 'Tu Talla')}
       </span>
       <div className="flex items-center justify-between w-full">
         <button
@@ -162,7 +164,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
       <div className="text-center w-full mt-1">
         {elegida === recomendada ? (
           <span className="text-[18px] font-bold text-green-400 leading-tight block">
-            ✓ Coincide con la recomendada
+            {t('sizing.matchesRecommended', '✓ Es tu talla recomendada')}
           </span>
         ) : (
           <button
@@ -170,9 +172,12 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
             onClick={() => setTallaElegida(garment.sku, recomendada)}
             className="text-[18px] text-zinc-400 hover:text-white transition-colors leading-tight cursor-pointer"
           >
-            Recomendada: <span className="font-bold text-cyan-400">{recomendada}</span>
+            {t('sizing.recommended', 'Recomendada')}:{' '}
+            <span className="font-bold text-cyan-400">{recomendada}</span>
             <br />
-            <span className="text-[18px] underline opacity-70">· tocar para usarla</span>
+            <span className="text-[18px] underline opacity-70">
+              {t('sizing.tapToUse', 'Toca para usarla')}
+            </span>
           </button>
         )}
       </div>

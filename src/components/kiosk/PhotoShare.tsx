@@ -136,7 +136,7 @@ export function PhotoShare() {
             <p className="font-mono text-xs text-fg-muted uppercase tracking-widest text-center px-4">
               Imagen no disponible
               <br />
-              La foto generada expiró · descargala antes de cerrar
+              La foto generada expiró · descárgala antes de cerrar
             </p>
           </div>
           {kioskState === 'SHARE_QR_FALLBACK' && (
@@ -223,10 +223,13 @@ export function PhotoShare() {
           </h2>
           <p className="font-mono text-sm text-fg-muted">
             {qrUrl
-              ? t('photo.share.subtitle', 'Escaneá el QR para llevártela al móvil')
+              ? t(
+                  'photo.share.subtitle',
+                  'Escanea el QR para llevarte la foto a tu celular',
+                )
               : t(
                   'photo.share.subtitleFallback',
-                  'Vista previa demo · escaneá QR no disponible',
+                  'Vista previa de demostración · QR no disponible',
                 )}
           </p>
         </div>
@@ -248,7 +251,10 @@ export function PhotoShare() {
                   {t('photo.share.noQrFallback', 'QR no disponible en modo demo')}
                 </p>
                 <p className="font-mono text-[10px]">
-                  {t('photo.share.useDownload', 'Usá el botón Descargar')}
+                  {t(
+                    'photo.share.useDownload',
+                    'Usa el botón Descargar para guardar la foto',
+                  )}
                 </p>
               </div>
             )}
@@ -260,7 +266,10 @@ export function PhotoShare() {
                 {wishlistCode}
               </div>
               <div className="font-mono text-[10px] text-fg-muted mt-2 uppercase">
-                {t('photo.share.wishlistHint', 'Código wishlist · dictalo al asesor')}
+                {t(
+                  'photo.share.wishlistHint',
+                  'Código de favoritos · díctaselo al asesor',
+                )}
               </div>
             </div>
 

@@ -37,7 +37,7 @@ export function CooldownCountdown() {
         onClick={cancelCooldown}
         className="px-12 py-6 bg-brand-red text-white font-display text-4xl tracking-widest clip-hud transition-all hover:brightness-110 active:scale-95 glow-red"
       >
-        {t('kiosk.cooldown.stay', 'QUEDATE')}
+        {t('kiosk.cooldown.stay', 'SIGO AQUÍ')}
       </button>
     </div>
   );

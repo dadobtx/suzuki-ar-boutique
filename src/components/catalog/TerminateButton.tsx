@@ -1,8 +1,10 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useSizingStore } from '@/store/sizing';
 import { useKioskStore } from '@/store/kiosk';
 
 export function TerminateButton() {
+  const { t } = useTranslation();
   const resetProfile = useSizingStore((s) => s.reset);
   const hasProfile = useSizingStore((s) => s.hasProfile);
   const kioskState = useKioskStore((s) => s.state);
@@ -43,7 +45,9 @@ export function TerminateButton() {
           : 'border-white/20 bg-surface-2 text-fg-muted hover:text-white hover:border-white/40'
       }`}
     >
-      {confirming ? 'TOCA OTRA VEZ PARA TERMINAR' : 'TERMINAR'}
+      {confirming
+        ? t('kiosk.terminate.confirm', 'TOCA OTRA VEZ PARA TERMINAR')
+        : t('kiosk.terminate.idle', 'TERMINAR')}
     </button>
   );
 }

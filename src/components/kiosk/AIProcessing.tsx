@@ -48,13 +48,13 @@ export function AIProcessing() {
 
     const processAI = async () => {
       if (!currentPhotoClean) {
-        transition('SHARE_QR_FALLBACK');
+        transition('TRYON');
         return;
       }
 
       const activeGarment = catalog.find((g) => g.id === activeGarmentId);
       if (!activeGarment) {
-        transition('SHARE_QR_FALLBACK');
+        transition('TRYON');
         return;
       }
 
