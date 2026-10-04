@@ -16,10 +16,10 @@ export function HomePage() {
   return (
     <main className="relative w-full h-full overflow-hidden">
       {/* 
-        CameraStage is always rendered but might be visually occluded by AttractLoop.
+        CameraStage is always rendered with persistent grid layout.
         This is necessary because CameraStage hosts the usePose hook which tracks presence!
       */}
-      <CameraStage isActive={kioskState === 'TRYON'} />
+      <CameraStage />
 
       {/* Kiosk Overlays */}
       {kioskState === 'ATTRACT' && <AttractLoop />}

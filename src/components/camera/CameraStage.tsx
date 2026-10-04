@@ -11,13 +11,12 @@ import { CameraView } from './CameraView';
 import { HudCorners } from '@/components/hud';
 import { PoseDebug } from '@/components/ar/PoseDebug';
 import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
-import { CatalogPanel } from '@/components/catalog';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
 import { Camera as CameraIcon, RefreshCw, Sparkles, X as XIcon } from 'lucide-react';
 import { PhotoCountdown, KioskGuide } from '@/components/kiosk';
 import { LiveTryOnManager } from '@/lib/liveTryon';
-import { SizingOnboardingModal } from '@/components/SizingOnboarding';
+import { StagePanel } from './StagePanel';
 import { SizingControls } from './SizingControls';
 import { VariantControls } from './VariantControls';
 import { useSizingStore } from '@/store/sizing';
@@ -305,16 +304,15 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   return (
     <div
       className={
-        !isActive
-          ? 'block h-screen w-full'
-          : isPortrait
-            ? 'grid grid-rows-[65fr_35fr] h-screen w-full'
-            : 'grid grid-cols-[7fr_3fr] h-screen w-full'
+        isPortrait
+          ? 'grid grid-rows-[65fr_35fr] h-screen w-full'
+          : 'grid grid-cols-[7fr_3fr] h-screen w-full'
       }
     >
-      {/* ── Video area ── */}
+      {/* ── Video area (mirror) ── */}
       <div
-        className="relative overflow-hidden bg-bg"
+        data-stage="mirror"
+        className="relative overflow-hidden bg-bg min-h-0 min-w-0"
         ref={(el) => {
           overlayContainerRef.current = el;
         }}
@@ -520,13 +518,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           </>
         )}
 
-        {/* Sizing Onboarding Modal (z-index 60) */}
-        {!hasProfile && presence !== 'absent' && <SizingOnboardingModal />}
-
-        {/* Ocultar la cámara durante ATTRACT y el Onboarding Modal (z-index 55) */}
-        {(!hasProfile || kioskState === 'ATTRACT') && (
-          <div className="absolute inset-0 bg-zinc-950 z-[55]" />
-        )}
+        {/* Ocultar la cámara durante ATTRACT (z-index 55) */}
+        {kioskState === 'ATTRACT' && <div className="absolute inset-0 bg-bg z-[55]" />}
 
         {/* Manual Reset Button (z-index 40) */}
         {kioskState === 'TRYON' && hasProfile && (
@@ -540,12 +533,13 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
       </div>
 
-      {/* ── Catalog area ── */}
-      {isActive && (
-        <div className="relative bg-zinc-950 z-40 border-l border-white/10 overflow-hidden">
-          <CatalogPanel />
-        </div>
-      )}
+      {/* ── Panel area ── */}
+      <div
+        data-stage="panel"
+        className="relative bg-bg min-h-0 min-w-0 overflow-hidden z-40 border-t md:border-t-0 md:border-l border-white/10"
+      >
+        <StagePanel kioskState={kioskState} hasProfile={hasProfile} presence={presence} />
+      </div>
     </div>
   );
 }
