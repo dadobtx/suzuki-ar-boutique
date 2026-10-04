@@ -144,6 +144,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
           type="button"
           onClick={handlePrev}
           disabled={currentIndex <= 0}
+          aria-label="Talla más chica"
           className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-surface-2 border border-line hover:border-fg-muted disabled:opacity-30 disabled:hover:border-line transition-colors cursor-pointer flex items-center justify-center text-fg"
         >
           <Minus size={28} />
@@ -155,6 +156,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
           type="button"
           onClick={handleNext}
           disabled={currentIndex === -1 || currentIndex >= garment.sizes.length - 1}
+          aria-label="Talla más grande"
           className="w-[72px] h-[72px] min-w-[72px] min-h-[72px] rounded-full bg-surface-2 border border-line hover:border-fg-muted disabled:opacity-30 disabled:hover:border-line transition-colors cursor-pointer flex items-center justify-center text-fg"
         >
           <Plus size={28} />

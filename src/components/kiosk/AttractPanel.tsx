@@ -69,19 +69,27 @@ export function AttractPanel() {
               transition={{ duration: 0.5, ease: 'easeOut' }}
               className="flex flex-col items-center text-center max-w-sm w-full h-full justify-center"
             >
-              <div className="relative w-48 h-48 md:w-56 md:h-56 mb-4 flex items-center justify-center">
-                {currentGarment.thumbnailUrl || currentGarment.overlayUrl ? (
-                  <img
-                    src={currentGarment.thumbnailUrl || currentGarment.overlayUrl}
-                    alt={currentGarment.name}
-                    className="max-w-full max-h-full object-contain drop-shadow-2xl"
-                  />
-                ) : (
-                  <div className="w-32 h-32 rounded-xl bg-surface-2 border border-line flex items-center justify-center text-fg-muted text-4xl">
-                    👕
+              {(() => {
+                const baseUrl = import.meta.env.BASE_URL;
+                const src = currentGarment.thumbnailUrl || currentGarment.overlayUrl;
+                const imageUrl = src ? `${baseUrl}${src.replace(/^\//, '')}` : '';
+
+                return (
+                  <div className="relative w-48 h-48 md:w-56 md:h-56 mb-4 flex items-center justify-center">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={currentGarment.name}
+                        className="max-w-full max-h-full object-contain drop-shadow-2xl"
+                      />
+                    ) : (
+                      <div className="w-32 h-32 rounded-xl bg-surface-2 border border-line flex items-center justify-center text-fg-muted text-4xl">
+                        👕
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               <span className="font-mono text-xs uppercase tracking-widest text-fg-muted mb-1">
                 {currentGarment.line}
@@ -90,8 +98,8 @@ export function AttractPanel() {
                 {currentGarment.name}
               </h3>
               {typeof currentGarment.priceCents === 'number' && (
-                <span className="font-mono text-xl text-brand-red font-bold">
-                  ${Math.round(currentGarment.priceCents / 100)}
+                <span className="font-mono text-xl text-fg font-bold">
+                  ${(currentGarment.priceCents / 100).toFixed(2)}
                 </span>
               )}
             </motion.div>

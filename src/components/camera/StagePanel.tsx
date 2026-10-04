@@ -5,6 +5,7 @@ import { SizingOnboardingPanel } from '@/components/SizingOnboarding';
 import { AttractPanel } from '@/components/kiosk';
 import { useGarmentStore } from '@/store/garment';
 import { useSizingStore } from '@/store/sizing';
+import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 import type { KioskState } from '@/store/kiosk';
 import type { PresenceState } from '@/hooks/usePresence';
 
@@ -22,9 +23,13 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
   const activeGarment = catalog.find((g) => g.id === activeGarmentId);
 
   // Sizing info
-  const tallasElegidas = useSizingStore((s) => s.tallasElegidas);
+  const profile = useSizingStore();
   const chosenSize = activeGarment
-    ? (tallasElegidas[activeGarment.sku] ?? activeGarment.sizes?.[0] ?? 'M')
+    ? resolverTallaElegida(
+        profile,
+        activeGarment,
+        recomendarTallaGarment(profile, activeGarment).recomendada,
+      )
     : null;
 
   // Determine which panel state is active according to the strict priority:
@@ -95,13 +100,21 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
         >
           {activeGarment ? (
             <>
-              {(activeGarment.thumbnailUrl || activeGarment.overlayUrl) && (
-                <img
-                  src={activeGarment.thumbnailUrl || activeGarment.overlayUrl}
-                  alt={activeGarment.name}
-                  className="w-32 h-32 object-contain rounded-lg bg-surface-2 p-2 border border-white/10"
-                />
-              )}
+              {(() => {
+                const baseUrl = import.meta.env.BASE_URL;
+                const src = activeGarment.thumbnailUrl || activeGarment.overlayUrl;
+                const imageUrl = src ? `${baseUrl}${src.replace(/^\//, '')}` : '';
+
+                return (
+                  imageUrl && (
+                    <img
+                      src={imageUrl}
+                      alt={activeGarment.name}
+                      className="w-32 h-32 object-contain rounded-lg bg-surface-2 p-2 border border-white/10"
+                    />
+                  )
+                );
+              })()}
               <div className="flex flex-col items-center">
                 <span className="font-display text-3xl text-white tracking-wider uppercase">
                   {activeGarment.name}

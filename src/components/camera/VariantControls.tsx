@@ -21,8 +21,8 @@ export function VariantControls() {
   const effectiveVariantId = activeVariantId ?? defaultVariant.id;
 
   return (
-    <div className="absolute top-20 right-44 bg-black/60 backdrop-blur-md border border-zinc-700 rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-white shadow-2xl">
-      <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest text-center">
+    <div className="absolute top-20 right-44 bg-surface/85 backdrop-blur-md border border-line rounded-2xl p-4 flex flex-col items-center gap-3 z-40 text-fg shadow-2xl">
+      <span className="text-xs font-bold text-fg-muted uppercase tracking-widest text-center">
         {t('variant.title', 'Cara')}
       </span>
       <div className="flex items-center gap-2">
@@ -35,8 +35,8 @@ export function VariantControls() {
               onClick={() => selectVariant(v.id)}
               className={`min-w-[72px] min-h-[72px] p-2 rounded-xl flex flex-col items-center justify-center gap-1.5 transition-all cursor-pointer ${
                 isSelected
-                  ? 'bg-zinc-800 border-2 border-brand-red shadow-[0_0_12px_rgba(230,0,18,0.4)]'
-                  : 'bg-zinc-900/80 border border-zinc-700 hover:bg-zinc-800/80 text-zinc-400'
+                  ? 'bg-surface-2 border-2 border-brand-red shadow-[0_0_12px_rgba(230,0,18,0.4)]'
+                  : 'bg-surface/80 border border-line hover:bg-surface-2 text-fg-muted'
               }`}
             >
               <span
@@ -45,7 +45,7 @@ export function VariantControls() {
               />
               <span
                 className={`text-xs font-bold leading-none ${
-                  isSelected ? 'text-white' : 'text-zinc-400'
+                  isSelected ? 'text-fg' : 'text-fg-muted'
                 }`}
               >
                 {v.label}

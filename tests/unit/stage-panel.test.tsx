@@ -128,6 +128,31 @@ describe('StagePanel condition precedence table', () => {
     expect(screen.getByTestId('panel-catalog').inert).toBe(true);
   });
 
+  it('renders CapturePanel with recommended/chosen size TALLA: M when profile has M and no manual size is chosen', () => {
+    useGarmentStore.setState({
+      activeGarmentId: 'test-1',
+    });
+    useSizingStore.setState({
+      hasProfile: true,
+      tallaHabitual: 'M',
+      preferenciaFit: 'regular',
+      tallasElegidas: {},
+    });
+
+    render(
+      <StagePanel
+        kioskState="PHOTO_COUNTDOWN"
+        hasProfile={true}
+        presence={'present' as PresenceState}
+      />,
+    );
+
+    const capturePanel = screen.getByTestId('panel-capture');
+    expect(capturePanel).toBeTruthy();
+    expect(capturePanel.textContent).toContain('Swift Sport Hoodie');
+    expect(capturePanel.textContent).toContain('TALLA: M');
+  });
+
   it('renders visible CatalogPanel on any other state (e.g. TRYON) with inert=false', () => {
     render(
       <StagePanel

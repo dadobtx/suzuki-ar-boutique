@@ -41,6 +41,10 @@ export function CameraView({
     }
   }); // sin deps → corre después de cada render incluyendo cambios de objectFit
 
+  const prefersReducedMotion =
+    typeof window !== 'undefined' &&
+    window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+
   return (
     <div className={`relative w-full h-full ${className}`}>
       <video
@@ -57,7 +61,9 @@ export function CameraView({
           objectFit,
           visibility: status === 'granted' ? 'visible' : 'hidden',
           filter: fog ? 'blur(28px) brightness(0.5) saturate(0.7)' : 'none',
-          transition: 'filter 600ms cubic-bezier(0.16, 1, 0.3, 1)',
+          transition: prefersReducedMotion
+            ? 'none'
+            : 'filter 600ms cubic-bezier(0.16, 1, 0.3, 1)',
         }}
         aria-label={t('a11y.cameraFeed')}
       />

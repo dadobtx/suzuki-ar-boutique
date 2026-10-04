@@ -4,6 +4,7 @@ import { render } from '@testing-library/react';
 import { CameraStage } from '@/components/camera/CameraStage';
 import { useKioskStore, type KioskState } from '@/store/kiosk';
 import { useSizingStore } from '@/store/sizing';
+import { useGarmentStore } from '@/store/garment';
 import { useCamera } from '@/hooks/useCamera';
 import { usePose } from '@/hooks/usePose';
 import { usePresence, type PresenceState } from '@/hooks/usePresence';
@@ -172,5 +173,42 @@ describe('CameraStage geometry measurement across states', () => {
         expect(container.firstElementChild?.className).toContain('grid-cols-[7fr_3fr]');
       });
     }
+  });
+
+  describe('Mirror plaque sizing resolution', () => {
+    it('displays active garment plaque with TALLA M when profile is M and no manual size is chosen', () => {
+      useGarmentStore.setState({
+        activeGarmentId: 'test-garment-1',
+        catalog: [
+          {
+            id: 'test-garment-1',
+            sku: 'SWF-HD-01',
+            name: 'Swift Sport Hoodie',
+            line: 'Swift Sport',
+            category: 'top',
+            price: 65,
+            imageUrl: '/test.png',
+            overlayUrl: '/garments/SWF-HD-01.png',
+            thumbnailUrl: '/garments/SWF-HD-01.png',
+            sizes: ['S', 'M', 'L', 'XL'], // Notice sizes[0] is 'S'
+            colors: ['black'],
+            description: '',
+            cutType: 'regular',
+            tags: [],
+            gender: 'unisex',
+          },
+        ],
+      });
+      useKioskStore.setState({ state: 'TRYON' });
+      useSizingStore.setState({
+        hasProfile: true,
+        tallaHabitual: 'M',
+        preferenciaFit: 'regular',
+        tallasElegidas: {},
+      });
+
+      const { getByText } = render(<CameraStage />);
+      expect(getByText(/Swift Sport Hoodie · TALLA M/)).toBeTruthy();
+    });
   });
 });

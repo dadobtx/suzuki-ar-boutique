@@ -19,7 +19,7 @@ export function CatalogLineTabs() {
   const setFilter = useGarmentStore((s) => s.setFilter);
 
   return (
-    <div className="flex w-full items-center justify-between border-b border-line pr-4">
+    <div className="flex w-full items-center border-b border-line">
       <div
         className="flex flex-1 overflow-x-auto snap-x snap-mandatory scrollbar-hide select-none"
         style={{
@@ -29,7 +29,7 @@ export function CatalogLineTabs() {
             'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
         }}
       >
-        <div className="flex px-4 min-w-max">
+        <div className="flex px-4 min-w-max items-center">
           {LINES.map((line) => {
             const isActive = filters.line === line.id;
             return (
@@ -52,9 +52,11 @@ export function CatalogLineTabs() {
               </button>
             );
           })}
+          <div className="ml-4 shrink-0 flex items-center pr-4">
+            <TerminateButton />
+          </div>
         </div>
       </div>
-      <TerminateButton />
     </div>
   );
 }

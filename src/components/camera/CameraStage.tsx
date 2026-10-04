@@ -5,7 +5,7 @@ import { useLayout } from '@/hooks/useLayout';
 import { useDprCanvas } from '@/hooks/useDprCanvas';
 import { useFps } from '@/hooks/useFps';
 import { usePose } from '@/hooks/usePose';
-import { usePresence } from '@/hooks/usePresence';
+import { usePresence, type PresenceState } from '@/hooks/usePresence';
 import { useGarmentStore } from '@/store/garment';
 import { CameraView } from './CameraView';
 import { HudCorners } from '@/components/hud';
@@ -22,6 +22,7 @@ import { VariantControls } from './VariantControls';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { isOperatorMode } from '@/lib/debug-mode';
+import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 
 const PUBLIC_ASSETS_BASE =
   import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
@@ -51,7 +52,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
   // Phase 3: Pose & Presence
   const pose = usePose(camera.videoRef);
-  const presence = usePresence(pose.landmarks, pose.frameId);
+  const detectedPresence = usePresence(pose.landmarks, pose.frameId);
+  const presence =
+    (typeof window !== 'undefined' &&
+      (window as unknown as { __presenceOverride?: PresenceState }).__presenceOverride) ||
+    detectedPresence;
 
   // Profile state
   const resetProfile = useSizingStore((s) => s.reset);
@@ -130,9 +135,13 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Only allow garment interaction if they have a profile
   const garmentActiveWithProfile = garmentActive && hasProfile;
 
-  const tallasElegidas = useSizingStore((s) => s.tallasElegidas);
+  const sizingProfile = useSizingStore();
   const chosenSize = activeGarment
-    ? (tallasElegidas[activeGarment.sku] ?? activeGarment.sizes?.[0] ?? 'M')
+    ? resolverTallaElegida(
+        sizingProfile,
+        activeGarment,
+        recomendarTallaGarment(sizingProfile, activeGarment).recomendada,
+      )
     : null;
 
   const isLiveTryOnEnabled = import.meta.env.VITE_LIVE_TRYON === 'on';
@@ -339,7 +348,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         {/* Active Garment Plaque (Top-Left of mirror, display ~32px) */}
         {activeGarment &&
           (kioskState === 'TRYON' || kioskState === 'PHOTO_COUNTDOWN') && (
-            <div className="absolute top-6 left-6 z-20 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-lg border border-line shadow-lg">
+            <div className="absolute top-28 left-6 z-20 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-lg border border-line shadow-lg">
               <span className="font-display text-2xl md:text-[32px] tracking-wider text-fg uppercase leading-tight">
                 {activeGarment.name} · TALLA {chosenSize}
               </span>
@@ -370,7 +379,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             />
             <button
               onClick={handleStopLiveTryon}
-              className="absolute bottom-8 right-8 px-8 py-4 min-h-[64px] bg-red-600 hover:bg-red-700 text-white rounded-full font-bold shadow-lg flex items-center gap-2 text-xl"
+              className="absolute bottom-8 right-8 px-8 py-4 min-h-[64px] bg-brand-red hover:bg-brand-red/90 text-white rounded-full font-bold shadow-lg flex items-center gap-2 text-xl"
             >
               <XIcon size={24} /> Salir
             </button>
@@ -379,7 +388,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
         {/* Toast Notification (z-index 60) */}
         {liveToast && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-red-600 text-white px-8 py-4 rounded-xl font-bold shadow-lg z-50 transition-opacity text-xl">
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-brand-red text-white px-8 py-4 rounded-xl font-bold shadow-lg z-50 transition-opacity text-xl">
             {liveToast}
           </div>
         )}
@@ -402,23 +411,30 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         />
 
         {/* HUD corners on the video area (z-index 30) */}
-        <div className="absolute inset-0 pointer-events-none p-2" style={{ zIndex: 30 }}>
-          <HudCorners variant="cyan" />
-        </div>
-
-        {/* Presence HUD (z-index 30, only in operator mode) */}
-        {isOperatorMode() && camera.status === 'granted' && (
+        {kioskState !== 'PHOTO_COUNTDOWN' && (
           <div
-            className="absolute top-4 right-4 pointer-events-none"
+            className="absolute inset-0 pointer-events-none p-2"
             style={{ zIndex: 30 }}
           >
-            <div
-              className={`font-mono text-xs px-3 py-1.5 rounded-full border border-current ${badgeColor}`}
-            >
-              PRESENCE: {t(`presence.${presence}`, presence.toUpperCase())}
-            </div>
+            <HudCorners variant="cyan" />
           </div>
         )}
+
+        {/* Presence HUD (z-index 30, only in operator mode) */}
+        {isOperatorMode() &&
+          camera.status === 'granted' &&
+          kioskState !== 'PHOTO_COUNTDOWN' && (
+            <div
+              className="absolute top-4 right-4 pointer-events-none"
+              style={{ zIndex: 30 }}
+            >
+              <div
+                className={`font-mono text-xs px-3 py-1.5 rounded-full border border-current ${badgeColor}`}
+              >
+                PRESENCE: {t(`presence.${presence}`, presence.toUpperCase())}
+              </div>
+            </div>
+          )}
 
         {/* Context-aware user guidance banner (z-index 35) */}
         {camera.status === 'granted' && (
@@ -430,19 +446,23 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
 
         {/* Resolution badge (dev info, z-index 30, only in operator mode) */}
-        {isOperatorMode() && camera.status === 'granted' && camera.settings && (
-          <div
-            className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded"
-            style={{ zIndex: 30 }}
-          >
-            {camera.settings.width}×{camera.settings.height} @{' '}
-            {camera.settings.frameRate?.toFixed(0) ?? '?'}fps
-            {fps !== null && ` · ${fps} actual`}
-          </div>
-        )}
+        {isOperatorMode() &&
+          camera.status === 'granted' &&
+          camera.settings &&
+          kioskState !== 'PHOTO_COUNTDOWN' && (
+            <div
+              className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded"
+              style={{ zIndex: 30 }}
+            >
+              {camera.settings.width}×{camera.settings.height} @{' '}
+              {camera.settings.frameRate?.toFixed(0) ?? '?'}fps
+              {fps !== null && ` · ${fps} actual`}
+            </div>
+          )}
 
         {/* Degraded camera indicator: 12px amber dot if height < expected (always visible if degraded, without text) */}
         {camera.status === 'granted' &&
+          kioskState !== 'PHOTO_COUNTDOWN' &&
           camera.settings &&
           camera.settings.height !== undefined &&
           camera.settings.height <
@@ -456,7 +476,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           )}
 
         {/* Dev Drawer — only with ?dev=1 (z-index 40) */}
-        {showDevDrawer && (
+        {showDevDrawer && kioskState === 'TRYON' && (
           <div
             className="absolute bottom-4 left-1/2 -translate-x-1/2 flex items-center gap-2 px-4 py-2 bg-bg/80 backdrop-blur-sm rounded-full border border-accent-cyan/30"
             style={{ zIndex: 40 }}
@@ -492,7 +512,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
 
         {/* Shoot Photo & Live Tryon Buttons (z-index 40) */}
-        {garmentActiveWithProfile && activeGarment && (
+        {garmentActiveWithProfile && activeGarment && kioskState === 'TRYON' && (
           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center justify-center gap-8 z-40">
             {!isLiveActive && (
               <button
@@ -554,15 +574,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         )}
 
         {/* Sizing & Variant Controls HUD (z-index 40) */}
-        {garmentActiveWithProfile && (
+        {garmentActiveWithProfile && kioskState === 'TRYON' && (
           <>
             <SizingControls pose={pose} />
             <VariantControls />
           </>
         )}
-
-        {/* Ocultar la cámara durante ATTRACT (z-index 55) */}
-        {kioskState === 'ATTRACT' && <div className="absolute inset-0 bg-bg z-[55]" />}
       </div>
 
       {/* ── Panel area ── */}
