@@ -35,20 +35,33 @@ describe('RestartButton component and restartSession action', () => {
     vi.useRealTimers();
   });
 
-  it('renders in idle state with REINICIAR text', () => {
-    render(<RestartButton />);
+  it('renders in idle state with REINICIAR text and red icon', () => {
+    const { container } = render(<RestartButton />);
     const btn = screen.getByRole('button');
     expect(btn.textContent).toContain('REINICIAR');
-    expect(btn.className).toContain('border-line');
+    expect(btn.className).toContain('bg-surface-2');
+    expect(btn.className).toContain('border-2');
+    expect(btn.className).toContain('border-fg/70');
+    expect(btn.className).toContain('text-fg');
+    const icon = container.querySelector('svg');
+    expect(icon?.className.baseVal || icon?.getAttribute('class')).toContain(
+      'text-brand-red',
+    );
   });
 
   it('transitions to confirming state on first click, reverts after 3s', () => {
-    render(<RestartButton />);
+    const { container } = render(<RestartButton />);
     const btn = screen.getByRole('button');
 
     fireEvent.click(btn);
     expect(btn.textContent).toContain('TOCA OTRA VEZ PARA REINICIAR');
+    expect(btn.className).toContain('bg-brand-red');
     expect(btn.className).toContain('border-brand-red');
+    expect(btn.className).toContain('text-white');
+    const icon = container.querySelector('svg');
+    expect(icon?.className.baseVal || icon?.getAttribute('class')).toContain(
+      'text-white',
+    );
 
     // Fast-forward 3000ms
     act(() => {
@@ -56,6 +69,7 @@ describe('RestartButton component and restartSession action', () => {
     });
 
     expect(btn.textContent).toContain('REINICIAR');
+    expect(btn.className).toContain('bg-surface-2');
   });
 
   it('resets session on second click when confirming', () => {

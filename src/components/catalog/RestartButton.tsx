@@ -39,13 +39,15 @@ export function RestartButton() {
       type="button"
       onClick={handleClick}
       aria-live="polite"
-      className={`h-[64px] min-h-[64px] min-w-[64px] px-4 font-display text-lg tracking-wider transition-all clip-hud flex items-center justify-center gap-2 shrink-0 border select-none cursor-pointer ${
+      className={`h-[64px] min-h-[64px] min-w-[64px] px-4 font-display text-lg tracking-wider transition-all clip-hud flex items-center justify-center gap-2 shrink-0 select-none cursor-pointer ${
         confirming
-          ? 'border-brand-red bg-brand-red/20 text-brand-red'
-          : 'border-line bg-surface text-fg-muted hover:text-fg hover:border-fg/40'
+          ? 'bg-brand-red border-brand-red text-white'
+          : 'bg-surface-2 border-2 border-fg/70 text-fg'
       }`}
     >
-      <RotateCcw className="w-5 h-5 shrink-0" />
+      <RotateCcw
+        className={`w-5 h-5 shrink-0 ${confirming ? 'text-white' : 'text-brand-red'}`}
+      />
       <span className="whitespace-nowrap">
         {confirming
           ? t('kiosk.restart.confirm', 'TOCA OTRA VEZ PARA REINICIAR')

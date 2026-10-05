@@ -11,6 +11,7 @@ import {
   videoToCssContain,
 } from '@/lib/center-crop';
 import { useGarmentStore } from '@/store/garment';
+import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { resolveGarmentIllustration } from '@/lib/garment-illustration';
 import { OneEuroFilter } from '@/lib/one-euro-filter';
@@ -106,6 +107,15 @@ export interface GarmentRendererResult {
   isLoading: boolean;
   error: string | null;
   isIllustration: boolean;
+  _testTrackingRefs?: {
+    referenceShoulderWidthPx: number | null;
+    shoulderToEarRatio: number | null;
+    lastValidTransform: SimilarityTransform | null;
+    lastValidAnchorsDst: Point[] | null;
+    lastValidAnchorsSrc: Point[] | null;
+    lostTrackingSince: number | null;
+    resetTracking?: () => void;
+  };
 }
 
 // ── Critical anchor IDs that must be present for rendering ──
@@ -144,7 +154,7 @@ export function useGarmentRenderer(
   const lostTrackingSinceRef = useRef<number | null>(null);
   const lastValidAnchorsDstRef = useRef<Point[] | null>(null);
   const lastValidAnchorsSrcRef = useRef<Point[] | null>(null);
-  const referenceScaleRef = useRef<number | null>(null);
+  const referenceShoulderWidthPxRef = useRef<number | null>(null);
   const lastValidTransformRef = useRef<SimilarityTransform | null>(null);
   const lastValidMsRef = useRef<Point | null>(null);
   const lastValidHeadExclusionRef = useRef<HeadExclusion | null>(null);
@@ -155,26 +165,41 @@ export function useGarmentRenderer(
   const shoulderToEarRatioRef = useRef<number | null>(null);
   const lastTrackingLostSustainedRef = useRef<boolean>(false);
 
+  const sessionId = useSizingStore((s) => s.sessionId);
+
+  const resetTracking = useCallback(() => {
+    visibilityBufferRef.current.clear();
+    lostTrackingSinceRef.current = null;
+    illustLoadedAtRef.current = 0;
+    lastValidAnchorsDstRef.current = null;
+    lastValidAnchorsSrcRef.current = null;
+    referenceShoulderWidthPxRef.current = null;
+    shoulderToEarRatioRef.current = null;
+    lastValidTransformRef.current = null;
+    lastValidMsRef.current = null;
+    lastValidHeadExclusionRef.current = null;
+    shoulderMidXFilter.current.reset();
+    shoulderMidYFilter.current.reset();
+    shoulderWidthFilter.current.reset();
+    lastTrackingLostSustainedRef.current = false;
+    useGarmentStore.getState().setRuntime(null, 0, 0, 0, false);
+  }, []);
+
   // Reset when user is absent
   useEffect(() => {
     if (presence === 'absent') {
-      visibilityBufferRef.current.clear();
-      lostTrackingSinceRef.current = null;
-      illustLoadedAtRef.current = 0;
-      lastValidAnchorsDstRef.current = null;
-      lastValidAnchorsSrcRef.current = null;
-      referenceScaleRef.current = null;
-      shoulderToEarRatioRef.current = null;
-      lastValidTransformRef.current = null;
-      lastValidMsRef.current = null;
-      lastValidHeadExclusionRef.current = null;
-      shoulderMidXFilter.current.reset();
-      shoulderMidYFilter.current.reset();
-      shoulderWidthFilter.current.reset();
-      lastTrackingLostSustainedRef.current = false;
-      useGarmentStore.getState().setRuntime(null, 0, 0, 0, false);
+      resetTracking();
     }
-  }, [presence]);
+  }, [presence, resetTracking]);
+
+  // Reset when sessionId changes (new visitor / session restart)
+  const prevSessionIdRef = useRef<string | null>(sessionId);
+  useEffect(() => {
+    if (prevSessionIdRef.current !== sessionId) {
+      prevSessionIdRef.current = sessionId;
+      resetTracking();
+    }
+  }, [sessionId, resetTracking]);
 
   function smoothedVisibility(landmarkIndex: number, current: number): number {
     let buf = visibilityBufferRef.current.get(landmarkIndex);
@@ -470,8 +495,8 @@ export function useGarmentRenderer(
           setValidAnchors(hasShoulders ? 2 : 0);
           updateStore(null, hasShoulders ? 2 : 0, 0, sustained);
 
-          // NOTA: referenceScale y shoulderToEarRatio no se resetean aquí; son proporciones
-          // anatómicas de la persona y su reset se gestiona únicamente en presence === 'absent'.
+          // NOTA: referenceShoulderWidthPx (ancho anatómico en px) y shoulderToEarRatio no se resetean aquí;
+          // su reset se gestiona únicamente en presence === 'absent' o al cambiar sessionId.
 
           if (lastValidTransformRef.current && lastValidMsRef.current) {
             let opacity = 1.0;
@@ -581,8 +606,8 @@ export function useGarmentRenderer(
           // Postura no fiable (brazos arriba, torso girado o postura no contrastable)
           if (areEarsReliable && dEar > 0 && shoulderToEarRatioRef.current !== null) {
             effectiveWidth = shoulderToEarRatioRef.current * dEar;
-          } else if (referenceScaleRef.current !== null && Ds > 0) {
-            effectiveWidth = referenceScaleRef.current * Ds;
+          } else if (referenceShoulderWidthPxRef.current !== null) {
+            effectiveWidth = referenceShoulderWidthPxRef.current;
           } else {
             effectiveWidth = rawWidth;
           }
@@ -600,23 +625,27 @@ export function useGarmentRenderer(
         const smoothedDstShoulderL = { x: fMidX - hx, y: fMidY - hy };
         const smoothedDstShoulderR = { x: fMidX + hx, y: fMidY + hy };
 
+        const currentReferenceScale =
+          referenceShoulderWidthPxRef.current !== null && Ds > 0
+            ? referenceShoulderWidthPxRef.current / Ds
+            : null;
+
         const transform = computeSimilarityTransform({
           srcShoulderL: { x: anchorL.overlayX, y: anchorL.overlayY },
           srcShoulderR: { x: anchorR.overlayX, y: anchorR.overlayY },
           dstShoulderL: smoothedDstShoulderL,
           dstShoulderR: smoothedDstShoulderR,
-          referenceScale: referenceScaleRef.current,
+          referenceScale: currentReferenceScale,
           fitFactor: 1.0,
         });
 
-        // Actualizar referenceScale ÚNICAMENTE mientras la postura sea fiable
+        // Actualizar referenceShoulderWidthPx ÚNICAMENTE mientras la postura sea fiable
         if (isPostureReliable) {
-          const currentRawScale = Ds > 0 ? fWidth / Ds : 1.0;
-          if (referenceScaleRef.current === null) {
-            referenceScaleRef.current = currentRawScale;
+          if (referenceShoulderWidthPxRef.current === null) {
+            referenceShoulderWidthPxRef.current = fWidth;
           } else {
-            referenceScaleRef.current =
-              referenceScaleRef.current * 0.98 + currentRawScale * 0.02;
+            referenceShoulderWidthPxRef.current =
+              referenceShoulderWidthPxRef.current * 0.98 + fWidth * 0.02;
           }
         }
 
@@ -1027,5 +1056,44 @@ export function useGarmentRenderer(
     isLoading,
     error,
     isIllustration: isIllustrationRef.current,
+    _testTrackingRefs: {
+      get referenceShoulderWidthPx() {
+        return referenceShoulderWidthPxRef.current;
+      },
+      set referenceShoulderWidthPx(v: number | null) {
+        referenceShoulderWidthPxRef.current = v;
+      },
+      get shoulderToEarRatio() {
+        return shoulderToEarRatioRef.current;
+      },
+      set shoulderToEarRatio(v: number | null) {
+        shoulderToEarRatioRef.current = v;
+      },
+      get lastValidTransform() {
+        return lastValidTransformRef.current;
+      },
+      set lastValidTransform(v: SimilarityTransform | null) {
+        lastValidTransformRef.current = v;
+      },
+      get lastValidAnchorsDst() {
+        return lastValidAnchorsDstRef.current;
+      },
+      set lastValidAnchorsDst(v: Point[] | null) {
+        lastValidAnchorsDstRef.current = v;
+      },
+      get lastValidAnchorsSrc() {
+        return lastValidAnchorsSrcRef.current;
+      },
+      set lastValidAnchorsSrc(v: Point[] | null) {
+        lastValidAnchorsSrcRef.current = v;
+      },
+      get lostTrackingSince() {
+        return lostTrackingSinceRef.current;
+      },
+      set lostTrackingSince(v: number | null) {
+        lostTrackingSinceRef.current = v;
+      },
+      resetTracking,
+    },
   };
 }
