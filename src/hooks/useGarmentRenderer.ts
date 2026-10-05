@@ -338,10 +338,11 @@ export function useGarmentRenderer(
       // Clear
       const cssWidth = c.clientWidth;
       const cssHeight = c.clientHeight;
-      ctx.save();
       ctx.setTransform(1, 0, 0, 1, 0, 0);
       ctx.clearRect(0, 0, c.width, c.height);
-      ctx.restore();
+      // Reaplicar la escala DPR en cada frame: no depender del estado de transform dejado por otros.
+      const dprScale = cssWidth > 0 ? c.width / cssWidth : 1;
+      ctx.setTransform(dprScale, 0, 0, dprScale, 0, 0);
 
       const cached = cachedRef.current;
       const lm = landmarksRef.current;
