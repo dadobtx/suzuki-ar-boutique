@@ -14,7 +14,7 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       injectRegister: null, // We'll register manually in kiosk mode
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,wasm,task}'],

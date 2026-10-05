@@ -9,6 +9,7 @@ import {
   PRESENCE_LEAVING_THRESHOLD,
   PRESENCE_LANDMARK_INDICES,
 } from '@/hooks/usePresence';
+import { usePwaStore } from '@/lib/pwa-update';
 
 function DiagnosticOverlayInner() {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -43,6 +44,7 @@ function DiagnosticOverlayInner() {
 
   // 5. Captured logs (max 50, newest first)
   const logs = getDebugLogs();
+  const updatePending = usePwaStore((s) => s.updatePending);
 
   const getLogLevelClass = (level: DebugLogEntry['level']) => {
     switch (level) {
@@ -71,6 +73,14 @@ function DiagnosticOverlayInner() {
           <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
           DIAGNOSTIC OVERLAY
         </span>
+        <span className="text-zinc-400 text-[11px]">
+          {__GIT_SHA__.slice(0, 7)} · {__BUILD_DATE__}
+        </span>
+        {updatePending && (
+          <span className="text-amber-400 font-bold text-[11px] animate-pulse">
+            actualización pendiente
+          </span>
+        )}
         <span className="text-zinc-400 text-[11px]">?debug=1 active</span>
         <button
           type="button"

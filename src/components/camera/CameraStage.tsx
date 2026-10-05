@@ -34,6 +34,7 @@ import {
   FramingHysteresis,
   type FramingState,
 } from '@/lib/body-framing';
+import { usePwaAutoUpdate, usePwaStore } from '@/lib/pwa-update';
 
 const PUBLIC_ASSETS_BASE =
   import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
@@ -133,6 +134,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const sizingProfile = useSizingStore();
 
   useKioskPresenceSync(presence, hasProfile);
+  usePwaAutoUpdate(presence);
+  const updatePending = usePwaStore((s) => s.updatePending);
 
   // Reset sizing profile when user leaves
   useEffect(() => {
@@ -523,29 +526,38 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           )}
 
         {/* Resolution & framing badge (dev info, z-index 30, only in operator mode) */}
-        {isOperatorMode() &&
-          camera.status === 'granted' &&
-          camera.settings &&
-          kioskState !== 'PHOTO_COUNTDOWN' && (
-            <div
-              className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded flex flex-col gap-0.5"
-              style={{ zIndex: 30 }}
-            >
-              <div>
-                {camera.settings.width}×{camera.settings.height} @{' '}
-                {camera.settings.frameRate?.toFixed(0) ?? '?'}fps
-                {fps !== null && ` · ${fps} actual`}
-              </div>
-              <div>
-                sw: {framingMetrics.sw !== null ? framingMetrics.sw.toFixed(3) : '—'} ·
-                headTop:{' '}
-                {framingMetrics.headTop !== null
-                  ? framingMetrics.headTop.toFixed(3)
-                  : '—'}{' '}
-                · {sustainedFraming}
-              </div>
+        {isOperatorMode() && kioskState !== 'PHOTO_COUNTDOWN' && (
+          <div
+            className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded flex flex-col gap-0.5 pointer-events-none"
+            style={{ zIndex: 30 }}
+          >
+            {camera.status === 'granted' && camera.settings && (
+              <>
+                <div>
+                  {camera.settings.width}×{camera.settings.height} @{' '}
+                  {camera.settings.frameRate?.toFixed(0) ?? '?'}fps
+                  {fps !== null && ` · ${fps} actual`}
+                </div>
+                <div>
+                  sw: {framingMetrics.sw !== null ? framingMetrics.sw.toFixed(3) : '—'} ·
+                  headTop:{' '}
+                  {framingMetrics.headTop !== null
+                    ? framingMetrics.headTop.toFixed(3)
+                    : '—'}{' '}
+                  · {sustainedFraming}
+                </div>
+              </>
+            )}
+            <div className="flex items-center gap-1.5 text-zinc-300">
+              <span>
+                {__GIT_SHA__.slice(0, 7)} · {__BUILD_DATE__}
+              </span>
+              {updatePending && (
+                <span className="text-amber-400 font-bold">actualización pendiente</span>
+              )}
             </div>
-          )}
+          </div>
+        )}
 
         {/* Degraded camera indicator: 12px amber dot if height < expected (always visible if degraded, without text) */}
         {camera.status === 'granted' &&
@@ -595,6 +607,14 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             >
               ✗ Clear
             </button>
+            <span className="font-mono text-[11px] text-zinc-400 border-l border-zinc-700 pl-2">
+              {__GIT_SHA__.slice(0, 7)}
+              {updatePending && (
+                <span className="text-amber-400 ml-1.5 font-bold">
+                  actualización pendiente
+                </span>
+              )}
+            </span>
           </div>
         )}
 

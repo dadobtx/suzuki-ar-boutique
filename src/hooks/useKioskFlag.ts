@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { cleanupNonKioskServiceWorker, registerKioskSW } from '@/lib/pwa-update';
 
 export function useKioskFlag() {
   const [isKiosk, setIsKiosk] = useState(false);
@@ -7,6 +8,11 @@ export function useKioskFlag() {
     const params = new URLSearchParams(window.location.search);
     const kioskMode = params.get('kiosk') === '1';
     setIsKiosk(kioskMode);
+
+    if (!kioskMode) {
+      cleanupNonKioskServiceWorker();
+      return;
+    }
 
     if (kioskMode) {
       document.body.classList.add('kiosk-mode');
@@ -40,12 +46,8 @@ export function useKioskFlag() {
       };
       document.addEventListener('keydown', preventZoom);
 
-      // Register Service Worker in kiosk mode
-      import('virtual:pwa-register')
-        .then(({ registerSW }) => {
-          registerSW({ immediate: true });
-        })
-        .catch((err) => console.warn('PWA registration failed', err));
+      // Register Service Worker in kiosk mode safely
+      registerKioskSW();
 
       return () => {
         document.body.classList.remove('kiosk-mode');
