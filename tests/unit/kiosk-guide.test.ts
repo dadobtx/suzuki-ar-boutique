@@ -197,7 +197,7 @@ describe('kiosk-guide resolveGuide logic', () => {
       });
     });
 
-    it('shows Step 3 guide with live hint when showLiveButton is true', () => {
+    it('shows Step 3 guide with live primary title when showLiveButton is true', () => {
       const result = resolveGuide({
         kioskState: 'TRYON',
         hasProfile: true,
@@ -211,8 +211,8 @@ describe('kiosk-guide resolveGuide logic', () => {
 
       expect(result).toEqual({
         step: 3,
-        title: 'TÓMATE LA FOTO',
-        hint: 'o pruébala EN VIVO 15 s',
+        title: 'PRUÉBALA EN VIVO',
+        hint: 'o tómate la foto',
         arrow: 'down',
         kind: 'step',
       });

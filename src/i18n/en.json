@@ -103,21 +103,15 @@
       },
       "step3": {
         "title": "TAKE THE PHOTO",
-        "hintLive": "or try it LIVE for 15s"
+        "titleLive": "TRY IT LIVE",
+        "hintPhoto": "or take the photo"
       },
       "body": {
         "standFront": "STAND IN FRONT OF THE MIRROR",
         "stepBack": "TAKE A STEP BACK",
         "stepForward": "TAKE A STEP FORWARD",
         "showShoulders": "SHOW YOUR SHOULDERS"
-      },
-      "standFront": "STAND IN FRONT OF THE CAMERA",
-      "reposition": "POSITION YOURSELF IN FRONT OF THE CAMERA",
-      "chooseGarment": "CHOOSE A GARMENT",
-      "activeLive": "TAKE A PHOTO OR TRY IT LIVE",
-      "activeFoto": "TAKE A PHOTO",
-      "photoOrLive": "TAKE A PHOTO OR TRY IT LIVE",
-      "photoOnly": "TAKE A PHOTO"
+      }
     },
     "restart": {
       "idle": "RESTART",
@@ -227,6 +221,7 @@
   },
   "live": {
     "connecting": "CONNECTING…",
+    "seeLive": "TRY IT LIVE",
     "start": "TRY LIVE",
     "exit": "EXIT LIVE",
     "errorToast": "Live mode unavailable right now. Try again.",

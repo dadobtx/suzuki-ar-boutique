@@ -175,8 +175,8 @@ describe('CameraStage geometry measurement across states', () => {
     }
   });
 
-  describe('Right column garment header and sizing resolution', () => {
-    it('displays active garment header and recommended size in right column when profile is M and no manual size is chosen', () => {
+  describe('Mirror plaque and sizing resolution', () => {
+    it('displays active garment mirror plaque with full name and resolved size M when profile is M and no manual size is chosen', () => {
       useGarmentStore.setState({
         activeGarmentId: 'test-garment-1',
         catalog: [
@@ -209,8 +209,7 @@ describe('CameraStage geometry measurement across states', () => {
 
       const { container } = render(<CameraStage />);
       const mirror = container.querySelector('[data-stage="mirror"]')!;
-      expect(within(mirror).getByText('Swift Sport')).toBeTruthy();
-      expect(within(mirror).getByText('Hoodie')).toBeTruthy();
+      expect(within(mirror).getByText(/Swift Sport Hoodie · TALLA M/)).toBeTruthy();
       expect(within(mirror).getByText('M')).toBeTruthy();
     });
   });

@@ -21,6 +21,7 @@ import { SizingControls } from './SizingControls';
 import { VariantControls } from './VariantControls';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
+import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 import { isOperatorMode } from '@/lib/debug-mode';
 import {
   computeFramingMetrics,
@@ -123,6 +124,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const resetProfile = useSizingStore((s) => s.reset);
   const hasProfile = useSizingStore((s) => s.hasProfile);
   const sessionId = useSizingStore((s) => s.sessionId);
+  const sizingProfile = useSizingStore();
 
   useKioskPresenceSync(presence, hasProfile);
 
@@ -159,6 +161,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Active garment SKU
   const activeGarment = catalog.find((g) => g.id === activeGarmentId);
   const activeIndex = activeGarment ? catalog.indexOf(activeGarment) : -1;
+
+  const tallaResuelta = useMemo(() => {
+    if (!activeGarment) return null;
+    const { recomendada } = recomendarTallaGarment(sizingProfile, activeGarment);
+    return resolverTallaElegida(sizingProfile, activeGarment, recomendada);
+  }, [sizingProfile, activeGarment]);
 
   const handlePrev = () => {
     if (catalog.length === 0) return;
@@ -489,6 +497,21 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           />
         )}
 
+        {/* Garment Plaque (left mirror) */}
+        {(kioskState === 'TRYON' || kioskState === 'PHOTO_COUNTDOWN') &&
+          activeGarment &&
+          tallaResuelta && (
+            <div
+              className={`absolute ${
+                kioskState === 'PHOTO_COUNTDOWN' ? 'top-6' : 'top-32'
+              } left-6 z-30 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 border border-line clip-hud max-w-[55%] shadow-lg`}
+            >
+              <span className="font-display text-[32px] uppercase leading-tight line-clamp-2 text-fg">
+                {activeGarment.name} · TALLA {tallaResuelta}
+              </span>
+            </div>
+          )}
+
         {/* Resolution & framing badge (dev info, z-index 30, only in operator mode) */}
         {isOperatorMode() &&
           camera.status === 'granted' &&
@@ -568,24 +591,13 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         {/* Shoot Photo & Live Tryon Buttons (z-index 40) */}
         {garmentActiveWithProfile && activeGarment && kioskState === 'TRYON' && (
           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center justify-center gap-8 z-40">
-            {!isLiveActive && (
-              <button
-                onClick={() => transition('PHOTO_COUNTDOWN')}
-                className="w-[144px] h-[144px] rounded-full bg-fg text-bg flex flex-col items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-transform border-4 border-fg/30"
-              >
-                <CameraIcon size={52} className="text-bg" />
-                <span className="font-display tracking-widest text-lg mt-1 uppercase text-bg">
-                  {t('photo.shoot', 'DISPARAR')}
-                </span>
-              </button>
-            )}
-
             {showLiveButton && (
               <button
                 type="button"
                 onClick={handleStartLiveTryon}
                 disabled={isLiveLoading || isLiveActive}
-                className={`w-[144px] h-[144px] rounded-full bg-surface/90 border-2 border-fg text-fg flex flex-col items-center justify-center shadow-2xl transition-transform ${
+                aria-label={t('live.seeLive', 'VERME EN VIVO')}
+                className={`w-[160px] h-[160px] rounded-full bg-fg text-bg border-4 border-fg/30 flex flex-col items-center justify-center shadow-2xl transition-transform ${
                   isLiveLoading
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
@@ -601,19 +613,37 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                       size={44}
                       className={`text-brand-red ${isLiveLoading ? 'animate-spin' : ''}`}
                     />
-                    <span className="font-display tracking-widest text-lg mt-1 uppercase text-center leading-tight">
-                      {isLiveLoading ? (
-                        t('live.connecting', 'CONECTANDO…')
-                      ) : (
-                        <>
-                          {t('live.seeLiveUpper', 'VERME')}
-                          <br />
-                          {t('live.seeLiveLower', 'EN VIVO')}
-                        </>
-                      )}
+                    <span className="font-display tracking-widest text-lg mt-1 uppercase text-center leading-tight max-w-[130px] text-bg">
+                      {isLiveLoading
+                        ? t('live.connecting', 'CONECTANDO…')
+                        : t('live.seeLive', 'VERME EN VIVO')}
                     </span>
                   </>
                 )}
+              </button>
+            )}
+
+            {!isLiveActive && (
+              <button
+                type="button"
+                onClick={() => transition('PHOTO_COUNTDOWN')}
+                className={`w-[144px] h-[144px] rounded-full flex flex-col items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-transform ${
+                  showLiveButton
+                    ? 'bg-surface/90 border-2 border-fg text-fg'
+                    : 'bg-fg text-bg border-4 border-fg/30'
+                }`}
+              >
+                <CameraIcon
+                  size={showLiveButton ? 48 : 52}
+                  className={showLiveButton ? 'text-fg' : 'text-bg'}
+                />
+                <span
+                  className={`font-display tracking-widest text-lg mt-1 uppercase ${
+                    showLiveButton ? 'text-fg' : 'text-bg'
+                  }`}
+                >
+                  {t('photo.shoot', 'DISPARAR')}
+                </span>
               </button>
             )}
           </div>
@@ -634,19 +664,6 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               isPortrait ? 'top-28' : 'top-4'
             } right-4 z-40 flex flex-col gap-3 w-[220px]`}
           >
-            {/* Garment Header Card */}
-            <div className="bg-surface/90 backdrop-blur-md border border-line rounded-2xl p-4 flex flex-col gap-1 text-left shadow-2xl">
-              <span className="text-sm font-bold text-fg-muted uppercase tracking-wider">
-                {activeGarment.line}
-              </span>
-              <span className="font-display text-2xl font-bold text-fg tracking-wide leading-tight">
-                {activeGarment.name.startsWith(activeGarment.line)
-                  ? activeGarment.name.slice(activeGarment.line.length).trim() ||
-                    activeGarment.name
-                  : activeGarment.name}
-              </span>
-            </div>
-
             {/* Sizing Controls */}
             <SizingControls pose={pose} />
 

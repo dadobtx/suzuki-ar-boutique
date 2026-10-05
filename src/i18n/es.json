@@ -103,21 +103,15 @@
       },
       "step3": {
         "title": "TÓMATE LA FOTO",
-        "hintLive": "o pruébala EN VIVO 15 s"
+        "titleLive": "PRUÉBALA EN VIVO",
+        "hintPhoto": "o tómate la foto"
       },
       "body": {
         "standFront": "PÁRATE FRENTE AL ESPEJO",
         "stepBack": "DA UN PASO ATRÁS",
         "stepForward": "ACÉRCATE UN PASO",
         "showShoulders": "MUESTRA TUS HOMBROS"
-      },
-      "standFront": "PÁRATE FRENTE A LA CÁMARA",
-      "reposition": "UBÍCATE FRENTE A LA CÁMARA",
-      "chooseGarment": "ELIGE UNA PRENDA",
-      "activeLive": "TÓMATE UNA FOTO O PRUÉBALA EN VIVO",
-      "activeFoto": "TÓMATE UNA FOTO",
-      "photoOrLive": "TÓMATE UNA FOTO O PRUÉBALA EN VIVO",
-      "photoOnly": "TÓMATE UNA FOTO"
+      }
     },
     "restart": {
       "idle": "REINICIAR",
@@ -227,6 +221,7 @@
   },
   "live": {
     "connecting": "CONECTANDO…",
+    "seeLive": "VERME EN VIVO",
     "start": "PROBAR EN VIVO",
     "exit": "SALIR DE LIVE",
     "errorToast": "Live no disponible en este momento. Inténtalo de nuevo.",

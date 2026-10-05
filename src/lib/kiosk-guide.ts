@@ -126,12 +126,20 @@ export function resolveGuide(options: ResolveGuideOptions): GuideResult | null {
   }
 
   // currentStep === 3
+  if (showLiveButton) {
+    return {
+      step: 3,
+      title: tr('kiosk.guide.step3.titleLive', 'PRUÉBALA EN VIVO'),
+      hint: tr('kiosk.guide.step3.hintPhoto', 'o tómate la foto'),
+      arrow: 'down',
+      kind: 'step',
+    };
+  }
+
   return {
     step: 3,
     title: tr('kiosk.guide.step3.title', 'TÓMATE LA FOTO'),
-    hint: showLiveButton
-      ? tr('kiosk.guide.step3.hintLive', 'o pruébala EN VIVO 15 s')
-      : null,
+    hint: null,
     arrow: 'down',
     kind: 'step',
   };

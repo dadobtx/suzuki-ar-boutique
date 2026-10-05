@@ -172,6 +172,7 @@ describe('Kiosk Scale & Operator Mode Acceptance (Phase 2)', () => {
       const cls = btn.className;
 
       const hasSufficientDimension =
+        cls.includes('w-[160px]') ||
         cls.includes('w-[144px]') ||
         cls.includes('min-w-[72px]') ||
         cls.includes('min-h-[72px]') ||
