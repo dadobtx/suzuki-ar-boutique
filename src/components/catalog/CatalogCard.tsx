@@ -64,6 +64,8 @@ export function CatalogCard({ garment }: CatalogCardProps) {
   const imgboxRef = useRef<HTMLDivElement | null>(null);
   const teaseTimer1Ref = useRef<ReturnType<typeof setTimeout> | null>(null);
   const teaseTimer2Ref = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewTimer1Ref = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewTimer2Ref = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
   const activeVariantId = useGarmentStore((s) => s.activeVariantId);
@@ -113,16 +115,29 @@ export function CatalogCard({ garment }: CatalogCardProps) {
     }
   };
 
+  const clearPreviewTimers = () => {
+    if (previewTimer1Ref.current) {
+      clearTimeout(previewTimer1Ref.current);
+      previewTimer1Ref.current = null;
+    }
+    if (previewTimer2Ref.current) {
+      clearTimeout(previewTimer2Ref.current);
+      previewTimer2Ref.current = null;
+    }
+  };
+
   // Reset view to 'front' when active garment or sessionId changes
   useEffect(() => {
     setView('front');
     clearTeaseTimers();
-  }, [garment.id, sessionId]);
+    clearPreviewTimers();
+  }, [activeGarmentId, garment.id, sessionId]);
 
   // Limpieza al desmontar
   useEffect(() => {
     return () => {
       clearTeaseTimers();
+      clearPreviewTimers();
     };
   }, []);
 
@@ -146,8 +161,38 @@ export function CatalogCard({ garment }: CatalogCardProps) {
     };
   }, [isActive, resolvedBackView, sessionId]);
 
+  // Vista posterior automática al seleccionar la prenda
+  const prevIsActiveRef = useRef(false);
+
+  useEffect(() => {
+    const wasActive = prevIsActiveRef.current;
+    prevIsActiveRef.current = isActive;
+
+    if (!isActive) {
+      clearPreviewTimers();
+      return;
+    }
+
+    if (!resolvedBackView) return;
+
+    if (!wasActive) {
+      clearPreviewTimers();
+      previewTimer1Ref.current = setTimeout(() => {
+        setView('back');
+        previewTimer2Ref.current = setTimeout(() => {
+          setView('front');
+        }, 2000);
+      }, 600);
+    }
+
+    return () => {
+      clearPreviewTimers();
+    };
+  }, [isActive, resolvedBackView]);
+
   const handleManualFlip = () => {
     clearTeaseTimers();
+    clearPreviewTimers();
     const nextView = view === 'front' ? 'back' : 'front';
     setView(nextView);
 
@@ -169,6 +214,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
   return (
     <div
       role="article"
+      data-view={view}
       className={`
         relative bg-surface rounded-sm border transition-all clip-hud flex flex-col h-[500px] overflow-hidden
         ${isActive ? 'border-brand-red glow-red' : 'border-line hover:border-fg-muted/50'}
