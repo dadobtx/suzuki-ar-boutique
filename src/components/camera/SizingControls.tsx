@@ -135,7 +135,7 @@ export function SizingControls({ pose }: { pose?: UsePoseResult }) {
   };
 
   return (
-    <div className="w-full bg-surface/90 backdrop-blur-md border border-line rounded-2xl p-4 flex flex-col items-center gap-3 text-fg shadow-2xl">
+    <div className="w-full bg-surface/85 backdrop-blur-md border border-line clip-hud p-4 flex flex-col items-center gap-3 text-fg shadow-2xl">
       <span className="text-lg font-bold text-fg-muted uppercase tracking-widest text-center">
         {t('sizing.yourSize', 'Tu Talla')}
       </span>

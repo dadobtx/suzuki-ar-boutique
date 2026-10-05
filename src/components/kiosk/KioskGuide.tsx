@@ -73,14 +73,14 @@ export function KioskGuide({
           exit={{ opacity: 0, y: -8 }}
           transition={{ duration: 0.25, ease: 'easeOut' }}
           className={`
-            flex flex-col items-center justify-center px-8 py-4
+            flex flex-col items-center justify-center px-6 py-2.5
             bg-surface/90 backdrop-blur-md clip-hud
             ${isBodyNotice ? 'border border-fg' : 'border border-line'}
           `}
         >
           {/* Step indicator row (only in step mode) */}
           {!isBodyNotice && (
-            <div className="flex items-center justify-center gap-2 text-sm mb-2 select-none tracking-wider">
+            <div className="flex items-center justify-center gap-2 text-xs mb-1 select-none tracking-wider">
               <span
                 className={
                   guide.step === 1
@@ -120,12 +120,12 @@ export function KioskGuide({
           {/* Main title row */}
           <div className="flex items-center justify-center gap-3">
             {isBodyNotice && (
-              <UserRound className="w-8 h-8 text-fg shrink-0" strokeWidth={2.2} />
+              <UserRound className="w-6 h-6 text-fg shrink-0" strokeWidth={2.2} />
             )}
 
             <span
               className={`font-display ${
-                layout === 'portrait' ? 'text-3xl' : 'text-2xl'
+                layout === 'portrait' ? 'text-2xl' : 'text-xl'
               } tracking-wide text-fg uppercase whitespace-nowrap`}
             >
               {guide.title}
@@ -147,7 +147,7 @@ export function KioskGuide({
                 }}
               >
                 <ArrowIcon
-                  className="w-7 h-7 text-brand-red shrink-0"
+                  className="w-6 h-6 text-brand-red shrink-0"
                   strokeWidth={2.5}
                 />
               </motion.div>
@@ -156,7 +156,7 @@ export function KioskGuide({
 
           {/* Hint text */}
           {!isBodyNotice && guide.hint && (
-            <p className="text-base text-fg-muted mt-1 text-center select-none">
+            <p className="text-sm text-fg-muted mt-0.5 text-center select-none">
               {guide.hint}
             </p>
           )}

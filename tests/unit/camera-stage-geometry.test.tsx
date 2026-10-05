@@ -209,8 +209,41 @@ describe('CameraStage geometry measurement across states', () => {
 
       const { container } = render(<CameraStage />);
       const mirror = container.querySelector('[data-stage="mirror"]')!;
-      expect(within(mirror).getByText(/Swift Sport Hoodie · TALLA M/)).toBeTruthy();
-      expect(within(mirror).getByText('M')).toBeTruthy();
+      const plaque = within(mirror).getByText(
+        /Swift Sport Hoodie · TALLA M/,
+      ).parentElement!;
+      expect(plaque).toBeTruthy();
+      expect(plaque.className).toContain('top-32');
+      expect(plaque.className).toContain('left-6');
+      expect(plaque.className).toContain('clip-hud');
+      expect(plaque.className).toContain('bg-surface/85');
+
+      const sizeText = within(mirror).getByText('M');
+      expect(sizeText).toBeTruthy();
+
+      // Right column wrapper has top-32 and right-4
+      const rightCol = mirror.querySelector('.w-\\[220px\\]') as HTMLElement;
+      expect(rightCol).toBeTruthy();
+      expect(rightCol.className).toContain('top-32');
+      expect(rightCol.className).toContain('right-4');
+
+      // Sizing card has clip-hud and bg-surface/85
+      const sizingCard = sizeText.closest('.clip-hud') as HTMLElement;
+      expect(sizingCard).toBeTruthy();
+      expect(sizingCard.className).toContain('clip-hud');
+      expect(sizingCard.className).toContain('bg-surface/85');
+    });
+
+    it('keeps top-32 for garment plaque in PHOTO_COUNTDOWN state (no jumping)', () => {
+      useKioskStore.setState({ state: 'PHOTO_COUNTDOWN' });
+      const { container } = render(<CameraStage />);
+      const mirror = container.querySelector('[data-stage="mirror"]')!;
+      const plaque = within(mirror).getByText(
+        /Swift Sport Hoodie · TALLA M/,
+      ).parentElement!;
+      expect(plaque.className).toContain('top-32');
+      expect(plaque.className).toContain('left-6');
+      expect(plaque.className).not.toContain('top-6');
     });
   });
 });

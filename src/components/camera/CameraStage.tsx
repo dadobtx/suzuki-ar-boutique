@@ -40,6 +40,8 @@ const PUBLIC_ASSETS_BASE =
   import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
   'https://dadobtx.github.io/suzuki-ar-boutique/';
 
+const SIDE_TOP = 'top-32'; // 128 px: deja libre la guía (máx. ~115 px de alto)
+
 /**
  * Camera stage: video + garment overlay + pose debug + catalog placeholder.
  *
@@ -515,9 +517,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           activeGarment &&
           tallaResuelta && (
             <div
-              className={`absolute ${
-                kioskState === 'PHOTO_COUNTDOWN' ? 'top-6' : 'top-32'
-              } left-6 z-30 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 border border-line clip-hud max-w-[55%] shadow-lg`}
+              className={`absolute left-6 ${SIDE_TOP} z-30 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 border border-line clip-hud max-w-[55%] shadow-lg`}
             >
               <span className="font-display text-[32px] uppercase leading-tight line-clamp-2 text-fg">
                 {activeGarment.name} · TALLA {tallaResuelta}
@@ -690,9 +690,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         {/* Unified Right Column (z-index 40) */}
         {garmentActiveWithProfile && activeGarment && kioskState === 'TRYON' && (
           <div
-            className={`absolute ${
-              isPortrait ? 'top-28' : 'top-4'
-            } right-4 z-40 flex flex-col gap-3 w-[220px]`}
+            className={`absolute right-4 ${SIDE_TOP} z-40 flex flex-col gap-3 w-[220px]`}
           >
             {/* Sizing Controls */}
             <SizingControls pose={pose} />

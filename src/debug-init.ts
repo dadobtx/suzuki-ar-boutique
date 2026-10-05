@@ -2,6 +2,7 @@ import { initDebugLogger } from './lib/debug-logger';
 import { useKioskStore } from './store/kiosk';
 import { useSizingStore } from './store/sizing';
 import { useGarmentStore } from './store/garment';
+import { useCameraStore } from './store/camera';
 
 initDebugLogger();
 
@@ -10,5 +11,6 @@ if (typeof window !== 'undefined') {
     useKioskStore,
     useSizingStore,
     useGarmentStore,
+    useCameraStore,
   };
 }
