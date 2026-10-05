@@ -1,12 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
+import { RotateCcw } from 'lucide-react';
 import { useSizingStore } from '@/store/sizing';
+import { useGarmentStore } from '@/store/garment';
 import { useKioskStore } from '@/store/kiosk';
 
-export function TerminateButton() {
+export function RestartButton() {
   const { t } = useTranslation();
   const resetProfile = useSizingStore((s) => s.reset);
   const hasProfile = useSizingStore((s) => s.hasProfile);
+  const clearGarment = useGarmentStore((s) => s.clearGarment);
   const kioskState = useKioskStore((s) => s.state);
 
   const [confirming, setConfirming] = useState(false);
@@ -25,6 +28,7 @@ export function TerminateButton() {
     if (confirming) {
       if (timerRef.current) clearTimeout(timerRef.current);
       setConfirming(false);
+      clearGarment();
       resetProfile();
     } else {
       setConfirming(true);
@@ -39,15 +43,18 @@ export function TerminateButton() {
       type="button"
       onClick={handleClick}
       aria-live="polite"
-      className={`h-[64px] min-h-[64px] min-w-[64px] px-6 font-display text-xl tracking-wider transition-all clip-hud flex items-center justify-center shrink-0 border-2 select-none cursor-pointer ${
+      className={`h-[64px] min-h-[64px] min-w-[64px] px-4 font-display text-lg tracking-wider transition-all clip-hud flex items-center justify-center gap-2 shrink-0 border select-none cursor-pointer ${
         confirming
           ? 'border-brand-red bg-brand-red/20 text-brand-red'
-          : 'border-white/20 bg-surface-2 text-fg-muted hover:text-white hover:border-white/40'
+          : 'border-line bg-surface text-fg-muted hover:text-fg hover:border-fg/40'
       }`}
     >
-      {confirming
-        ? t('kiosk.terminate.confirm', 'TOCA OTRA VEZ PARA TERMINAR')
-        : t('kiosk.terminate.idle', 'TERMINAR')}
+      <RotateCcw className="w-5 h-5 shrink-0" />
+      <span className="whitespace-nowrap">
+        {confirming
+          ? t('kiosk.restart.confirm', 'TOCA OTRA VEZ PARA REINICIAR')
+          : t('kiosk.restart.idle', 'REINICIAR')}
+      </span>
     </button>
   );
 }

@@ -38,7 +38,7 @@ export function CatalogCategoryChips() {
           clip-hud
           ${
             filters.category === null
-              ? 'bg-brand-red/20 border-brand-red text-white glow-red'
+              ? 'border-2 border-fg text-fg bg-surface-2'
               : 'border-line bg-surface/50 text-fg-muted hover:border-fg-muted hover:text-white'
           }
         `}
@@ -59,7 +59,7 @@ export function CatalogCategoryChips() {
               clip-hud
               ${
                 isActive
-                  ? 'bg-brand-red/20 border-brand-red text-white glow-red'
+                  ? 'border-2 border-fg text-fg bg-surface-2'
                   : 'border-line bg-surface/50 text-fg-muted hover:border-fg-muted hover:text-white'
               }
             `}

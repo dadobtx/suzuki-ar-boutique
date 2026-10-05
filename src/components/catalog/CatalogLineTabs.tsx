@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useGarmentStore } from '@/store/garment';
-import { TerminateButton } from './TerminateButton';
+import { RestartButton } from './RestartButton';
 
 // Líneas presentes en public/catalog.json. Mantener sincronizado con el catálogo:
 // una pestaña sin prendas se ve como una sección vacía en el kiosko.
@@ -21,7 +21,7 @@ export function CatalogLineTabs() {
   return (
     <div className="flex w-full items-center border-b border-line">
       <div
-        className="flex flex-1 overflow-x-auto snap-x snap-mandatory scrollbar-hide select-none"
+        className="flex flex-1 min-w-0 overflow-x-auto snap-x snap-mandatory scrollbar-hide select-none"
         style={{
           maskImage:
             'linear-gradient(to right, transparent, black 24px, black calc(100% - 24px), transparent)',
@@ -52,10 +52,11 @@ export function CatalogLineTabs() {
               </button>
             );
           })}
-          <div className="ml-4 shrink-0 flex items-center pr-4">
-            <TerminateButton />
-          </div>
         </div>
+      </div>
+      <div className="w-[1px] h-10 bg-line shrink-0 my-auto mx-2" />
+      <div className="shrink-0 flex items-center pr-4">
+        <RestartButton />
       </div>
     </div>
   );

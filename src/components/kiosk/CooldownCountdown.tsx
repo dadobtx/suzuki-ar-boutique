@@ -35,7 +35,7 @@ export function CooldownCountdown() {
 
       <button
         onClick={cancelCooldown}
-        className="px-12 py-6 bg-brand-red text-white font-display text-4xl tracking-widest clip-hud transition-all hover:brightness-110 active:scale-95 glow-red"
+        className="px-12 py-6 bg-fg text-bg font-display text-4xl tracking-widest clip-hud transition-all hover:brightness-95 active:scale-95"
       >
         {t('kiosk.cooldown.stay', 'SIGO AQUÍ')}
       </button>

@@ -96,9 +96,9 @@
       "photoOrLive": "TÓMATE UNA FOTO O PRUÉBALA EN VIVO",
       "photoOnly": "TÓMATE UNA FOTO"
     },
-    "terminate": {
-      "idle": "TERMINAR",
-      "confirm": "TOCA OTRA VEZ PARA TERMINAR"
+    "restart": {
+      "idle": "REINICIAR",
+      "confirm": "TOCA OTRA VEZ PARA REINICIAR"
     }
   },
   "share": {

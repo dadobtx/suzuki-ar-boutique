@@ -100,7 +100,7 @@ export function AIError() {
             <button
               type="button"
               onClick={handleRetrySamePhoto}
-              className="flex items-center justify-center gap-4 px-12 py-6 bg-brand-red text-white font-display text-2xl tracking-widest clip-hud hover:brightness-110 transition-all glow-red min-w-[300px] min-h-[64px]"
+              className="flex items-center justify-center gap-4 px-12 py-6 bg-fg text-bg font-display text-2xl tracking-widest clip-hud hover:brightness-95 active:scale-95 transition-all min-w-[300px] min-h-[64px]"
             >
               <RefreshCw className="w-8 h-8" />
               {t('ai.error.retryButton', 'INTENTAR DE NUEVO')}
@@ -109,7 +109,7 @@ export function AIError() {
             <button
               type="button"
               onClick={handleRetake}
-              className="flex items-center justify-center gap-4 px-12 py-6 bg-brand-red text-white font-display text-2xl tracking-widest clip-hud hover:brightness-110 transition-all glow-red min-w-[300px] min-h-[64px]"
+              className="flex items-center justify-center gap-4 px-12 py-6 bg-fg text-bg font-display text-2xl tracking-widest clip-hud hover:brightness-95 active:scale-95 transition-all min-w-[300px] min-h-[64px]"
             >
               <Camera className="w-8 h-8" />
               {t('ai.error.retakeButton', 'TOMAR LA FOTO DE NUEVO')}

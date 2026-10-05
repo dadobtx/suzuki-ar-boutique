@@ -276,7 +276,7 @@ export function PhotoShare() {
             <div className="flex flex-col gap-2">
               <button
                 onClick={handleDownload}
-                className="w-full py-3 bg-brand-red text-white font-display text-xl tracking-widest clip-hud hover:brightness-110 active:scale-95 transition-all"
+                className="w-full py-3 bg-fg text-bg font-display text-xl tracking-widest clip-hud hover:brightness-95 active:scale-95 transition-all"
               >
                 {t('photo.share.download', 'DESCARGAR PNG')}
               </button>

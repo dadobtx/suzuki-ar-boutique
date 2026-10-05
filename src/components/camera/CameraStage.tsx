@@ -13,7 +13,7 @@ import { PoseDebug } from '@/components/ar/PoseDebug';
 import { GarmentOverlay } from '@/components/ar/GarmentOverlay';
 import { useKioskPresenceSync } from '@/hooks/useKioskPresenceSync';
 import { useKioskStore } from '@/store/kiosk';
-import { Camera as CameraIcon, Sparkles, X as XIcon } from 'lucide-react';
+import { Camera as CameraIcon, Sparkles, X as XIcon, AlertCircle } from 'lucide-react';
 import { PhotoCountdown, KioskGuide, AttractLoop } from '@/components/kiosk';
 import { LiveTryOnManager } from '@/lib/liveTryon';
 import { StagePanel } from './StagePanel';
@@ -388,8 +388,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
         {/* Toast Notification (z-index 60) */}
         {liveToast && (
-          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-brand-red text-white px-8 py-4 rounded-xl font-bold shadow-lg z-50 transition-opacity text-xl">
-            {liveToast}
+          <div className="absolute top-20 left-1/2 -translate-x-1/2 bg-surface border border-line text-fg px-8 py-4 rounded-xl font-bold shadow-lg z-50 transition-opacity text-xl flex items-center gap-3">
+            <AlertCircle className="w-6 h-6 text-brand-red shrink-0" />
+            <span>{liveToast}</span>
           </div>
         )}
 
@@ -517,10 +518,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             {!isLiveActive && (
               <button
                 onClick={() => transition('PHOTO_COUNTDOWN')}
-                className="w-[144px] h-[144px] rounded-full bg-brand-red flex flex-col items-center justify-center text-white shadow-2xl hover:scale-105 active:scale-95 transition-transform border-4 border-white/20"
+                className="w-[144px] h-[144px] rounded-full bg-fg text-bg flex flex-col items-center justify-center shadow-2xl hover:scale-105 active:scale-95 transition-transform border-4 border-fg/30"
               >
-                <CameraIcon size={52} />
-                <span className="font-display tracking-widest text-lg mt-1 uppercase">
+                <CameraIcon size={52} className="text-bg" />
+                <span className="font-display tracking-widest text-lg mt-1 uppercase text-bg">
                   {t('photo.shoot', 'DISPARAR')}
                 </span>
               </button>

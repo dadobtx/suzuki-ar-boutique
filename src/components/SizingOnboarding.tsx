@@ -47,12 +47,11 @@ export function SizingOnboardingPanel() {
                   isPortrait
                     ? 'h-[96px] min-h-[96px] flex-1 min-w-0 text-3xl'
                     : 'h-[64px] min-h-[64px] min-w-[64px] text-2xl'
-                } rounded-xl border-2 font-display tracking-wider transition-all cursor-pointer flex items-center justify-center select-none
-                  ${
-                    talla === s
-                      ? 'bg-brand-red border-brand-red text-white scale-105 shadow-lg'
-                      : 'border-line hover:border-fg-muted text-fg-muted hover:text-white bg-surface-2'
-                  }`}
+                } rounded-xl font-display tracking-wider transition-all cursor-pointer flex items-center justify-center select-none ${
+                  talla === s
+                    ? 'bg-surface-2 border-2 border-fg text-fg'
+                    : 'bg-surface border border-line text-fg-muted hover:border-fg-muted hover:text-white'
+                }`}
               >
                 {s}
               </button>
@@ -78,12 +77,11 @@ export function SizingOnboardingPanel() {
                   isPortrait
                     ? 'h-[96px] min-h-[96px] text-2xl'
                     : 'h-[64px] min-h-[64px] text-xl'
-                } min-w-[64px] rounded-xl border-2 font-display tracking-wider transition-all cursor-pointer flex items-center justify-center select-none
-                  ${
-                    fit === f.id
-                      ? 'bg-surface-2 border-fg text-white scale-105 shadow-md'
-                      : 'border-line hover:border-fg-muted text-fg-muted hover:text-white bg-surface-2/60'
-                  }`}
+                } min-w-[64px] rounded-xl font-display tracking-wider transition-all cursor-pointer flex items-center justify-center select-none ${
+                  fit === f.id
+                    ? 'bg-surface-2 border-2 border-fg text-fg'
+                    : 'bg-surface border border-line text-fg-muted hover:border-fg-muted hover:text-white'
+                }`}
               >
                 {f.label}
               </button>
@@ -100,7 +98,11 @@ export function SizingOnboardingPanel() {
               isPortrait
                 ? 'h-[112px] min-h-[112px] text-3xl'
                 : 'h-[64px] min-h-[64px] text-2xl'
-            } min-w-[64px] rounded-xl bg-brand-red text-white font-display tracking-widest uppercase hover:brightness-110 active:scale-95 transition-all cursor-pointer disabled:opacity-40 disabled:bg-surface-2 disabled:text-fg-muted disabled:cursor-not-allowed border-2 border-transparent disabled:border-line`}
+            } min-w-[64px] rounded-xl font-display tracking-widest uppercase transition-all cursor-pointer ${
+              !talla || submitting
+                ? 'bg-surface-2 text-fg-muted border border-line cursor-not-allowed'
+                : 'bg-fg text-bg hover:brightness-95 active:scale-95'
+            }`}
           >
             {submitting
               ? t('onboarding.submitting', 'EMPEZANDO…')
