@@ -88,6 +88,29 @@
       "message": "REINICIANDO…"
     },
     "guide": {
+      "steps": {
+        "step1": "① TALLA",
+        "step2": "② PRENDA",
+        "step3": "③ FOTO"
+      },
+      "step1": {
+        "title": "ELIGE TU TALLA",
+        "hint": "y cómo te gusta que te quede"
+      },
+      "step2": {
+        "title": "TOCA UNA PRENDA PARA PROBÁRTELA",
+        "hint": "Desliza para ver más · cambia de línea arriba"
+      },
+      "step3": {
+        "title": "TÓMATE LA FOTO",
+        "hintLive": "o pruébala EN VIVO 15 s"
+      },
+      "body": {
+        "standFront": "PÁRATE FRENTE AL ESPEJO",
+        "stepBack": "DA UN PASO ATRÁS",
+        "stepForward": "ACÉRCATE UN PASO",
+        "showShoulders": "MUESTRA TUS HOMBROS"
+      },
       "standFront": "PÁRATE FRENTE A LA CÁMARA",
       "reposition": "UBÍCATE FRENTE A LA CÁMARA",
       "chooseGarment": "ELIGE UNA PRENDA",
@@ -211,6 +234,6 @@
     "readyToast": "¡Probador en vivo activo!"
   },
   "variant": {
-    "title": "Cara"
+    "title": "COLOR"
   }
 }

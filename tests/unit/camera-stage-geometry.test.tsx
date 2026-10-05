@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, beforeEach, vi, type MockedFunction } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, within } from '@testing-library/react';
 import { CameraStage } from '@/components/camera/CameraStage';
 import { useKioskStore, type KioskState } from '@/store/kiosk';
 import { useSizingStore } from '@/store/sizing';
@@ -175,8 +175,8 @@ describe('CameraStage geometry measurement across states', () => {
     }
   });
 
-  describe('Mirror plaque sizing resolution', () => {
-    it('displays active garment plaque with TALLA M when profile is M and no manual size is chosen', () => {
+  describe('Right column garment header and sizing resolution', () => {
+    it('displays active garment header and recommended size in right column when profile is M and no manual size is chosen', () => {
       useGarmentStore.setState({
         activeGarmentId: 'test-garment-1',
         catalog: [
@@ -207,8 +207,11 @@ describe('CameraStage geometry measurement across states', () => {
         tallasElegidas: {},
       });
 
-      const { getByText } = render(<CameraStage />);
-      expect(getByText(/Swift Sport Hoodie · TALLA M/)).toBeTruthy();
+      const { container } = render(<CameraStage />);
+      const mirror = container.querySelector('[data-stage="mirror"]')!;
+      expect(within(mirror).getByText('Swift Sport')).toBeTruthy();
+      expect(within(mirror).getByText('Hoodie')).toBeTruthy();
+      expect(within(mirror).getByText('M')).toBeTruthy();
     });
   });
 });

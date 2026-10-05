@@ -88,6 +88,29 @@
       "message": "RESTARTING…"
     },
     "guide": {
+      "steps": {
+        "step1": "① SIZE",
+        "step2": "② GARMENT",
+        "step3": "③ PHOTO"
+      },
+      "step1": {
+        "title": "CHOOSE YOUR SIZE",
+        "hint": "and how you like it to fit"
+      },
+      "step2": {
+        "title": "TAP A GARMENT TO TRY IT ON",
+        "hint": "Swipe to see more · change line above"
+      },
+      "step3": {
+        "title": "TAKE THE PHOTO",
+        "hintLive": "or try it LIVE for 15s"
+      },
+      "body": {
+        "standFront": "STAND IN FRONT OF THE MIRROR",
+        "stepBack": "TAKE A STEP BACK",
+        "stepForward": "TAKE A STEP FORWARD",
+        "showShoulders": "SHOW YOUR SHOULDERS"
+      },
       "standFront": "STAND IN FRONT OF THE CAMERA",
       "reposition": "POSITION YOURSELF IN FRONT OF THE CAMERA",
       "chooseGarment": "CHOOSE A GARMENT",
@@ -211,6 +234,6 @@
     "readyToast": "Live try-on active!"
   },
   "variant": {
-    "title": "Side"
+    "title": "COLOR"
   }
 }

@@ -1,106 +1,164 @@
 import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'framer-motion';
-import { ArrowRight, ArrowDown, Camera, Users } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
+import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
+import { ArrowRight, ArrowDown, UserRound } from 'lucide-react';
 import { useKioskStore } from '@/store/kiosk';
 import { useGarmentStore } from '@/store/garment';
+import { useSizingStore } from '@/store/sizing';
 import type { PresenceState } from '@/hooks/usePresence';
+import type { FramingState } from '@/lib/body-framing';
+import { resolveGuide } from '@/lib/kiosk-guide';
 
-interface KioskGuideProps {
+export interface KioskGuideProps {
   presence: PresenceState;
   layout: 'landscape' | 'portrait';
+  framing?: FramingState;
   showLiveButton?: boolean;
 }
 
 /**
- * Context-aware instruction banner that tells the user what to do next.
- * Placed at the top of the video area; auto-hides during countdowns/processing.
- *
- * The kiosk has lots of implicit steps (stand here, pick garment, hit red
- * button) that aren't obvious to a stranger walking up. This banner removes
- * that guesswork by always showing exactly one next action.
+ * 3-step kiosk user guide and distance warning card.
+ * Centers at top of mirror viewport.
  */
 export function KioskGuide({
   presence,
   layout,
+  framing = 'ok',
   showLiveButton = false,
 }: KioskGuideProps) {
   const { t } = useTranslation();
   const kioskState = useKioskStore((s) => s.state);
+  const hasProfile = useSizingStore((s) => s.hasProfile);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
   const trackingLostSustained = useGarmentStore((s) => s.runtime.trackingLostSustained);
+  const reducedMotion = useReducedMotion();
 
-  // Only show during the interactive try-on phase. Other states have their
-  // own dedicated UIs (attract loop, calibration guide, countdown, etc.).
-  if (kioskState !== 'TRYON') return null;
+  const guide = resolveGuide({
+    kioskState,
+    hasProfile,
+    presence,
+    activeGarmentId,
+    trackingLostSustained,
+    framing,
+    showLiveButton,
+    layout,
+    t: (key, fallback) => t(key, fallback ?? key),
+  });
 
-  let message = '';
-  let icon: LucideIcon | null = null;
-  let showArrow: 'right' | 'down' | null = null;
-  let pulse = false;
+  if (!guide) return null;
 
-  if (presence === 'absent' || presence === 'arriving') {
-    message = t('kiosk.guide.standFront', 'PÁRATE FRENTE A LA CÁMARA');
-    icon = Users;
-    pulse = true;
-  } else if (presence === 'present' && activeGarmentId && trackingLostSustained) {
-    message = t('kiosk.guide.reposition', 'UBÍCATE FRENTE A LA CÁMARA');
-    icon = Users;
-    pulse = true;
-  } else if (presence === 'present' && !activeGarmentId) {
-    message = t('kiosk.guide.chooseGarment', 'ELIGE UNA PRENDA');
-    showArrow = layout === 'portrait' ? 'down' : 'right';
-    pulse = true;
-  } else if (presence === 'present' && activeGarmentId) {
-    message = showLiveButton
-      ? t('kiosk.guide.activeLive', 'TÓMATE UNA FOTO O PRUÉBALA EN VIVO')
-      : t('kiosk.guide.activeFoto', 'TÓMATE UNA FOTO');
-    icon = Camera;
-    showArrow = 'down';
-  }
+  const ArrowIcon = guide.arrow === 'right' ? ArrowRight : ArrowDown;
+  const isBodyNotice = guide.kind === 'body';
 
-  if (!message) return null;
+  const step1Label = t('kiosk.guide.steps.step1', '① TALLA');
+  const step2Label = t('kiosk.guide.steps.step2', '② PRENDA');
+  const step3Label = t('kiosk.guide.steps.step3', '③ FOTO');
 
-  const ArrowIcon = showArrow === 'right' ? ArrowRight : ArrowDown;
-  const IconComponent = icon;
+  const formatStep = (stepNum: 1 | 2 | 3, defaultLabel: string) => {
+    if (guide.step !== null && guide.step > stepNum) {
+      return defaultLabel.replace(/^[①②③]/, '✓');
+    }
+    return defaultLabel;
+  };
 
   return (
     <div
-      className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none"
+      className="absolute top-4 left-1/2 -translate-x-1/2 pointer-events-none select-none max-w-[90%] md:max-w-[calc(100%-260px)]"
       style={{ zIndex: 35 }}
     >
       <AnimatePresence mode="wait">
         <motion.div
-          key={message}
-          initial={{ opacity: 0, y: -20 }}
+          key={`${guide.kind}-${guide.title}`}
+          initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -20 }}
-          transition={{ duration: 0.35, ease: 'easeOut' }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.25, ease: 'easeOut' }}
           className={`
-            flex items-center gap-3 px-6 py-4
-            bg-bg/85 backdrop-blur-md
-            border border-accent-cyan/40
-            clip-hud
-            ${pulse ? 'animate-pulse' : ''}
+            flex flex-col items-center justify-center px-8 py-4
+            bg-surface/90 backdrop-blur-md clip-hud
+            ${isBodyNotice ? 'border border-fg' : 'border border-line'}
           `}
         >
-          {IconComponent && <IconComponent className="w-7 h-7 text-accent-cyan" />}
+          {/* Step indicator row (only in step mode) */}
+          {!isBodyNotice && (
+            <div className="flex items-center justify-center gap-2 text-sm mb-2 select-none tracking-wider">
+              <span
+                className={
+                  guide.step === 1
+                    ? 'text-fg font-bold pb-0.5 border-b-2 border-brand-red'
+                    : guide.step !== null && guide.step > 1
+                      ? 'text-fg-muted font-normal'
+                      : 'text-fg-muted/50 font-normal'
+                }
+              >
+                {formatStep(1, step1Label)}
+              </span>
+              <span className="text-fg-muted/30 select-none">──</span>
+              <span
+                className={
+                  guide.step === 2
+                    ? 'text-fg font-bold pb-0.5 border-b-2 border-brand-red'
+                    : guide.step !== null && guide.step > 2
+                      ? 'text-fg-muted font-normal'
+                      : 'text-fg-muted/50 font-normal'
+                }
+              >
+                {formatStep(2, step2Label)}
+              </span>
+              <span className="text-fg-muted/30 select-none">──</span>
+              <span
+                className={
+                  guide.step === 3
+                    ? 'text-fg font-bold pb-0.5 border-b-2 border-brand-red'
+                    : 'text-fg-muted/50 font-normal'
+                }
+              >
+                {formatStep(3, step3Label)}
+              </span>
+            </div>
+          )}
 
-          <span className="font-display text-2xl tracking-widest text-white uppercase whitespace-nowrap">
-            {message}
-          </span>
+          {/* Main title row */}
+          <div className="flex items-center justify-center gap-3">
+            {isBodyNotice && (
+              <UserRound className="w-8 h-8 text-fg shrink-0" strokeWidth={2.2} />
+            )}
 
-          {showArrow && (
-            <motion.div
-              animate={showArrow === 'right' ? { x: [0, 8, 0] } : { y: [0, 8, 0] }}
-              transition={{
-                duration: 1.2,
-                repeat: Infinity,
-                ease: 'easeInOut',
-              }}
+            <span
+              className={`font-display ${
+                layout === 'portrait' ? 'text-3xl' : 'text-2xl'
+              } tracking-wide text-fg uppercase whitespace-nowrap`}
             >
-              <ArrowIcon className="w-8 h-8 text-brand-red" strokeWidth={2.5} />
-            </motion.div>
+              {guide.title}
+            </span>
+
+            {!isBodyNotice && guide.arrow && (
+              <motion.div
+                animate={
+                  reducedMotion
+                    ? undefined
+                    : guide.arrow === 'right'
+                      ? { x: [0, 6, 0] }
+                      : { y: [0, 6, 0] }
+                }
+                transition={{
+                  duration: 1.2,
+                  repeat: Infinity,
+                  ease: 'easeInOut',
+                }}
+              >
+                <ArrowIcon
+                  className="w-7 h-7 text-brand-red shrink-0"
+                  strokeWidth={2.5}
+                />
+              </motion.div>
+            )}
+          </div>
+
+          {/* Hint text */}
+          {!isBodyNotice && guide.hint && (
+            <p className="text-base text-fg-muted mt-1 text-center select-none">
+              {guide.hint}
+            </p>
           )}
         </motion.div>
       </AnimatePresence>

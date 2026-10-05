@@ -22,7 +22,11 @@ import { VariantControls } from './VariantControls';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { isOperatorMode } from '@/lib/debug-mode';
-import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
+import {
+  computeFramingMetrics,
+  FramingHysteresis,
+  type FramingState,
+} from '@/lib/body-framing';
 
 const PUBLIC_ASSETS_BASE =
   import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
@@ -57,6 +61,63 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     (typeof window !== 'undefined' &&
       (window as unknown as { __presenceOverride?: PresenceState }).__presenceOverride) ||
     detectedPresence;
+
+  const [landmarksOverride, setLandmarksOverride] = useState<
+    typeof pose.landmarks | null
+  >(
+    (typeof window !== 'undefined' &&
+      (window as unknown as { __landmarksOverride?: typeof pose.landmarks })
+        .__landmarksOverride) ||
+      null,
+  );
+
+  useEffect(() => {
+    const handleUpdate = () => {
+      const override = (
+        window as unknown as { __landmarksOverride?: typeof pose.landmarks }
+      ).__landmarksOverride;
+      if (override) {
+        setLandmarksOverride(override);
+      }
+    };
+    window.addEventListener('kiosk-landmarks', handleUpdate);
+    return () => window.removeEventListener('kiosk-landmarks', handleUpdate);
+  }, []);
+
+  const effectiveLandmarks = landmarksOverride || pose.landmarks;
+
+  // Body framing metrics & 1000ms hysteresis
+  const framingMetrics = useMemo(
+    () => computeFramingMetrics(effectiveLandmarks),
+    [effectiveLandmarks],
+  );
+  const hysteresisRef = useRef<FramingHysteresis>(new FramingHysteresis(1000));
+  const [sustainedFraming, setSustainedFraming] = useState<FramingState>('ok');
+
+  useEffect(() => {
+    if (presence === 'absent') {
+      hysteresisRef.current.reset('ok');
+      setSustainedFraming('ok');
+      return;
+    }
+    const updated = hysteresisRef.current.update(
+      framingMetrics.framing,
+      performance.now(),
+    );
+    setSustainedFraming(updated);
+  }, [framingMetrics.framing, pose.frameId, presence]);
+
+  useEffect(() => {
+    if (framingMetrics.framing === sustainedFraming) return;
+    const timer = setTimeout(() => {
+      const updated = hysteresisRef.current.update(
+        framingMetrics.framing,
+        performance.now(),
+      );
+      setSustainedFraming(updated);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [framingMetrics.framing, sustainedFraming]);
 
   // Profile state
   const resetProfile = useSizingStore((s) => s.reset);
@@ -134,15 +195,6 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
   // Only allow garment interaction if they have a profile
   const garmentActiveWithProfile = garmentActive && hasProfile;
-
-  const sizingProfile = useSizingStore();
-  const chosenSize = activeGarment
-    ? resolverTallaElegida(
-        sizingProfile,
-        activeGarment,
-        recomendarTallaGarment(sizingProfile, activeGarment).recomendada,
-      )
-    : null;
 
   const isLiveTryOnEnabled = import.meta.env.VITE_LIVE_TRYON === 'on';
   const showLiveButton =
@@ -342,18 +394,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           fog={kioskState === 'ATTRACT' && presence === 'absent'}
         />
 
-        {/* Attract Loop (headline in mirror cell) */}
-        {kioskState === 'ATTRACT' && <AttractLoop />}
-
-        {/* Active Garment Plaque (Top-Left of mirror, display ~32px) */}
-        {activeGarment &&
-          (kioskState === 'TRYON' || kioskState === 'PHOTO_COUNTDOWN') && (
-            <div className="absolute top-28 left-6 z-20 pointer-events-none flex items-center bg-surface/85 backdrop-blur-md px-5 py-2.5 rounded-lg border border-line shadow-lg">
-              <span className="font-display text-2xl md:text-[32px] tracking-wider text-fg uppercase leading-tight">
-                {activeGarment.name} · TALLA {chosenSize}
-              </span>
-            </div>
-          )}
+        {/* Attract Loop (headline in mirror cell only when absent) */}
+        {kioskState === 'ATTRACT' && presence === 'absent' && <AttractLoop />}
 
         {/* Garment Overlay (z-index 10) */}
         <GarmentOverlay
@@ -426,7 +468,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           camera.status === 'granted' &&
           kioskState !== 'PHOTO_COUNTDOWN' && (
             <div
-              className="absolute top-4 right-4 pointer-events-none"
+              className="absolute top-4 left-4 pointer-events-none"
               style={{ zIndex: 30 }}
             >
               <div
@@ -442,22 +484,33 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           <KioskGuide
             presence={presence}
             layout={layout}
+            framing={sustainedFraming}
             showLiveButton={showLiveButton}
           />
         )}
 
-        {/* Resolution badge (dev info, z-index 30, only in operator mode) */}
+        {/* Resolution & framing badge (dev info, z-index 30, only in operator mode) */}
         {isOperatorMode() &&
           camera.status === 'granted' &&
           camera.settings &&
           kioskState !== 'PHOTO_COUNTDOWN' && (
             <div
-              className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded"
+              className="absolute bottom-2 left-2 font-mono text-hud-xs text-accent-cyan/60 bg-bg/60 px-2 py-0.5 rounded flex flex-col gap-0.5"
               style={{ zIndex: 30 }}
             >
-              {camera.settings.width}×{camera.settings.height} @{' '}
-              {camera.settings.frameRate?.toFixed(0) ?? '?'}fps
-              {fps !== null && ` · ${fps} actual`}
+              <div>
+                {camera.settings.width}×{camera.settings.height} @{' '}
+                {camera.settings.frameRate?.toFixed(0) ?? '?'}fps
+                {fps !== null && ` · ${fps} actual`}
+              </div>
+              <div>
+                sw: {framingMetrics.sw !== null ? framingMetrics.sw.toFixed(3) : '—'} ·
+                headTop:{' '}
+                {framingMetrics.headTop !== null
+                  ? framingMetrics.headTop.toFixed(3)
+                  : '—'}{' '}
+                · {sustainedFraming}
+              </div>
             </div>
           )}
 
@@ -574,12 +627,32 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           />
         )}
 
-        {/* Sizing & Variant Controls HUD (z-index 40) */}
-        {garmentActiveWithProfile && kioskState === 'TRYON' && (
-          <>
+        {/* Unified Right Column (z-index 40) */}
+        {garmentActiveWithProfile && activeGarment && kioskState === 'TRYON' && (
+          <div
+            className={`absolute ${
+              isPortrait ? 'top-28' : 'top-4'
+            } right-4 z-40 flex flex-col gap-3 w-[220px]`}
+          >
+            {/* Garment Header Card */}
+            <div className="bg-surface/90 backdrop-blur-md border border-line rounded-2xl p-4 flex flex-col gap-1 text-left shadow-2xl">
+              <span className="text-sm font-bold text-fg-muted uppercase tracking-wider">
+                {activeGarment.line}
+              </span>
+              <span className="font-display text-2xl font-bold text-fg tracking-wide leading-tight">
+                {activeGarment.name.startsWith(activeGarment.line)
+                  ? activeGarment.name.slice(activeGarment.line.length).trim() ||
+                    activeGarment.name
+                  : activeGarment.name}
+              </span>
+            </div>
+
+            {/* Sizing Controls */}
             <SizingControls pose={pose} />
+
+            {/* Variant Controls */}
             <VariantControls />
-          </>
+          </div>
         )}
       </div>
 
