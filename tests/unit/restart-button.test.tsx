@@ -4,9 +4,10 @@ import { render, screen, fireEvent, act } from '@testing-library/react';
 import { RestartButton } from '@/components/catalog/RestartButton';
 import { useSizingStore } from '@/store/sizing';
 import { useGarmentStore } from '@/store/garment';
-import { useKioskStore } from '@/store/kiosk';
+import { useKioskStore, restartSession } from '@/store/kiosk';
+import { useAnalyticsStore } from '@/store/analytics';
 
-describe('RestartButton component', () => {
+describe('RestartButton component and restartSession action', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     useSizingStore.setState({
@@ -17,6 +18,13 @@ describe('RestartButton component', () => {
     });
     useGarmentStore.setState({
       activeGarmentId: 'garment-1',
+      wishlist: ['SWF-01'],
+      filters: {
+        line: 'Todas',
+        category: null,
+        sizes: [],
+        colors: [],
+      },
     });
     useKioskStore.setState({
       state: 'TRYON',
@@ -50,7 +58,7 @@ describe('RestartButton component', () => {
     expect(btn.textContent).toContain('REINICIAR');
   });
 
-  it('resets profile and garment on second click when confirming', () => {
+  it('resets session on second click when confirming', () => {
     render(<RestartButton />);
     const btn = screen.getByRole('button');
 
@@ -60,5 +68,51 @@ describe('RestartButton component', () => {
     fireEvent.click(btn);
     expect(useSizingStore.getState().hasProfile).toBe(false);
     expect(useGarmentStore.getState().activeGarmentId).toBe(null);
+    expect(useGarmentStore.getState().wishlist).toEqual([]);
+    expect(useKioskStore.getState().state).toBe('ATTRACT');
+  });
+
+  it('con perfil M, prenda activa, 1 favorito, filtro de línea y sessionId -> restartSession() deja hasProfile=false, activeGarmentId=null, wishlist=[], filtros vacíos, kiosk state ATTRACT, y analytics registra session_end', () => {
+    useAnalyticsStore.getState().startSession();
+    const sid = useAnalyticsStore.getState().currentSessionId;
+    expect(sid).toBeTruthy();
+
+    useSizingStore.setState({
+      hasProfile: true,
+      tallaHabitual: 'M',
+      preferenciaFit: 'regular',
+      sessionId: sid,
+    });
+    useGarmentStore.setState({
+      activeGarmentId: 'test-garment-1',
+      wishlist: ['SWF-HD-01'],
+      filters: {
+        line: 'Team Black',
+        category: 'top',
+        sizes: ['M'],
+        colors: ['black'],
+      },
+    });
+    useKioskStore.setState({
+      state: 'TRYON',
+    });
+
+    restartSession();
+
+    expect(useSizingStore.getState().hasProfile).toBe(false);
+    expect(useGarmentStore.getState().activeGarmentId).toBe(null);
+    expect(useGarmentStore.getState().wishlist).toEqual([]);
+    expect(useGarmentStore.getState().filters).toEqual({
+      line: 'Todas',
+      category: null,
+      sizes: [],
+      colors: [],
+    });
+    expect(useKioskStore.getState().state).toBe('ATTRACT');
+
+    const endEvents = useAnalyticsStore.getState().query({ type: 'session_ended' });
+    expect(endEvents.length).toBeGreaterThan(0);
+    const lastEnd = endEvents[endEvents.length - 1];
+    expect(lastEnd.sessionId).toBe(sid);
   });
 });

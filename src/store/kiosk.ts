@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { usePhotoStore } from './photo';
 import { useAnalyticsStore } from './analytics';
+import { useGarmentStore } from './garment';
+import { useSizingStore } from './sizing';
 
 export type KioskState =
   | 'ATTRACT'
@@ -24,6 +26,7 @@ interface KioskStore {
   wakeUp: () => void;
   calibrationDone: () => void;
   reset: () => void;
+  restartSession: () => void;
 }
 
 export const useKioskStore = create<KioskStore>()(
@@ -101,6 +104,7 @@ export const useKioskStore = create<KioskStore>()(
         usePhotoStore.getState().clearPhoto();
         set({ state: 'ATTRACT', stateStartTime: Date.now() });
       },
+      restartSession: () => restartSession(),
     }),
     {
       name: 'suzuki-ar-kiosk',
@@ -112,3 +116,27 @@ export const useKioskStore = create<KioskStore>()(
     },
   ),
 );
+
+/**
+ * Restart session:
+ * a. clearPhoto() del photo store,
+ * b. clearGarment() y vaciar wishlist y filtros (line, category, sizes, colors) del garment store,
+ * c. useSizingStore.getState().reset(),
+ * d. transition('ATTRACT') — NO reset(), para que analytics cierre la sesión con su outcome real.
+ */
+export function restartSession() {
+  // a. clearPhoto() del photo store
+  usePhotoStore.getState().clearPhoto();
+
+  // b. clearGarment() y vaciar wishlist y filtros (line, category, sizes, colors) del garment store
+  const garmentStore = useGarmentStore.getState();
+  garmentStore.clearGarment();
+  garmentStore.clearWishlist();
+  garmentStore.clearFilters();
+
+  // c. useSizingStore.getState().reset()
+  useSizingStore.getState().reset();
+
+  // d. transition('ATTRACT') — NO reset(), para que analytics cierre la sesión con su outcome real
+  useKioskStore.getState().transition('ATTRACT');
+}

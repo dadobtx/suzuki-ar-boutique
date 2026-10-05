@@ -2,14 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { RotateCcw } from 'lucide-react';
 import { useSizingStore } from '@/store/sizing';
-import { useGarmentStore } from '@/store/garment';
-import { useKioskStore } from '@/store/kiosk';
+import { useKioskStore, restartSession } from '@/store/kiosk';
 
 export function RestartButton() {
   const { t } = useTranslation();
-  const resetProfile = useSizingStore((s) => s.reset);
   const hasProfile = useSizingStore((s) => s.hasProfile);
-  const clearGarment = useGarmentStore((s) => s.clearGarment);
   const kioskState = useKioskStore((s) => s.state);
 
   const [confirming, setConfirming] = useState(false);
@@ -28,8 +25,7 @@ export function RestartButton() {
     if (confirming) {
       if (timerRef.current) clearTimeout(timerRef.current);
       setConfirming(false);
-      clearGarment();
-      resetProfile();
+      restartSession();
     } else {
       setConfirming(true);
       timerRef.current = setTimeout(() => {

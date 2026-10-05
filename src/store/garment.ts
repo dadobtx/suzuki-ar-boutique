@@ -45,6 +45,7 @@ interface GarmentState {
   // Wishlist
   wishlist: string[];
   toggleWishlist: (sku: string) => void;
+  clearWishlist: () => void;
 }
 
 const getInitialWishlist = (): string[] => {
@@ -189,6 +190,14 @@ export const useGarmentStore = create<GarmentState>()(
       clearFilters: () => set({ filters: initialFilters }),
 
       wishlist: getInitialWishlist(),
+      clearWishlist: () => {
+        try {
+          localStorage.removeItem('suzuki-wishlist');
+        } catch {
+          // Ignore storage errors
+        }
+        set({ wishlist: [] });
+      },
       toggleWishlist: (sku) =>
         set((state) => {
           const isAdding = !state.wishlist.includes(sku);

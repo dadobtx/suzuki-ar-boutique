@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { useLayout } from '@/hooks/useLayout';
 import { useGarmentStore } from '@/store/garment';
 import { CatalogLineTabs } from './CatalogLineTabs';
@@ -10,12 +10,20 @@ export function CatalogPanel() {
   const { layout } = useLayout();
   const catalog = useGarmentStore((s) => s.catalog);
   const filters = useGarmentStore((s) => s.filters);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   const filteredCatalog = useMemo(() => {
     return filterGarments(catalog, filters);
   }, [catalog, filters]);
 
   const isPortrait = layout === 'portrait';
+
+  useEffect(() => {
+    if (contentRef.current) {
+      contentRef.current.scrollLeft = 0;
+      contentRef.current.scrollTop = 0;
+    }
+  }, [filters.line, filters.category]);
 
   return (
     <div className="bg-surface flex flex-col w-full h-full overflow-hidden border-t md:border-t-0 md:border-l border-surface-hover shadow-2xl relative">
@@ -27,6 +35,7 @@ export function CatalogPanel() {
 
       {/* Content Area */}
       <div
+        ref={contentRef}
         className={`
         flex-1 overflow-auto scrollbar-hide p-6
         ${isPortrait ? 'flex flex-row gap-6 snap-x snap-mandatory' : 'grid grid-cols-2 gap-6 content-start'}
