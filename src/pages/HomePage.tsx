@@ -1,13 +1,6 @@
 import { CameraStage } from '@/components/camera';
 import { useKioskStore } from '@/store/kiosk';
-import {
-  AwakeningSplash,
-  CalibrationGuide,
-  CooldownCountdown,
-  PhotoShare,
-  AIProcessing,
-  AIError,
-} from '@/components/kiosk';
+import { CooldownCountdown, PhotoShare, AIProcessing, AIError } from '@/components/kiosk';
 
 export function HomePage() {
   const kioskState = useKioskStore((s) => s.state);
@@ -21,8 +14,6 @@ export function HomePage() {
       <CameraStage />
 
       {/* Kiosk Overlays */}
-      {kioskState === 'AWAKENING' && <AwakeningSplash />}
-      {kioskState === 'CALIBRATING' && <CalibrationGuide />}
       {kioskState === 'AI_PROCESSING' && <AIProcessing />}
       {kioskState === 'AI_ERROR' && <AIError />}
       {kioskState === 'COOLDOWN' && <CooldownCountdown />}
