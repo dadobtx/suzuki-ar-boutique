@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useGarmentStore } from '@/store/garment';
+import { useKioskStore } from '@/store/kiosk';
 import { buildRack, type RackItem } from './buildRack';
 import { RackSlot } from './RackSlot';
 import { RackCaption } from './RackCaption';
@@ -21,6 +22,13 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
   const selectVariant = useGarmentStore((s) => s.selectVariant);
   const wishlist = useGarmentStore((s) => s.wishlist);
   const toggleWishlist = useGarmentStore((s) => s.toggleWishlist);
+
+  const kioskState = useKioskStore((s) => s.state);
+  const prevActiveRef = useRef<boolean>(active);
+  const activeFlyersRef = useRef<Set<{ img: HTMLElement; anims: Animation[] }>>(
+    new Set(),
+  );
+  const timeoutsRef = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
 
   const [panelHeight, setPanelHeight] = useState<number>(672);
   const [focusIdx, setFocusIdx] = useState<number | null>(mode === 'attract' ? 0 : null);
@@ -48,9 +56,73 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     return () => ro.disconnect();
   }, []);
 
-  // Precargar ilustraciones en memoria una vez
+  // Timeouts rastreados para cancelación limpia
+  const registerTimeout = useCallback((fn: () => void, ms: number) => {
+    const id = setTimeout(() => {
+      timeoutsRef.current.delete(id);
+      fn();
+    }, ms);
+    timeoutsRef.current.add(id);
+    return id;
+  }, []);
+
+  const clearAllTimeouts = useCallback(() => {
+    timeoutsRef.current.forEach((id) => clearTimeout(id));
+    timeoutsRef.current.clear();
+  }, []);
+
+  // Cancelar animaciones y remover clones de vuelo del DOM
+  const cancelAllFlyers = useCallback(() => {
+    activeFlyersRef.current.forEach(({ img, anims }) => {
+      anims.forEach((a) => {
+        try {
+          a.cancel();
+        } catch {
+          // Ignorar animaciones que ya finalizaron o fueron canceladas
+        }
+      });
+      img.remove();
+    });
+    activeFlyersRef.current.clear();
+    if (typeof document !== 'undefined') {
+      document.querySelectorAll('.rack-flyer').forEach((el) => el.remove());
+    }
+  }, []);
+
+  // Resetear estado local del perchero (focus, vuelo, busy, mecida, timeouts, flyers)
+  const resetLocalState = useCallback(() => {
+    clearAllTimeouts();
+    cancelAllFlyers();
+    setFocusIdx(mode === 'attract' ? 0 : null);
+    setReturningId(null);
+    isBusyRef.current = false;
+    setKickClasses(new Array(items.length).fill(''));
+  }, [clearAllTimeouts, cancelAllFlyers, mode, items.length]);
+
+  // Limpieza al desmontar
   useEffect(() => {
-    items.forEach((item) => {
+    return () => {
+      clearAllTimeouts();
+      cancelAllFlyers();
+    };
+  }, [clearAllTimeouts, cancelAllFlyers]);
+
+  // Limpieza cuando kioskState pasa a 'ATTRACT' o active pasa true->false sin prenda activa
+  useEffect(() => {
+    const isAttract = kioskState === 'ATTRACT';
+    const wasActive = prevActiveRef.current;
+    const visitorLeft = wasActive && !active && !activeGarmentId;
+
+    if (isAttract || visitorLeft) {
+      resetLocalState();
+    }
+  }, [kioskState, active, activeGarmentId, resetLocalState]);
+
+  // Precargar ilustraciones en memoria una vez basadas en el catálogo (no en items)
+  const preloadUrls = useMemo(() => {
+    const staticItems = buildRack(catalog, null, null);
+    const urls: string[] = [];
+    staticItems.forEach((item) => {
       const urlsToPreload =
         item.illustrations.length > 0
           ? item.illustrations
@@ -59,32 +131,52 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
             ) as string[]);
 
       urlsToPreload.forEach((url) => {
-        const img = new Image();
-        img.src = url;
-        if (img.decode) {
-          img.decode().catch(() => {});
+        if (url && !urls.includes(url)) {
+          urls.push(url);
         }
       });
     });
-  }, [items]);
+    return urls;
+  }, [catalog]);
+
+  useEffect(() => {
+    preloadUrls.forEach((url) => {
+      const img = new Image();
+      img.src = url;
+      if (img.decode) {
+        img.decode().catch(() => {});
+      }
+    });
+  }, [preloadUrls]);
 
   // Función para sacudir una prenda (swing)
-  const kick = useCallback((index: number, delay = 0) => {
-    if (
-      typeof window !== 'undefined' &&
-      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
-    ) {
-      return;
-    }
-    setTimeout(() => {
-      setKickClasses((prev) => {
-        const next = [...prev];
-        const current = next[index];
-        next[index] = current === 'kick' ? 'kick2' : 'kick';
-        return next;
-      });
-    }, delay);
-  }, []);
+  const kick = useCallback(
+    (index: number, delay = 0) => {
+      if (
+        typeof window !== 'undefined' &&
+        window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches
+      ) {
+        return;
+      }
+      registerTimeout(() => {
+        setKickClasses((prev) => {
+          const next = [...prev];
+          const current = next[index];
+          next[index] = current === 'kick' ? 'kick2' : 'kick';
+          return next;
+        });
+        registerTimeout(() => {
+          setKickClasses((prev) => {
+            if (!prev[index]) return prev;
+            const next = [...prev];
+            next[index] = '';
+            return next;
+          });
+        }, 1600);
+      }, delay);
+    },
+    [registerTimeout],
+  );
 
   // Inicializar estado de mecida según cantidad de items
   useEffect(() => {
@@ -101,15 +193,20 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     }
   }, [activeGarmentId, items, mode]);
 
-  // Despertar del perchero: mecida escalonada desde el centro al entrar a modo interactivo
+  // Despertar del perchero: mecida escalonada desde el centro SOLO cuando active pasa de false a true
   useEffect(() => {
-    if (mode === 'interactive' && items.length > 0) {
+    const wasActive = prevActiveRef.current;
+    prevActiveRef.current = active;
+
+    if (mode === 'interactive' && !wasActive && active && items.length > 0) {
       const center = (items.length - 1) / 2;
       items.forEach((_, k) => {
         kick(k, 120 + Math.abs(k - center) * 55);
       });
     }
-  }, [mode, items, kick]);
+    // items no se incluye intencionalmente para no disparar la mecida al cambiar de prenda
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, mode, kick, items.length]);
 
   // Modo Attract: ciclo automático cada 2600 ms, pausado en document.hidden
   useEffect(() => {
@@ -182,7 +279,11 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
       });
       document.body.appendChild(img);
 
+      const flyerRecord = { img, anims: [] as Animation[] };
+      activeFlyersRef.current.add(flyerRecord);
+
       if (isReduced || typeof img.animate !== 'function') {
+        activeFlyersRef.current.delete(flyerRecord);
         img.remove();
         return;
       }
@@ -209,6 +310,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
             fill: 'forwards',
           },
         );
+        flyerRecord.anims.push(anim);
 
         if (anim?.finished) {
           await anim.finished;
@@ -219,12 +321,15 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
           easing: 'ease-out',
           fill: 'forwards',
         });
+        flyerRecord.anims.push(fade);
+
         if (fade?.finished) {
           await fade.finished;
         }
       } catch {
         // En caso de interrupción
       } finally {
+        activeFlyersRef.current.delete(flyerRecord);
         img.remove();
       }
     },
@@ -325,7 +430,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
 
           // 120 ms después, vuelo de la nueva
           const takePromise = (async () => {
-            await new Promise((resolve) => setTimeout(resolve, 120));
+            await new Promise((resolve) => registerTimeout(() => resolve(true), 120));
             if (slotImg && flySrc) {
               const slotRect = slotImg.getBoundingClientRect();
               const mirrorRect = getMirrorTargetRect(slotRect);
@@ -351,7 +456,17 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
         isBusyRef.current = false;
       }
     },
-    [mode, active, items, selectGarment, kick, setFocus, getMirrorTargetRect, flyElement],
+    [
+      mode,
+      active,
+      items,
+      selectGarment,
+      kick,
+      setFocus,
+      getMirrorTargetRect,
+      flyElement,
+      registerTimeout,
+    ],
   );
 
   // Interacción táctil / puntero con histéresis
@@ -453,8 +568,21 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     .filter((p) => typeof p === 'number' && !isNaN(p));
   const minPriceCents = validPrices.length > 0 ? Math.min(...validPrices) : 3529;
 
-  // Alto del recortable ≈ 52% del alto del panel (~352px en panel de 672px)
-  const garmentHeight = Math.round(panelHeight * 0.5238);
+  // Reservar la altura de la leyenda (64px en pantallas compactas <=350px, 90px en <=450px, 120px en 672px estándar)
+  const isCompact = panelHeight <= 350;
+  const alturaLeyenda = isCompact ? 64 : panelHeight <= 450 ? 90 : 120;
+
+  // Calcular garmentHeight: min(0.52 * panelHeight, panelHeight - alturaLeyenda - 58 (riel) - 50 (gancho) - 16) con mínimo de 120px
+  const maxAvailableForGarment = panelHeight - alturaLeyenda - 58 - 50 - 16;
+  const desiredGarmentHeight =
+    panelHeight >= 600
+      ? Math.round(panelHeight * 0.5238) // 352px exactos en 672px
+      : Math.round(panelHeight * 0.52);
+
+  const garmentHeight = Math.max(
+    120,
+    Math.min(desiredGarmentHeight, maxAvailableForGarment),
+  );
 
   return (
     <section
@@ -499,7 +627,10 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
       </div>
 
       {/* ── Leyenda inferior (RackCaption) ── */}
-      <div className="absolute left-0 right-0 bottom-3 h-[160px] pointer-events-auto">
+      <div
+        style={{ height: `${alturaLeyenda}px` }}
+        className="absolute left-0 right-0 bottom-2 pointer-events-auto"
+      >
         <RackCaption
           item={openItem}
           totalCount={items.length}
@@ -510,6 +641,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
           onToggleWishlist={toggleWishlist}
           onSelectVariant={selectVariant}
           interactive={mode === 'interactive'}
+          compact={isCompact}
         />
       </div>
     </section>

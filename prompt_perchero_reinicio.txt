@@ -1,0 +1,96 @@
+PROMPT PARA ANTIGRAVITY — Reinicio del perchero cuando la persona se va
+Guardar en la raíz del repo como: prompt_perchero_reinicio.txt
+Rama: fix/perchero-reinicio (desde main actualizado, después del merge de feature/diag-mano)
+
+====================================================================
+1. QUÉ PASA HOY (verificado en la app compilada y en una prueba real de Dario)
+====================================================================
+Flujo de salida actual (useKioskPresenceSync + CooldownCountdown): la persona se va → ~6.5 s hasta
+presence 'absent' → 25 s → COOLDOWN ("¿SIGUES AHÍ?", 5 s) → reset() → ATTRACT. Eso funciona.
+
+El problema es lo que NO se limpia:
+a) kiosk.reset() (y transition('ATTRACT')) NO limpia la prenda activa. Simulado: TRYON con
+   990F0-JYFJ1 puesta → 31 s después state = ATTRACT pero activeGarmentId sigue = '990F0-JYFJ1'.
+   La siguiente persona llega con la prenda del anterior puesta en el AR, y en el perchero ve el
+   gancho vacío y la leyenda del visitante anterior. Lo mismo pasa con la wishlist (corazones
+   llenos del visitante anterior) y los filtros. Solo restartSession() (botón REINICIAR) limpia todo.
+   Este defecto existe también en la interfaz clásica (la tarjeta queda seleccionada).
+b) RackPanel interactive está montado siempre, así que conserva su estado local (focusIdx,
+   returningId, isBusyRef, clases de mecida) entre visitantes.
+c) La "mecida de despertar" está atada a [mode, items]; como items se recalcula con
+   activeGarmentId, TODO el perchero se mece en cada selección, y nunca cuando de verdad despierta.
+   La precarga de imágenes también se repite en cada selección por la misma razón.
+d) Con ventana horizontal y ?layout=portrait (prueba en laptop) el panel mide ~300 px de alto y los
+   recortables tapan la leyenda ("FUNCTIONAL HOODED SWEAT JACKET" queda cortado por las prendas).
+
+====================================================================
+2. REGLAS
+====================================================================
+- No tocar AttractPanel/vitrina, CatalogPanel/CatalogCard (salvo que el arreglo de la sección 3.1
+  cambie su estado a través del store, que es lo esperado), public/, catalog.json, AR/FASHN/Lucy.
+- No editar tests existentes; agregar tests nuevos.
+- No cambiar los tiempos (5 s, 25 s, 5 s): es decisión de producto, no de este prompt.
+- UTF-8. VITE_AI_BACKEND_URL intacto.
+
+====================================================================
+3. CAMBIOS
+====================================================================
+3.1 Fin de visita = estado limpio (src/store/kiosk.ts)
+  - Extraer de restartSession() una función `clearVisitorState()` que haga exactamente los pasos
+    a, b y c actuales (clearPhoto, clearGarment + wishlist + filtros, sizing reset), sin transicionar.
+  - restartSession() = clearVisitorState() + transition('ATTRACT')  (comportamiento idéntico al de hoy).
+  - reset(): además de lo que hace hoy, llamar clearVisitorState() ANTES del set a ATTRACT.
+  - transition(newState) cuando newState === 'ATTRACT' y prev !== 'ATTRACT': llamar
+    clearVisitorState() (hoy ya llama clearPhoto; reemplazarlo por clearVisitorState()).
+  - Cuidar el orden con analytics: endSession debe seguir ocurriendo con el outcome real (no tocar
+    esa lógica; clearVisitorState va después de endSession).
+  - Evitar dobles llamadas si restartSession → transition('ATTRACT') ya limpió (es idempotente,
+    pero no debe registrar eventos dos veces; clearVisitorState no registra analytics).
+
+3.2 Estado local del perchero (src/components/rack/RackPanel.tsx)
+  - Cuando `active` pasa de true a false Y activeGarmentId es null (fin de visita), o cuando el
+    kioskState pasa a 'ATTRACT': focusIdx = null, returningId = null, isBusyRef = false, clases de
+    mecida vacías, cancelar timeouts pendientes y eliminar del DOM cualquier clon de vuelo que siga
+    vivo (guardar referencias a las animaciones/elementos de flyElement para poder cancelarlas).
+  - Leyenda sin foco = resumen "Colección Suzuki / 10 prendas / desde $35.29".
+
+3.3 Mecida de despertar y precarga
+  - La mecida escalonada desde el centro se dispara SOLO cuando `active` pasa de false a true
+    (la persona terminó el onboarding y aparece el perchero). Nunca por cambios de items.
+  - La precarga depende de la lista de URLs del catálogo (useMemo sobre catalog), no de items.
+  - Seleccionar una prenda mece solo esa prenda (como ya hace kick(index)).
+
+3.4 Leyenda nunca tapada (src/components/rack/RackPanel.tsx + rack.css)
+  - Reservar la altura de la leyenda (medirla o fijarla, p. ej. 120 px en 672) y calcular:
+      garmentHeight = min(0.52 × panelHeight, panelHeight − alturaLeyenda − 58 (riel) − 50 (gancho) − 16)
+    con un mínimo de 120 px. El ancho de los slots se escala en proporción.
+  - Verificar en 1080×672 (kiosko real: debe verse igual que hoy) y en 1915×305
+    (laptop horizontal con ?layout=portrait: sin superposición).
+
+====================================================================
+4. TESTS NUEVOS
+====================================================================
+- kiosk-visitor-reset.test.ts:
+    · TRYON con prenda, wishlist y perfil → reset() → ATTRACT, activeGarmentId null, wishlist vacía,
+      sizing sin perfil, foto limpia.
+    · transition('ATTRACT') desde COOLDOWN hace la misma limpieza.
+    · restartSession() sigue dejando exactamente el mismo estado que hoy.
+    · endSession recibe el outcome correcto antes de limpiar (photo_taken si hubo foto).
+- rack-reset.test.tsx:
+    · Con prenda puesta y foco en otra, pasar kioskState a ATTRACT → focusIdx null, ningún slot vacío,
+      leyenda en modo resumen, ningún elemento .rack-flyer (o la clase del clon) en el DOM.
+    · La mecida de despertar se dispara al pasar active false→true y NO al seleccionar una prenda
+      (espiar kick o contar slots con clase de mecida).
+
+====================================================================
+5. EVIDENCIA
+====================================================================
+- Salida final de tsc --noEmit, npm run lint, npm test (raíz y backend/), npm run build.
+- Prueba en el navegador (vite preview, cámara falsa, estados con window.__stores):
+    1) TRYON + prenda puesta → esperar el ciclo de salida (~31 s sin persona) → captura del panel:
+       perchero en modo atracción, sin gancho vacío.
+    2) Forzar de nuevo TRYON con perfil → captura: perchero limpio, leyenda en resumen, sin prenda
+       en el AR.
+    3) Captura 1915×870 con ?layout=portrait&ui=perchero en estado TRYON: la leyenda no está tapada.
+  Guardar en scripts/qa_output/perchero/reinicio-1.png, reinicio-2.png, laptop-horizontal.png.
+- git diff --stat main: solo src/store/kiosk.ts, src/components/rack/**, tests nuevos y capturas.
