@@ -7,9 +7,10 @@ import './rack.css';
 
 interface RackPanelProps {
   mode: 'attract' | 'interactive';
+  active?: boolean;
 }
 
-export function RackPanel({ mode }: RackPanelProps) {
+export function RackPanel({ mode, active = true }: RackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -24,6 +25,7 @@ export function RackPanel({ mode }: RackPanelProps) {
   const [panelHeight, setPanelHeight] = useState<number>(672);
   const [focusIdx, setFocusIdx] = useState<number | null>(mode === 'attract' ? 0 : null);
   const [kickClasses, setKickClasses] = useState<string[]>([]);
+  const [returningId, setReturningId] = useState<string | null>(null);
   const isBusyRef = useRef<boolean>(false);
 
   // Construir items del perchero con catálogo real y variante activa
@@ -262,7 +264,7 @@ export function RackPanel({ mode }: RackPanelProps) {
   // Tomar o devolver una prenda
   const handleTakeOrReturn = useCallback(
     async (index: number) => {
-      if (mode !== 'interactive' || isBusyRef.current) return;
+      if (mode !== 'interactive' || !active || isBusyRef.current) return;
       const item = items[index];
       if (!item) return;
 
@@ -276,17 +278,64 @@ export function RackPanel({ mode }: RackPanelProps) {
 
       try {
         if (isAlreadySelected) {
-          // Deseleccionar y vuelo de regreso
+          // Deseleccionar y mantener slot vacío mientras vuela de regreso
+          setReturningId(item.id);
           selectGarment(null);
-          kick(index);
 
           if (slotImg && flySrc) {
             const slotRect = slotImg.getBoundingClientRect();
             const mirrorRect = getMirrorTargetRect(slotRect);
             await flyElement(flySrc, mirrorRect, slotRect, { arc: -60, tilt: 5 });
           }
+
+          setReturningId(null);
+          kick(index);
+        } else if (currentActiveId) {
+          // Tocar otra prenda con una puesta: la anterior vuelve a su gancho y la nueva sale
+          setFocus(index);
+          kick(index);
+          selectGarment(item.id);
+
+          const prevIdx = items.findIndex((it) => it.id === currentActiveId);
+          const prevItem = prevIdx !== -1 ? items[prevIdx] : null;
+
+          if (prevItem) {
+            setReturningId(prevItem.id);
+          }
+
+          // Vuelo de regreso de la anterior
+          const returnPromise = (async () => {
+            if (prevItem && prevIdx !== -1) {
+              const prevSlotEl = slotRefs.current[prevIdx];
+              const prevSlotImg =
+                prevSlotEl?.querySelector<HTMLElement>('.rack-garment') || prevSlotEl;
+              const prevFlySrc = prevItem.illustrationUrl || prevItem.fallbackPhotoUrl;
+              if (prevSlotImg && prevFlySrc) {
+                const prevSlotRect = prevSlotImg.getBoundingClientRect();
+                const mirrorRect = getMirrorTargetRect(prevSlotRect);
+                await flyElement(prevFlySrc, mirrorRect, prevSlotRect, {
+                  arc: -60,
+                  tilt: 5,
+                });
+              }
+              setReturningId((cur) => (cur === prevItem.id ? null : cur));
+              kick(prevIdx);
+            }
+          })();
+
+          // 120 ms después, vuelo de la nueva
+          const takePromise = (async () => {
+            await new Promise((resolve) => setTimeout(resolve, 120));
+            if (slotImg && flySrc) {
+              const slotRect = slotImg.getBoundingClientRect();
+              const mirrorRect = getMirrorTargetRect(slotRect);
+              await flyElement(flySrc, slotRect, mirrorRect, { arc: -140, tilt: -6 });
+            }
+          })();
+
+          await Promise.all([returnPromise, takePromise]);
         } else {
-          // Si había otra puesta, se deselecciona esa y la nueva vuela hacia el espejo
+          // Ninguna puesta: la nueva vuela hacia el espejo
           setFocus(index);
           kick(index);
           selectGarment(item.id);
@@ -298,15 +347,16 @@ export function RackPanel({ mode }: RackPanelProps) {
           }
         }
       } finally {
+        setReturningId(null);
         isBusyRef.current = false;
       }
     },
-    [mode, items, selectGarment, kick, setFocus, getMirrorTargetRect, flyElement],
+    [mode, active, items, selectGarment, kick, setFocus, getMirrorTargetRect, flyElement],
   );
 
   // Interacción táctil / puntero con histéresis
   const handlePointerMove = (e: React.PointerEvent) => {
-    if (mode !== 'interactive' || isBusyRef.current) return;
+    if (mode !== 'interactive' || !active || isBusyRef.current) return;
     const x = e.clientX;
 
     // Histéresis: si el cursor permanece dentro del slot abierto, no cambiar
@@ -339,7 +389,7 @@ export function RackPanel({ mode }: RackPanelProps) {
 
   // Teclado (← → Enter Escape)
   useEffect(() => {
-    if (mode !== 'interactive') return;
+    if (mode !== 'interactive' || !active) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
       if (
@@ -366,7 +416,7 @@ export function RackPanel({ mode }: RackPanelProps) {
         if (focusIdx !== null && items[focusIdx]) {
           handleTakeOrReturn(focusIdx);
         }
-      } else if (e.key === 'Escape' || e.key === 'p' || e.key === 'P') {
+      } else if (e.key === 'Escape') {
         e.preventDefault();
         const currentActiveId = useGarmentStore.getState().activeGarmentId;
         if (currentActiveId) {
@@ -384,6 +434,7 @@ export function RackPanel({ mode }: RackPanelProps) {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [
     mode,
+    active,
     focusIdx,
     items,
     activeGarmentId,
@@ -422,7 +473,7 @@ export function RackPanel({ mode }: RackPanelProps) {
         {items.map((item, idx) => {
           const isOpen = focusIdx === idx;
           const isLeft = focusIdx !== null && idx < focusIdx;
-          const isEmpty = activeGarmentId === item.id;
+          const isEmpty = activeGarmentId === item.id || returningId === item.id;
 
           return (
             <RackSlot
@@ -438,7 +489,7 @@ export function RackPanel({ mode }: RackPanelProps) {
               kickClass={kickClasses[idx] || ''}
               garmentHeight={garmentHeight}
               onClick={() => {
-                if (mode === 'interactive') {
+                if (mode === 'interactive' && active) {
                   handleTakeOrReturn(idx);
                 }
               }}

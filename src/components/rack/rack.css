@@ -145,6 +145,7 @@
 .rack-slot.empty .rack-garment {
   opacity: 0;
   pointer-events: none;
+  transition: none;
 }
 
 .rack-focusbar {

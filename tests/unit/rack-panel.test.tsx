@@ -280,4 +280,23 @@ describe('Rack Panel and Showcase', () => {
     expect(slot).toBeTruthy();
     expect(screen.getByAltText('Prenda Especial Sin Ilustración')).toBeTruthy();
   });
+
+  it('con active=false, ArrowRight / Enter / Escape no llaman selectGarment', async () => {
+    const selectGarmentSpy = vi.fn();
+    useGarmentStore.setState({
+      selectGarment: selectGarmentSpy,
+      activeGarmentId: catalogJson[0].id,
+    });
+
+    render(<RackPanel mode="interactive" active={false} />);
+
+    // ArrowRight
+    fireEvent.keyDown(window, { key: 'ArrowRight' });
+    // Enter
+    fireEvent.keyDown(window, { key: 'Enter' });
+    // Escape
+    fireEvent.keyDown(window, { key: 'Escape' });
+
+    expect(selectGarmentSpy).not.toHaveBeenCalled();
+  });
 });

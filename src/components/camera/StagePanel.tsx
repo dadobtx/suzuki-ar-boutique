@@ -149,7 +149,11 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
         }`}
         aria-hidden={!isCatalogVisible}
       >
-        {isPerchero ? <RackPanel mode="interactive" /> : <CatalogPanel />}
+        {isPerchero ? (
+          <RackPanel mode="interactive" active={isCatalogVisible} />
+        ) : (
+          <CatalogPanel />
+        )}
       </div>
     </div>
   );

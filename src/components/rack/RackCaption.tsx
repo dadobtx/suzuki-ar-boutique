@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Heart } from 'lucide-react';
 import type { RackItem } from './buildRack';
@@ -29,17 +29,66 @@ export function RackCaption({
   const { t } = useTranslation();
   const [view, setView] = useState<'front' | 'back'>('front');
 
-  // Reset view when item changes
+  // Estado para retardo y fundido al cambiar de prenda
+  const [displayedItem, setDisplayedItem] = useState<RackItem | null>(item);
+  const [opacity, setOpacity] = useState<number>(1);
+  const [fadeDuration, setFadeDuration] = useState<number>(250);
+  const prevItemIdRef = useRef<string | null | undefined>(item?.id);
+
+  // Sincronizar item con retardo de 300 ms y fundido (150 ms salida / 250 ms entrada)
+  useEffect(() => {
+    // Si no cambió el ID del item (misma prenda, o actualización interna), sincronizar de inmediato
+    if (item?.id === prevItemIdRef.current) {
+      setDisplayedItem(item);
+      return;
+    }
+
+    const prevId = prevItemIdRef.current;
+    prevItemIdRef.current = item?.id;
+
+    const isReduced =
+      typeof window !== 'undefined' &&
+      window.matchMedia?.('(prefers-reduced-motion: reduce)')?.matches;
+
+    // Con prefers-reduced-motion o al inicializar desde null, cambio inmediato
+    if (isReduced || !prevId || !item) {
+      setDisplayedItem(item);
+      setOpacity(1);
+      return;
+    }
+
+    // 1. Fundido de salida de 150 ms
+    setFadeDuration(150);
+    setOpacity(0);
+
+    // 2. El contenido nuevo entra a los ~300 ms del cambio de foco con entrada de 250 ms
+    const timer = setTimeout(() => {
+      setDisplayedItem(item);
+      setFadeDuration(250);
+      setOpacity(1);
+    }, 300);
+
+    // Si el foco cambia otra vez antes, cancelar el anterior (no encolar)
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [item]);
+
+  // Reset view when displayed item changes
   useEffect(() => {
     setView('front');
-  }, [item?.id]);
+  }, [displayedItem?.id]);
 
-  if (!item) {
+  if (!displayedItem) {
     const minPriceFormatted = `$${(minPriceCents / 100).toFixed(2)}`;
     return (
       <div
         data-testid="rack-caption"
-        className="w-full h-full flex flex-col items-center justify-center text-center px-10 transition-opacity duration-300"
+        style={{
+          opacity,
+          transition: `opacity ${fadeDuration}ms ease-out`,
+        }}
+        className="w-full h-full flex flex-col items-center justify-center text-center px-10"
       >
         <span className="font-display text-5xl lg:text-6xl text-white tracking-wider uppercase">
           Colección Suzuki
@@ -57,32 +106,38 @@ export function RackCaption({
   }
 
   const currentVariant =
-    (activeVariantId ? item.variants.find((v) => v.id === activeVariantId) : null) ??
-    item.variants[0];
+    (activeVariantId
+      ? displayedItem.variants.find((v) => v.id === activeVariantId)
+      : null) ?? displayedItem.variants[0];
 
-  const frontThumb = currentVariant?.photoThumbUrl ?? item.photoThumbUrl;
-  const backThumb = item.backThumbnailUrl;
+  const frontThumb = currentVariant?.photoThumbUrl ?? displayedItem.photoThumbUrl;
+  const backThumb = displayedItem.backThumbnailUrl;
   const hasBack = Boolean(backThumb);
   const activeThumb = view === 'back' && backThumb ? backThumb : frontThumb;
 
-  const priceFormatted = `$${(item.priceCents / 100).toFixed(2)}`;
-  const sizesText = item.sizes.length > 0 ? `Tallas ${item.sizes.join(', ')}` : '';
+  const priceFormatted = `$${(displayedItem.priceCents / 100).toFixed(2)}`;
+  const sizesText =
+    displayedItem.sizes.length > 0 ? `Tallas ${displayedItem.sizes.join(', ')}` : '';
   const colorsText =
-    item.variants.length > 1
-      ? `${item.variants.length} colores`
-      : item.colors.length > 1
-        ? `${item.colors.length} colores`
+    displayedItem.variants.length > 1
+      ? `${displayedItem.variants.length} colores`
+      : displayedItem.colors.length > 1
+        ? `${displayedItem.colors.length} colores`
         : '';
 
   const wishlistAria = t(
     isWishlisted ? 'catalog.removeWishlist' : 'catalog.addWishlist',
-    { name: item.name },
+    { name: displayedItem.name },
   );
 
   return (
     <div
       data-testid="rack-caption"
-      className="w-full h-full flex items-center justify-between px-10 gap-8 transition-opacity duration-300"
+      style={{
+        opacity,
+        transition: `opacity ${fadeDuration}ms ease-out`,
+      }}
+      className="w-full h-full flex items-center justify-between px-10 gap-8"
     >
       {/* ── Izquierda: Placa blanca con foto real y filo rojo inferior ── */}
       <div className="flex-shrink-0">
@@ -102,7 +157,7 @@ export function RackCaption({
           {activeThumb ? (
             <img
               src={activeThumb}
-              alt={item.name}
+              alt={displayedItem.name}
               draggable={false}
               className="w-full h-full object-contain select-none pointer-events-none"
             />
@@ -121,7 +176,7 @@ export function RackCaption({
       {/* ── Centro: Nombre, precio, tallas y chips de variante ── */}
       <div className="flex-1 flex flex-col justify-center min-w-0">
         <span className="font-display text-4xl sm:text-5xl lg:text-6xl text-white tracking-wide uppercase line-clamp-2 leading-none">
-          {item.name}
+          {displayedItem.name}
         </span>
 
         <div className="flex flex-wrap items-baseline gap-4 sm:gap-6 mt-2">
@@ -141,10 +196,11 @@ export function RackCaption({
         </div>
 
         {/* Chips de variante si la prenda abierta está seleccionada y tiene variantes */}
-        {isSelected && item.variants.length > 1 && interactive && (
+        {isSelected && displayedItem.variants.length > 1 && interactive && (
           <div className="flex items-center gap-2 mt-3 flex-wrap">
-            {item.variants.map((v) => {
-              const isVarActive = (activeVariantId ?? item.variants[0]?.id) === v.id;
+            {displayedItem.variants.map((v) => {
+              const isVarActive =
+                (activeVariantId ?? displayedItem.variants[0]?.id) === v.id;
               return (
                 <button
                   key={v.id}
@@ -181,7 +237,7 @@ export function RackCaption({
           onClick={(e) => {
             e.stopPropagation();
             if (interactive) {
-              onToggleWishlist(item.sku);
+              onToggleWishlist(displayedItem.sku);
             }
           }}
           className={`w-16 h-16 min-w-[64px] min-h-[64px] rounded-full border border-line bg-surface-2 flex items-center justify-center transition-all cursor-pointer ${
