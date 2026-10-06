@@ -1,0 +1,153 @@
+PROMPT PARA ANTIGRAVITY — Zona activa y persona fija (multitud en el autoshow)
+Guardar en la raíz del repo como: prompt_zona_activa.txt
+Rama: feature/zona-activa (desde main actualizado, DESPUÉS de mergear fix/perchero-reinicio)
+
+====================================================================
+1. PROBLEMA
+====================================================================
+Hoy (main 9f387fa):
+- usePose corre PoseLandmarker con numPoses: 1. MediaPipe devuelve UNA persona sin criterio nuestro
+  y puede saltar de una a otra entre frames: el AR se le pasa a quien camina detrás.
+- usePresence solo promedia la visibility de los landmarks 0, 11, 12, 23, 24 (umbral 0.6, 1 s).
+  No mira tamaño ni posición: alguien detenido a 4 m mirando otro carro puede despertar el kiosko.
+- En la Fase 2 (gestos) cualquier mano en cuadro podría actuar.
+
+Objetivo: el kiosko solo atiende a UNA persona, la que está parada en la marca del piso, y se queda
+con ella hasta que se va, aunque otros crucen detrás o se paren al lado.
+
+====================================================================
+2. PRINCIPIO DE DISEÑO
+====================================================================
+No tocar la máquina de estados ni usePresence. La zona activa se resuelve ANTES: usePose detecta
+hasta N personas, un módulo puro elige al "usuario" y usePose sigue exponiendo `landmarks` (y
+`worldLandmarks`, `mask`) pero SOLO del usuario fijado, o null si no hay nadie elegible. Así
+usePresence, el AR, el encuadre, FASHN y Lucy siguen funcionando igual, pero alimentados por la
+persona correcta.
+
+Todo detrás de un interruptor, como el perchero:
+  ?zona=1 / ?zona=0 (search o hash) > sessionStorage('suzuki-active-zone') > VITE_ACTIVE_ZONE > OFF.
+  Con OFF el comportamiento es EXACTAMENTE el de hoy (numPoses: 1, sin selección).
+  Agregar VITE_ACTIVE_ZONE al env del workflow de deploy (${{ vars.VITE_ACTIVE_ZONE }}).
+
+====================================================================
+3. REGLAS
+====================================================================
+- Sin modelos ni dependencias nuevas: solo PoseLandmarker con numPoses > 1.
+- No modificar kiosk.ts, useKioskPresenceSync, usePresence, el perchero, la vitrina ni el catálogo.
+- No tocar public/, catalog.json, el camino FASHN/Lucy.
+- No editar tests existentes; agregar tests nuevos.
+- UTF-8. VITE_AI_BACKEND_URL intacto.
+
+====================================================================
+4. MÓDULO PURO src/lib/active-zone.ts
+====================================================================
+4.1 Coordenadas: TODO se calcula en coordenadas de la parte VISIBLE del video. En portrait el video
+    se recorta al centro (objectFit cover); usar src/lib/center-crop.ts (computeCropOffset) para
+    pasar de normalizado-del-video a normalizado-de-lo-visible. En landscape (contain) es 1:1.
+
+4.2 Métricas por candidata (una por pose detectada):
+    sw    = ancho de hombros |x11 − x12| (normalizado al ancho visible)
+    cx    = centro del torso: promedio x de 11, 12, 23, 24 (o de 11 y 12 si las caderas tienen
+            visibility < 0.5)
+    vis   = visibility promedio de 0, 11, 12, 23, 24
+    speed = |Δcx| / Δt en anchos-de-pantalla por segundo, suavizado (EMA α 0.3)
+
+4.3 Configuración (objeto ActiveZoneConfig con defaults, sobrescribible por URL para calibrar:
+    ?zona_sw=…&zona_band=…&zona_speed=…):
+      SW_MIN        = 0.09   cerca de la marca (FRAMING_TOO_FAR es 0.12: queda por debajo a propósito)
+      CENTER_BAND   = 0.22   |cx − 0.5| máximo
+      VIS_MIN       = 0.6
+      SPEED_MAX     = 0.35   más rápido = está cruzando
+      LOCK_MS       = 600    elegible y quieta este tiempo antes de fijarla
+      LOST_MS       = 1500   tiempo sin encontrar a la fijada (o fuera de zona) para soltarla
+      HYST          = 0.85 en SW_MIN y +0.05 en CENTER_BAND para la fijada (salir cuesta más que entrar)
+      MATCH_DIST    = 0.15   distancia máxima del punto medio de hombros entre frames para decir
+                             "es la misma persona"
+    Valores iniciales: se calibrarán con las mediciones de Dario (sección 7).
+
+4.4 Elegibilidad (para fijar): sw ≥ SW_MIN, |cx−0.5| ≤ CENTER_BAND, vis ≥ VIS_MIN, speed ≤ SPEED_MAX.
+    Puntaje = sw − 0.5·|cx − 0.5| (más cerca y más centrada gana).
+
+4.5 Identidad entre frames: MediaPipe no da IDs y el orden de las poses cambia. La persona fijada se
+    reencuentra en cada frame como la candidata cuyo punto medio de hombros esté más cerca del
+    anterior (≤ MATCH_DIST). Si nadie cumple, cuenta como "no encontrada" ese frame.
+
+4.6 Función principal:
+      selectUser(candidates, prevState, config, nowMs) → {
+        state,                 // estado interno para el próximo frame (lock, timers, EMA)
+        lockedIndex: number | null,
+        reasons: Array<'locked'|'far'|'offCenter'|'moving'|'lowVis'|'candidate'>,  // por candidata
+        approaching: boolean   // hay alguien centrado y visible pero aún lejos (sw entre 0.6·SW_MIN y SW_MIN)
+      }
+    Reglas:
+    - Sin fijada: fijar la de mayor puntaje que lleve LOCK_MS siendo elegible de forma continua.
+    - Con fijada: NO cambiar a otra aunque otra tenga más puntaje (persona fija). Soltar solo si la
+      fijada no se encuentra o queda fuera de zona (con histéresis) durante LOST_MS.
+    - Al soltar, en el mismo frame no se fija otra: debe cumplir LOCK_MS desde cero.
+
+====================================================================
+5. INTEGRACIÓN EN src/hooks/usePose.ts
+====================================================================
+- Con la zona ON: numPoses 3 (constante POSE_MAX_PERSONS = 3). Con OFF: 1, como hoy.
+- Por frame: construir candidatas → selectUser → si lockedIndex !== null, usar
+  result.landmarks[lockedIndex], worldLandmarks[lockedIndex] y segmentationMasks[lockedIndex];
+  si es null, exponer landmarks/worldLandmarks/mask = null.
+- IMPORTANTE: cerrar TODAS las máscaras de segmentationMasks en cada frame (hoy solo se lee la [0]);
+  con 3 personas, no cerrarlas es una fuga de memoria de GPU.
+- Los 33 filtros One-Euro: reiniciarlos cuando cambia la persona fijada (o se suelta), para que el
+  AR no "arrastre" puntos de la persona anterior.
+- Exponer además en UsePoseResult (sin romper a los consumidores actuales):
+    activeZone: { enabled, lockedIndex, candidates: Array<{sw, cx, vis, speed, reason}>, approaching }
+    lockedWrists: { left: NormalizedLandmark | null, right: NormalizedLandmark | null }  // para la Fase 2
+
+====================================================================
+6. UI MÍNIMA
+====================================================================
+6.1 ?debug=1 (PoseDebug / DiagnosticOverlay): dibujar sobre el espejo
+    - las dos líneas verticales de CENTER_BAND,
+    - un recuadro por candidata: verde = fijada, gris = ignorada, con la razón ("lejos",
+      "descentrada", "moviéndose", "poco visible") y sus valores sw / cx / speed,
+    - el FPS y la latencia del pose (ya existen) para ver el costo de 3 personas.
+6.2 AttractLoop: si activeZone.approaching es true, la línea "PÁRATE EN LA MARCA DEL PISO" pasa de
+    pulso suave a un pulso más marcado (escala 1 → 1.06, 900 ms) para invitar a dar el último paso.
+    Con reduced motion, solo cambio de opacidad. Nada más cambia en la pantalla de atracción.
+
+====================================================================
+7. CALIBRACIÓN (para Dario, documentarlo en el reporte)
+====================================================================
+Con ?debug=1&zona=1&layout=portrait:
+  1) Parado en la marca: anotar sw y cx de su recuadro (debe ser verde).
+  2) A 1 m detrás de la marca y a 3–4 m: anotar sw (deben quedar grises "lejos").
+  3) Alguien cruza caminando detrás: debe quedar gris ("moviéndose" o "lejos") y el AR no salta.
+  4) Alguien se para al lado del usuario: el usuario sigue verde; el acompañante gris o
+     "candidata", y el AR no cambia de persona.
+Con esos números se ajusta SW_MIN y CENTER_BAND por URL hasta que funcione, y luego se fijan
+como defaults.
+
+====================================================================
+8. TESTS NUEVOS (tests/unit/active-zone.test.ts + active-zone-flag.test.ts)
+====================================================================
+- Persona lejana (sw 0.05) centrada y quieta → no se fija; approaching true si sw ≥ 0.054.
+- Persona cerca pero descentrada (cx 0.85) → no se fija ("offCenter").
+- Persona cerca y centrada que cruza (speed 0.8) → no se fija ("moving").
+- Una persona elegible → se fija recién después de LOCK_MS.
+- Dos elegibles → se fija la de mayor puntaje.
+- Con una fijada, aparece otra con más puntaje → la fijada NO cambia.
+- El orden de las poses se invierte entre frames → la identidad se mantiene por MATCH_DIST.
+- La fijada desaparece 1 s y vuelve → sigue fijada; desaparece 1.6 s → se suelta.
+- Histéresis: la fijada con sw 0.08 (entre 0.85·SW_MIN y SW_MIN) sigue fijada.
+- Coordenadas visibles: en portrait, un cx de video que cae fuera del recorte visible cuenta como
+  descentrado.
+- Interruptor: sin parámetro → OFF; ?zona=1 → ON; #/?zona=1 → ON; sessionStorage gana.
+- Con OFF, usePose usa numPoses 1 y entrega landmarks como hoy (mock de PoseLandmarker).
+
+====================================================================
+9. EVIDENCIA
+====================================================================
+- Salida final de tsc --noEmit, npm run lint, npm test (raíz y backend/), npm run build.
+- FPS y latencia del pose con ?zona=1 vs ?zona=0 en la laptop (los de ?debug=1), con 1 persona.
+- Captura real de ?debug=1&zona=1&layout=portrait con la cámara falsa (para ver líneas y panel).
+- Confirmar con un test o una medición que no hay fuga: memoria estable tras 2 min con ?zona=1
+  (performance.memory o el panel de Chrome).
+- git diff --stat main: nada en kiosk.ts, usePresence.ts, useKioskPresenceSync.ts, components/rack,
+  components/catalog, kiosk/AttractPanel, public/.

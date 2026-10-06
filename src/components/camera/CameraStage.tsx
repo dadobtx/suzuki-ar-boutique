@@ -81,6 +81,15 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
       null,
   );
 
+  const [activeZoneOverride, setActiveZoneOverride] = useState<
+    typeof pose.activeZone | null
+  >(
+    (typeof window !== 'undefined' &&
+      (window as unknown as { __activeZoneOverride?: typeof pose.activeZone })
+        .__activeZoneOverride) ||
+      null,
+  );
+
   useEffect(() => {
     const handleUpdate = () => {
       const override = (
@@ -90,9 +99,23 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         setLandmarksOverride(override);
       }
     };
+    const handleZoneUpdate = () => {
+      const override = (
+        window as unknown as { __activeZoneOverride?: typeof pose.activeZone }
+      ).__activeZoneOverride;
+      if (override) {
+        setActiveZoneOverride(override);
+      }
+    };
     window.addEventListener('kiosk-landmarks', handleUpdate);
-    return () => window.removeEventListener('kiosk-landmarks', handleUpdate);
+    window.addEventListener('kiosk-active-zone', handleZoneUpdate);
+    return () => {
+      window.removeEventListener('kiosk-landmarks', handleUpdate);
+      window.removeEventListener('kiosk-active-zone', handleZoneUpdate);
+    };
   }, []);
+
+  const effectiveActiveZone = activeZoneOverride || pose.activeZone;
 
   const effectiveLandmarks = landmarksOverride || pose.landmarks;
 
@@ -414,7 +437,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         />
 
         {/* Attract Loop (headline in mirror cell only when absent) */}
-        {kioskState === 'ATTRACT' && presence === 'absent' && <AttractLoop />}
+        {kioskState === 'ATTRACT' && presence === 'absent' && (
+          <AttractLoop approaching={effectiveActiveZone?.approaching} />
+        )}
 
         {/* Awakening & Calibration mirror overlays */}
         {kioskState === 'AWAKENING' && <AwakeningSplash />}
@@ -471,9 +496,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         <PoseDebug
           canvasRef={overlayCanvasRef}
           videoRef={camera.videoRef}
-          landmarks={pose.landmarks}
+          landmarks={effectiveLandmarks}
           mask={pose.mask}
           layout={layout}
+          activeZone={effectiveActiveZone}
         />
 
         {/* HUD corners on the video area (z-index 30) */}

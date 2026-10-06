@@ -49,6 +49,7 @@ jobs:
           VITE_LIVE_TRYON: ${{ vars.VITE_LIVE_TRYON || secrets.VITE_LIVE_TRYON }}
           VITE_AR_RECORTABLES: ${{ vars.VITE_AR_RECORTABLES || secrets.VITE_AR_RECORTABLES }}
           VITE_SELECTION_UI: ${{ vars.VITE_SELECTION_UI }}
+          VITE_ACTIVE_ZONE: ${{ vars.VITE_ACTIVE_ZONE }}
           VITE_EXPECTED_CAMERA_HEIGHT: ${{ vars.VITE_EXPECTED_CAMERA_HEIGHT }}
 
       - uses: actions/upload-pages-artifact@v3
