@@ -1,0 +1,71 @@
+PROMPT PARA ANTIGRAVITY — Ajustes del perchero (Fase 1) antes de mergear
+Guardar en la raíz del repo como: prompt_perchero_ajustes.txt
+Rama: feature/perchero (la misma). Un solo commit nuevo encima de e9f69d1.
+
+Revisión del código y de la app compilada (1080×1920, ?layout=portrait&ui=perchero, estados forzados
+con window.__stores): tsc, lint y 212 tests pasan; el interruptor, la bifurcación única en StagePanel,
+el favorito y el modo landscape → clásica están bien. Quedan 4 ajustes. Mismas reglas que
+prompt_perchero_fase1.txt (no tocar la clásica, public/, catalog.json ni el camino AR/FASHN/Lucy;
+no editar tests existentes; UTF-8).
+
+--------------------------------------------------------------------
+1. [P2] El teclado del perchero actúa cuando el perchero no está visible
+--------------------------------------------------------------------
+RackPanel en modo "interactive" queda montado siempre (correcto, para la caché), pero su listener
+de keydown está en window y no mira si el panel está visible. Lo comprobé: con kioskState = ATTRACT
+y una prenda seleccionada, presionar Escape ejecutó selectGarment(null). Lo mismo pasaría durante
+el onboarding de talla o en PHOTO_COUNTDOWN (se quitaría la prenda en plena cuenta regresiva), y en
+la Fase 2 los gestos pueden emitir estas mismas acciones.
+- StagePanel ya calcula isCatalogVisible. Pasarlo a RackPanel como prop `active` (solo en el
+  montaje interactive).
+- El listener de teclado se registra solo cuando mode === 'interactive' && active.
+- handleTakeOrReturn también sale temprano si !active.
+- Quitar la tecla "p"/"P" (no estaba en el prompt; la palma se define en la Fase 2). Dejar Escape.
+- Test nuevo (archivo nuevo o casos nuevos en rack-panel.test.tsx, sin modificar los existentes):
+  con active=false, ArrowRight / Enter / Escape no llaman selectGarment.
+
+--------------------------------------------------------------------
+2. [P2] La prenda se ve duplicada durante el vuelo
+--------------------------------------------------------------------
+- AL TOMAR: .rack-garment tiene `transition: opacity 0.25s`, así que en los primeros 250 ms del vuelo
+  se ven el clon y el original en el gancho (captura a los 300 ms: dos chaquetas superpuestas).
+  El recortable del slot tiene que desaparecer en el mismo frame en que nace el clon: sin transición
+  al pasar a vacío (transition solo al volver a aparecer).
+- AL DEVOLVER: hoy se llama selectGarment(null) ANTES del vuelo, y el slot deja de estar vacío al
+  instante, así que el recortable ya está en el gancho mientras el clon todavía viene volando.
+  Mantener el slot vacío hasta que el clon aterriza (estado local `returningId` en RackPanel que
+  fuerza isEmpty para ese slot hasta que termina flyElement), y recién ahí mostrar el recortable,
+  sin transición, y mecer el gancho. selectGarment(null) puede seguir llamándose al inicio para que
+  el AR se apague de inmediato.
+
+--------------------------------------------------------------------
+3. [P3] Al cambiar de prenda, la anterior no vuelve volando
+--------------------------------------------------------------------
+El prompt pedía: "Tocar otra prenda: la actual vuelve a su gancho (vuelo inverso más corto, arco -60)
+y la nueva sale." Hoy la anterior simplemente reaparece en su gancho.
+- En handleTakeOrReturn, si hay una prenda puesta distinta de la tocada: lanzar el vuelo de
+  regreso de la anterior (con el mismo returningId del punto 2) y, 120 ms después, el vuelo de la
+  nueva. Las dos animaciones pueden solaparse. isBusyRef se libera cuando terminan ambas.
+- selectGarment(nueva) se llama al inicio, como hoy.
+
+--------------------------------------------------------------------
+4. [P3] La leyenda cambia antes que el perchero
+--------------------------------------------------------------------
+En modo attract (y al recorrer con el puntero), el nombre y precio de la leyenda cambian al
+instante, mientras el slot tarda 650 ms en girar y abrirse. Durante ese tiempo la leyenda dice
+"Team Black Hoodie" y lo abierto es el polo.
+- RackCaption: cuando cambia el item, fundido de salida de 150 ms y entrada de 250 ms, y el
+  contenido nuevo entra a los ~300 ms del cambio de foco (cuando el slot ya está mayormente
+  abierto). Si el foco cambia otra vez antes, cancelar el anterior (no encolar).
+- Con prefers-reduced-motion: cambio inmediato.
+
+--------------------------------------------------------------------
+EVIDENCIA
+--------------------------------------------------------------------
+- Salida final de tsc --noEmit, npm run lint, npm test (raíz y backend/), npm run build.
+- Capturas reales nuevas en scripts/qa_output/perchero/ (no reemplazar las anteriores):
+    f) vuelo-200ms.png    a 200 ms de tocar una prenda: un solo recortable visible (el clon).
+    g) cambio-400ms.png   a 400 ms de tocar una segunda prenda con otra puesta: se ven los dos
+                          clones en vuelo (uno subiendo y otro regresando) y los dos ganchos vacíos.
+- git diff --stat HEAD~1: solo src/components/rack/**, StagePanel.tsx (la prop active), tests
+  nuevos y las capturas. Nada en public/, catalog/, kiosk/AttractPanel.
