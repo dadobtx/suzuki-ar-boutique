@@ -72,7 +72,17 @@
     "attract": {
       "cta": "STEP CLOSER TO START",
       "title": "TRY THE SUZUKI COLLECTION",
-      "standOnMark": "STAND ON THE FLOOR MARK"
+      "standOnMark": "STAND ON THE FLOOR MARK",
+      "showcase": {
+        "realOne": "THE REAL ONE",
+        "sizes": "SIZES",
+        "colors": "{{count}} COLORS",
+        "cta": "TRY IT ON IN THE MIRROR",
+        "summaryTitle": "SUZUKI COLLECTION",
+        "summaryCount": "{{count}} ITEMS",
+        "summaryFrom": "FROM",
+        "summaryCta": "STAND IN FRONT OF THE MIRROR AND TRY THEM ON"
+      }
     },
     "awakening": {
       "greeting": "LET'S GO!"

@@ -1,0 +1,234 @@
+PROMPT PARA ANTIGRAVITY — Variantes de prenda (chompa reversible) + uso de thumbnails
+Repo: C:\Users\Dario\Documents\Suzuki Boutique  (React + TS + Vite, MediaPipe Pose, FASHN AI, Lucy 2 VTON)
+
+=====================================================================
+CONTEXTO
+=====================================================================
+El catálogo de demo fue reemplazado por el catálogo real de la boutique: 10 prendas
+con número de parte Suzuki (990F0-XXXXX) como id y sku, precio real y tallas reales.
+Las imágenes nuevas son PNG de 2048x2048 con fondo blanco, y cada prenda tiene además
+un thumbnail de 512px (<PN>.thumb.png) y sus anchors (<PN>.anchors.json).
+
+Una de las prendas, la 990F0-BKQJ5 (Team Black Reversible Jacket), es REVERSIBLE:
+tiene cara roja y cara negra. Es UN SOLO producto con UN SOLO número de parte, no dos
+productos. Los assets de las dos caras ya están en public/garments/:
+
+  990F0-BKQJ5.png / .anchors.json / .thumb.png     -> cara ROJA (la de por defecto)
+  990F0-BKQJ5_2.png / .anchors.json / .thumb.png   -> cara NEGRA
+
+public/catalog.json YA TIENE los datos: la entrada de 990F0-BKQJ5 lleva un array
+"variants" con las dos caras (id, label, color, overlayUrl, anchorsUrl, thumbnailUrl),
+y los campos overlayUrl/anchorsUrl/thumbnailUrl de la prenda siguen apuntando a la
+cara roja (la variante por defecto). NO hay que tocar catalog.json.
+
+OBJETIVO: que el cliente, con la prenda reversible activa, pueda elegir con un toque
+qué cara se prueba, y que ese cambio afecte a los TRES caminos de prueba: el overlay
+AR, la foto con FASHN y el live con Lucy 2.
+
+=====================================================================
+PROBLEMA DE FONDO QUE HAY QUE ARREGLAR PRIMERO
+=====================================================================
+Hoy el código NO respeta los campos de assets del catálogo: arma las rutas a partir
+del sku. Mientras siga así, una variante es imposible (las dos caras tienen el mismo
+sku). Estos son los puntos exactos:
+
+1. src/hooks/useGarmentRenderer.ts, líneas ~53 y ~55:
+     image.src = `${base}garments/${garment.sku}.png`;
+     fetch(`${base}garments/${garment.sku}.anchors.json`)
+   Además el caché (garmentCache, loadingSkus, activeSkuRef) está indexado por
+   garment.sku — con variantes eso devolvería la imagen equivocada desde caché.
+
+2. src/lib/liveTryon.ts, línea ~127 (sendGarment):
+     reference_image_url: `https://dadobtx.github.io/suzuki-ar-boutique/garments/${sku}.png`
+   Arma la URL pública desde el sku y además tiene el origen de producción hardcodeado.
+
+3. src/components/catalog/CatalogCard.tsx, línea ~28:
+     const imageUrl = `${baseUrl}${garment.overlayUrl.replace(/^\//, '')}`;
+   Usa el overlay de 2048px (1 a 4 MB por prenda) para la tarjeta del catálogo,
+   ignorando thumbnailUrl. Hay que usar el thumbnail.
+
+4. src/components/kiosk/AIProcessing.tsx, línea ~78: este SÍ usa
+   activeGarment.overlayUrl — está bien, solo hay que pasarlo por el resolver nuevo.
+
+=====================================================================
+IMPLEMENTACIÓN
+=====================================================================
+
+--- 1) Tipos: src/types/garment.ts ---------------------------------
+Agregar:
+
+  export interface GarmentVariant {
+    /** Clave estable de la variante, p.ej. 'roja' | 'negra' */
+    id: string;
+    /** Etiqueta corta para el botón del kiosko */
+    label: string;
+    /** Color hex para el chip */
+    color: string;
+    overlayUrl: string;
+    anchorsUrl: string;
+    thumbnailUrl: string;
+  }
+
+y en la interface Garment, un campo opcional:
+
+  /** Caras/variantes de una misma prenda (p.ej. chompa reversible).
+   *  Si existe, variants[0] es la variante por defecto y coincide con
+   *  overlayUrl/anchorsUrl/thumbnailUrl de la prenda. */
+  variants?: GarmentVariant[];
+
+Es opcional a propósito: las otras 9 prendas no lo llevan y no deben cambiar.
+
+--- 2) Resolver de assets: src/lib/garment-assets.ts (ARCHIVO NUEVO) ---
+Módulo puro, sin React, fácil de testear:
+
+  export interface ResolvedGarmentAssets {
+    /** Clave de caché: sku, o `${sku}#${variantId}` si hay variante */
+    key: string;
+    overlayUrl: string;
+    anchorsUrl: string;
+    thumbnailUrl: string;
+    variant: GarmentVariant | null;
+  }
+
+  export function resolveGarmentAssets(
+    garment: Garment,
+    variantId?: string | null,
+  ): ResolvedGarmentAssets
+
+Reglas:
+ - Sin variants, o variants vacío -> usa overlayUrl / anchorsUrl / thumbnailUrl de la
+   prenda, thumbnailUrl cae a overlayUrl si viene undefined, key = garment.sku,
+   variant = null.
+ - Con variants: si variantId es null/undefined o no existe en la lista, usa
+   variants[0] (NO tirar error, el kiosko no debe quedarse sin prenda por un id malo).
+ - key = `${garment.sku}#${variante.id}`.
+
+--- 3) Estado: src/store/garment.ts --------------------------------
+ - Agregar `activeVariantId: string | null` (inicial null).
+ - Agregar `selectVariant: (variantId: string | null) => void`.
+ - En selectGarment(id): al activar una prenda, setear activeVariantId al
+   `variants[0].id` si la prenda tiene variantes, y a null si no tiene. Esto va en el
+   MISMO set que activeGarmentId (nunca dejar una variante de la prenda anterior).
+ - En clearGarment(): activeVariantId = null.
+ - En el partialize del persist (sessionStorage) agregar activeVariantId, junto a
+   activeGarmentId y filters.
+ - No cambiar la lógica de tallas, wishlist ni las interacciones que ya se registran:
+   la variante NO cambia el sku ni el número de parte (es el mismo producto).
+
+--- 4) Overlay AR: src/hooks/useGarmentRenderer.ts -----------------
+ - Suscribirse también a activeVariantId.
+ - Calcular `const assets = activeGarment ? resolveGarmentAssets(activeGarment, activeVariantId) : null`.
+ - loadGarmentAssets debe recibir los URLs resueltos y la key, NO el garment:
+     loadGarmentAssets({ key, overlayUrl, anchorsUrl })
+   y armar las rutas como `${base}${overlayUrl.replace(/^\//, '')}` (respetando
+   BASE_URL de Vite, que es lo que hace hoy con `${base}garments/...`).
+ - garmentCache, loadingSkus y activeSkuRef pasan a estar indexados por `key`
+   (renombrar a garmentCache/loadingKeys/activeKeyRef para que no quede ambiguo).
+ - El useCallback/useEffect de carga debe depender de la key, de modo que cambiar de
+   cara recargue imagen Y anchors. Cada cara tiene SU PROPIO .anchors.json: no reusar
+   los anchors de la otra cara.
+
+--- 5) Foto con FASHN: src/components/kiosk/AIProcessing.tsx -------
+ - Leer activeVariantId del store y construir fullOverlayUrl desde
+   resolveGarmentAssets(activeGarment, activeVariantId).overlayUrl en vez de
+   activeGarment.overlayUrl.
+ - La descripción que se manda a FASHN (`${line} ${name}`) debe incluir la cara cuando
+   hay variante, p.ej. `Team Black Reversible Jacket (cara Roja)`, para que el modelo
+   no se confunda con el color.
+
+--- 6) Live con Lucy 2: src/lib/liveTryon.ts + CameraStage.tsx -----
+ - liveTryon.ts: cambiar la firma a `sendGarment(referenceImageUrl: string)` y usar ese
+   valor tal cual en reference_image_url. Sacar de ahí el sku y el origen hardcodeado.
+ - LiveTryOnConfig: reemplazar `sku: string` por `referenceImageUrl: string`, y en
+   start() llamar `this.sendGarment(this.config.referenceImageUrl)`.
+ - CameraStage.tsx: construir la URL PÚBLICA absoluta (fal tiene que poder descargarla
+   desde internet; una URL local o localhost no sirve) con una constante nueva:
+       const PUBLIC_ASSETS_BASE =
+         import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
+         'https://dadobtx.github.io/suzuki-ar-boutique/';
+   y `new URL(assets.overlayUrl.replace(/^\//, ''), PUBLIC_ASSETS_BASE).href`.
+   Agregar VITE_PUBLIC_ASSETS_BASE a .env.example con ese valor por defecto y un
+   comentario de que en dev el live sigue apuntando a producción a propósito.
+ - El efecto que hoy reenvía la prenda cuando cambia activeGarment (línea ~175)
+   DEBE depender también de activeVariantId, para que voltear la chompa en medio de la
+   sesión live reenvíe la nueva referencia SIN reconectar (el protocolo de fal lo
+   soporta y así está diseñado hoy el cambio de prenda).
+
+--- 7) UI del selector de cara -------------------------------------
+Componente nuevo: src/components/camera/VariantControls.tsx
+
+ - Se muestra SOLO si la prenda activa tiene variants con length > 1. Para las otras
+   9 prendas no debe aparecer nada (ni un hueco en el layout).
+ - Un chip por variante: círculo relleno con variant.color y la label debajo o al lado.
+   Área táctil mínima de 72x72 px — es un kiosko de 32" en vertical y la gente toca
+   rápido y de pie. La variante activa va marcada con borde/glow (usar el mismo
+   lenguaje visual que SizingControls.tsx: bg-zinc-800, borde brand-red para activo).
+ - Un toque llama a selectVariant(id). No hace falta confirmar nada.
+ - Título corto arriba, tipo "Cara" o "Color".
+ - Montarlo en el HUD de la vista de prueba, junto al control de talla, en el MISMO
+   contenedor donde hoy se renderiza SizingControls (ver CameraStage.tsx). No meterlo
+   en la tarjeta del catálogo: la tarjeta sigue mostrando la cara por defecto.
+ - Textos por i18n (src/i18n/es.json y en.json), no hardcodeados.
+
+--- 8) Tarjeta del catálogo: CatalogCard.tsx -----------------------
+ - Usar thumbnailUrl para la imagen de la tarjeta, con fallback a overlayUrl:
+     const src = garment.thumbnailUrl ?? garment.overlayUrl;
+   Mantener el resto igual (el fade de imgLoaded, el drop-shadow, etc.).
+ - Esto es lo que evita que cada tarjeta descargue 1 a 4 MB. No es cosmético: son
+   10 prendas en una mini PC tirando también de MediaPipe y de la cámara en 4K.
+
+--- 9) Analítica (opcional pero preferible) ------------------------
+ - En src/lib/analytics-events.ts agregar el evento
+     { type: 'garment_variant_selected'; sku: string; variantId: string }
+   y dispararlo desde selectVariant.
+ - SOLO cliente. NO tocar el esquema de D1 ni los endpoints /kiosk/*: la variante no
+   es un SKU distinto y el reporte de demanda por prenda×talla no cambia.
+
+=====================================================================
+TESTS
+=====================================================================
+Agregar tests/unit/garment-assets.test.ts cubriendo resolveGarmentAssets:
+ - prenda sin variants -> devuelve los campos de la prenda, key = sku, variant = null
+ - prenda sin variants y sin thumbnailUrl -> thumbnailUrl cae a overlayUrl
+ - prenda con variants y variantId null -> devuelve variants[0]
+ - prenda con variants y variantId inexistente -> devuelve variants[0] (no lanza)
+ - prenda con variants y variantId válido -> devuelve esa variante y
+   key === `${sku}#${variantId}`
+ - las dos caras de 990F0-BKQJ5 dan keys DISTINTAS (es la garantía de que el caché del
+   renderer no sirve la imagen equivocada al voltear la chompa)
+
+Los tests existentes de garment-filter y sizing no deben cambiar: las prendas sin
+variantes se comportan igual que antes.
+
+=====================================================================
+VERIFICACIÓN MANUAL ANTES DE DAR POR HECHO
+=====================================================================
+1. npm run dev, abrir el catálogo: las 10 prendas cargan con su foto y su precio, y la
+   pestaña de líneas muestra Team Black / Team Blue / GSX-R / Jimny / Lifestyle.
+2. En la pestaña Network del navegador, al listar el catálogo se descargan los
+   *.thumb.png (100-250 KB), NO los PNG de 2048px.
+3. Activar 990F0-BKQJ5: aparece el selector de cara con dos chips. Al tocar "Negra" el
+   overlay AR cambia a la chompa negra (no solo el chip) y al volver a "Roja" regresa.
+   Repetir el ciclo 3 o 4 veces: no debe quedarse pegada la cara anterior (eso sería
+   el caché por sku sin arreglar).
+4. Activar cualquier otra prenda: el selector NO aparece.
+5. Tomar una foto con FASHN con la cara negra activa: la prenda generada es la negra.
+6. Con VITE_LIVE_TRYON=on, iniciar el live y voltear la cara en medio de la sesión: la
+   referencia cambia sin reconectar y sin cortar el contador.
+7. Revisar en consola que no haya 404 de garments/*.
+
+=====================================================================
+GATES OBLIGATORIOS ANTES DEL COMMIT
+=====================================================================
+  npx tsc --noEmit
+  npm run lint
+  npm test            (raíz y backend/)
+  npm run build
+
+Notas del repo que ya nos han mordido antes:
+ - Guardar TODO en UTF-8 sin BOM. Editar estos archivos con otra codificación ya
+   corrompió KioskPage.tsx una vez (NUL/truncado) y hubo que reconstruirlo entero.
+ - No reintroducir VITE_BACKEND_URL: la variable correcta es VITE_AI_BACKEND_URL.
+ - No renombrar 990F0-BKQJ5_2.png ni crear un segundo producto para la cara negra.
+ - Al terminar, entregar el DIFF real de cada archivo tocado. El walkthrough narrado
+   no sirve como evidencia: el código se revisa línea por línea.

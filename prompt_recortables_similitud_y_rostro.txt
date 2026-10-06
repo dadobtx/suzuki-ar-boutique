@@ -1,0 +1,294 @@
+PROMPT PARA ANTIGRAVITY — Recortables: transformación de similitud, mangas completas y protección del rostro
+Repo: C:\Users\Dario\Documents\Suzuki Boutique
+Rama: seguir en feature/recortables-ar-intro (o una nueva a partir de ella). NO desplegar.
+
+Corrección del piloto de recortables tras la primera prueba en cámara real (2026-09-15,
+camiseta 990F0-BKTM1 y chaleco 990F0-BKBW5, webcam 640x480 a 30fps, usuario encuadrado
+de cabeza a cintura).
+
+=====================================================================
+QUÉ SE VIO EN CÁMARA
+=====================================================================
+1. La camiseta se estrecha en el bajo: el ruedo se cierra en punta hacia la cintura.
+   El cuello, en cambio, quedó BIEN colocado — esa referencia se conserva.
+2. Las mangas se difuminan y se cortan parcialmente en el borde exterior.
+3. La capucha del chaleco cae sobre la boca y la nariz: se lee como un tapabocas rojo.
+4. El chaleco también se estrecha y se deforma en el bajo.
+
+=====================================================================
+ESTADO DEL CÓDIGO — VERIFICADO LEYENDO LOS ARCHIVOS, NO EL WALKTHROUGH
+=====================================================================
+Los cinco hallazgos de la revisión previa siguen presentes en la rama actual:
+
+ a. src/hooks/useGarmentRenderer.ts L696: `warpGarment(ctx, cached.img, anchorsSrc, renderDst)`
+    se usa TAMBIÉN para las ilustraciones — deformación por triángulos de Delaunay con
+    hombros y caderas.
+ b. L555-563: HIP_WIDEN_FACTOR = 1.15 aplicado en todos los modos.
+ c. L701-722: máscara de persona completa con `globalCompositeOperation = 'destination-in'`,
+    sin distinguir modo ilustración.
+ d. src/components/ar/GarmentOverlay.tsx L77: `filter: 'blur(0.5px)'` sobre todo el canvas.
+ e. L596-609: el límite superior sale de `topClipY ?? (shoulderY - NECK_MARGIN_PX)`. Es un
+    corte horizontal en coordenadas de la IMAGEN: no sabe dónde está la cara del usuario.
+
+=====================================================================
+DIAGNÓSTICO — POR QUÉ PASA CADA COSA
+=====================================================================
+ESTRECHAMIENTO DEL BAJO (síntomas 1 y 4). Dos causas que se suman:
+
+  (i) El warp lleva las caderas de la ilustración a los landmarks 23/24 de MediaPipe, que
+      están sobre las crestas ilíacas y son bastante más angostos que la silueta de la
+      prenda. En la camiseta los anchors de origen tienen hombros a 667px y caderas a
+      557px (ratio 0.835); en el cuerpo, el par de caderas proyectado suele quedar en
+      0.55-0.65x el ancho de hombros, y ni siquiera el 1.15 de HIP_WIDEN_FACTOR alcanza
+      para llegar a 0.835. El resultado es exactamente el ruedo cerrándose en punta.
+      Subir más el factor NO es la solución: deforma sin conservar proporciones.
+
+  (ii) Y probablemente la causa dominante en esta prueba: el usuario está encuadrado hasta
+      la cintura, así que los landmarks de cadera caen fuera de cuadro o con visibilidad
+      baja, y entra el camino de estimación de L410-472. Ese camino usa como punto de
+      ORIGEN las constantes hardcodeadas `{x: 320, y: 800}` y `{x: 704, y: 800}`
+      (L422, L438, L464, L468) — 384px de separación, heredadas del catálogo demo de
+      1024px. Sobre una ilustración de 1254px cuyas caderas reales están a 557px de
+      separación, eso mapea una franja de origen mucho más angosta al mismo destino: el
+      bajo se comprime todavía más. Es el resabio que documentamos y dejamos intacto a
+      propósito.
+
+  La corrección pedida (similitud, sin caderas) resuelve las dos de raíz y además deja
+  esas constantes fuera del camino de ilustración sin tocarlas: siguen sirviendo, sin
+  cambios, a las 8 prendas fotográficas en producción.
+
+MANGAS (síntoma 2). Dos causas independientes:
+  (i) el `blur(0.5px)` del canvas, que existe para disimular las costuras entre triángulos
+      de Delaunay — y si no hay triángulos, ya no hace falta;
+  (ii) la máscara de persona con `destination-in`: recorta el overlay a la silueta del
+      usuario, así que toda manga o ruedo que sobresalga del cuerpo se borra. Con brazos
+      pegados al cuerpo, las mangas ilustradas son más anchas que los brazos reales y se
+      comen justamente por el borde exterior.
+
+CAPUCHA SOBRE LA CARA (síntoma 3). No es un error de calibración: es geometría.
+  En la ilustración del chaleco la capucha ocupa de y=10 a la línea de hombros y=245, es
+  decir 235px por encima de los hombros, con los anchors de hombro a 600px de separación.
+  Eso es 0.39x el ancho de hombros proyectado por encima de la línea de hombros. En
+  proporciones humanas medidas desde esa línea: mentón ~0.30x, boca ~0.40x, ojos ~0.55x.
+  La punta de la capucha cae justo a la altura de la boca, que es exactamente lo que se ve.
+  Ningún valor de topClipY lo arregla bien: recortar a media capucha deja un corte
+  horizontal duro. Hace falta una zona de exclusión de cabeza/rostro.
+
+=====================================================================
+CAMBIOS
+=====================================================================
+
+--- 1) Módulo puro nuevo: src/lib/illustration-transform.ts ---------
+Toda la matemática afuera de React, testeable sin canvas.
+
+  export interface SimilarityTransform {
+    /** traslación en coords CSS del canvas */
+    tx: number; ty: number;
+    /** escala uniforme (la misma en x e y) */
+    scale: number;
+    /** rotación en radianes, ya limitada */
+    rotation: number;
+  }
+
+  export interface SimilarityInput {
+    srcShoulderL: Point; srcShoulderR: Point;   // px de la ilustración
+    dstShoulderL: Point; dstShoulderR: Point;   // CSS del canvas
+    referenceScale: number | null;              // escala estable previa, null al inicio
+    fitFactor?: number;                         // por prenda, default 1.0
+  }
+
+  export function computeSimilarityTransform(i: SimilarityInput): SimilarityTransform
+
+Reglas:
+ - Ms = punto medio de los hombros de ORIGEN; Ds = distancia entre ellos.
+ - Md = punto medio de los hombros de DESTINO; Dd = distancia entre ellos.
+ - scale = (Dd / Ds) * fitFactor, UNIFORME. Nunca escalas x e y independientes.
+ - rotation = atan2 de la línea de hombros de destino, LIMITADA a ±15° (constante
+   MAX_ROTATION_RAD exportada). Más allá del límite se satura, no se recorta de golpe.
+ - Anti-colapso de escala: si `referenceScale` no es null, limitar `scale` al rango
+   [0.80, 1.25] x referenceScale. Cuando el usuario gira el cuerpo, la distancia entre
+   hombros proyectada se acorta y sin este límite el recortable se encoge de golpe.
+ - La transformación resultante mapea Ms -> Md. Nada más: no hay caderas, no hay
+   estiramiento vertical, no hay puntos de ruedo.
+
+  export interface HeadExclusion { cx: number; cy: number; rx: number; ry: number }
+  export function computeHeadExclusion(
+    landmarksCss: { ear L/R, eyes, nose, mouth ... ya mapeados a CSS },
+  ): HeadExclusion | null
+
+Reglas de la zona de cabeza (ver punto 3 para el uso):
+ - Base: punto medio de las orejas (landmarks 7 y 8) y la distancia entre ellas, dEar.
+ - cx, cy = punto medio de las orejas; cy desplazado hacia arriba 0.10 * dEar.
+ - rx = 0.75 * dEar,  ry = 1.05 * dEar.  Con esos valores la elipse cubre desde algo por
+   encima de la coronilla (~0.85 dEar) hasta por debajo del mentón (~0.55 dEar), con
+   margen. Son valores de arranque: ajustalos en cámara y documentá los finales.
+ - Si alguna oreja tiene visibilidad suavizada por debajo del umbral, devolver null
+   (ver punto 3: sin zona fiable, no se dibuja el recortable).
+
+--- 2) Renderizado de ilustración: src/hooks/useGarmentRenderer.ts ---
+Rama separada y explícita para `isIllustrationRef.current === true`. La rama fotográfica
+queda EXACTAMENTE como está hoy: mismo warp de triángulos, mismas caderas, mismo
+HIP_WIDEN_FACTOR, misma máscara, mismos clips. No se toca.
+
+En la rama de ilustración:
+ - Se usan SOLO los anchors `shoulderL` y `shoulderR` (con su `offset`, que es parte de por
+   qué el cuello quedó bien colocado: conservalo). `hipL`/`hipR`, `topClipY` y
+   `bottomClipY` quedan SIN USO en este modo — dejalos en los .anchors.json y documentá
+   en el JSON y en el código que se ignoran acá, para que nadie los ajuste esperando efecto.
+ - Suavizar con los OneEuroFilter que ya están conectados: punto medio de hombros (x, y) y
+   distancia entre hombros. La escala se calcula a partir del ancho YA suavizado.
+ - Mantener una `referenceScale`: mediana móvil (o media lenta) de la escala mientras el
+   tracking es bueno, para alimentar el anti-colapso del punto 1.
+ - Dibujar con `ctx.setTransform` / `translate` + `rotate` + `scale` uniforme y un solo
+   `drawImage` de la ilustración completa. NO llamar a `warpGarment` en este modo.
+ - NO aplicar la máscara de persona (`destination-in`) en este modo: el recortable es una
+   pegatina que va encima del video y su alfa propio ya define el borde. Esto es lo que
+   devuelve mangas y ruedo completos. La rama fotográfica sigue usando la máscara.
+ - Conservar el fade de proximidad por distancia entre orejas que ya existe, y el fundido
+   por pérdida de tracking (SUSTAINED_THRESHOLD_MS / FADE_DURATION_MS) que ya implementaste.
+ - El rebote de colocación sigue igual, pero ahora aplicado sobre `scale` (un solo número),
+   no sobre una lista de puntos: queda más simple y no puede deformar.
+
+DECISIÓN QUE HAY QUE TOMAR — ESPEJO DEL DIBUJO. Hoy el canvas se dibuja dentro de
+`translate(cssWidth,0); scale(-1,1)`, así que la ilustración sale espejada y cualquier logo
+o texto se lee al revés. Con las fotos reales casi no se notaba. Como uno de los criterios
+de aceptación es que no haya logos espejados, en modo ilustración dibujá el PNG
+CONTRA-ESPEJADO (un `scale(-1,1)` adicional alrededor del centro del recortable), de modo
+que la COLOCACIÓN siga espejada —y por lo tanto siga pegada al cuerpo del usuario— pero el
+dibujo se lea correcto. Verificá el resultado comparando el logo en pantalla contra el PNG
+de origen; no lo des por hecho.
+
+--- 3) Zona de exclusión de cabeza y rostro -------------------------
+Qué seguimiento hay disponible, verificado: `usePose.ts` carga
+`pose_landmarker_full.task` con `numPoses: 1` y `outputSegmentationMasks: true`. Eso da los
+33 landmarks de pose — que INCLUYEN cara: 0 nariz, 1-6 ojos, 7-8 orejas, 9-10 comisuras de
+la boca — y una máscara de PERSONA COMPLETA. NO hay segmentación facial, ni face mesh, ni
+nada que distinga rostro de torso. La máscara de persona no sirve para esto: la cabeza es
+parte de la persona, así que un `destination-in` conserva el dibujo sobre la cara en lugar
+de quitarlo.
+
+Entonces: región conservadora ESTIMADA a partir de landmarks de pose, y documentada como
+tal. En el código, en el JSON y en el entregable, llamala estimación por pose. No la
+presentes como segmentación facial precisa, porque no lo es.
+
+Implementación, en modo ilustración, inmediatamente después de dibujar el recortable:
+ - `computeHeadExclusion(...)` con los landmarks ya mapeados a CSS por la MISMA ruta que
+   los hombros (videoToCss en portrait / videoToCssContain en landscape, y dentro del mismo
+   contexto espejado). Comprobá las coordenadas contra el esqueleto de debug (?dev=1) antes
+   de confiar en ellas: si la elipse queda corrida, es el espejo o el crop, no la fórmula.
+ - `ctx.globalCompositeOperation = 'destination-out'` y rellenar la elipse. Con eso el
+   recortable desaparece donde está la cabeza y se ve la cámara: la prenda queda
+   visualmente DETRÁS. Usá un borde suave (gradiente radial de ~8-10% del radio) para que
+   no quede un recorte duro.
+ - Si `computeHeadExclusion` devuelve null (orejas no fiables), NO dibujes el recortable en
+   ese frame: entra al mismo fundido de pérdida de tracking que ya existe. Es preferible que
+   la prenda se retire un momento a que tape una cara.
+ - NO bajes la prenda entera para esquivar la cara: desalinea hombros y cuello, que es
+   justo lo que hoy funciona bien.
+
+Expectativa: con la exclusión, del chaleco debería quedar el aro exterior de la capucha
+alrededor de la cabeza, que es como se ve una capucha caída detrás del cuello. Si al
+probarlo no convence, REPORTALO y pedimos una ilustración con la capucha más baja detrás
+del cuello. No modifiques el dibujo ni deformes el chaleco para compensar.
+
+--- 4) Anchors: cuello propio por prenda ---------------------------
+Agregá un anchor `neck` (el tipo `GarmentAnchor` ya admite el id 'neck') a los dos
+.anchors.json de ilustración, para poder calibrar la abertura del cuello con independencia
+de la parte alta de la prenda. Medidas que ya saqué de los PNG, en coordenadas nativas
+1254x1254 (usalas como punto de partida y ajustá mirando el dibujo):
+
+  990F0-BKTM1: centro de la prenda en la línea de hombros x=623. El vivo rojo del cuello
+    va de y=105 a y=228, centrado en x=628. La abertura del cuello está alrededor de
+    y=105-130  ->  neck ~ (623, 120).
+    Silueta: y=89 ancho 311, y=129 ancho 440, y=169 ancho 630, y=189 (hombros) ancho 725.
+
+  990F0-BKBW5: centro x=621. El forro rojo de la CAPUCHA ocupa de y=27 a y=284 — o sea que
+    la capucha y su forro bajan por debajo de la línea de hombros (y=245). La base del
+    cuello, donde la capucha se encuentra con el cuerpo, está alrededor de y=245-284
+    ->  neck ~ (621, 265). La punta de la capucha (y=10) está a 255px de ese punto: por eso
+    hay que calibrar las dos cosas por separado, como se pidió.
+    Silueta: la columna de la capucha mide ~400px de ancho constante de y=105 a y=205, y
+    recién en y=225 empieza a ensancharse hacia los hombros.
+
+--- 5) GarmentOverlay.tsx ------------------------------------------
+ - `filter: 'blur(0.5px)'` solo cuando el modo activo es fotográfico. En ilustración, sin
+   blur: el PNG tiene su propio antialias y su borde de pegatina, y el blur global es lo
+   que come el contorno de las mangas.
+ - El blur está hoy en el estilo del canvas, que es un único elemento compartido por los
+   dos modos: vas a necesitar exponer el modo desde el hook (ya tenés `isIllustrationRef`;
+   sacalo como parte del resultado del hook, o derivalo en el componente con
+   `resolveGarmentIllustration`) para alternar el estilo. No dupliques el canvas.
+
+--- 6) Separación de funcionalidades (sin cambios de código, a verificar) ---
+ - FASHN (`AIProcessing.tsx`) y Lucy (`CameraStage.tsx`, `liveTryon.ts`) siguen usando
+   `resolveGarmentAssets` y la foto real. Los tests de aislamiento que ya escribiste deben
+   seguir en verde.
+ - `photo-composer.ts` sigue recibiendo el canvas del esqueleto de debug, no el de
+   GarmentOverlay: la captura limpia para FASHN nunca lleva el dibujo. Test existente.
+ - Nombres de archivo, SKU y variantes reversibles sin cambios.
+
+=====================================================================
+TESTS AUTOMATIZADOS
+=====================================================================
+tests/unit/illustration-transform.test.ts (nuevo), sobre el módulo puro:
+ - Conservación de proporciones: para varias entradas, la transformación devuelve una
+   escala única; aplicada a las cuatro esquinas del PNG, la relación ancho/alto del
+   cuadrilátero resultante es igual a la del origen (tolerancia 1e-6). Este es el test que
+   habría atrapado el estrechamiento del bajo.
+ - Relación bajo/superior constante: tomando dos anchos del dibujo (a la altura de los
+   hombros y a la altura del ruedo), su cociente después de transformar es el mismo que
+   antes.
+ - Límite de rotación: con una línea de hombros a 40°, la rotación devuelta se satura en
+   MAX_ROTATION_RAD y no salta.
+ - Anti-colapso de escala: con `referenceScale` fijo y un `Dd` que cae a la mitad (giro de
+   cuerpo), la escala devuelta no baja de 0.80 x referenceScale.
+ - Escala uniforme: nunca hay dos factores distintos para x e y (el tipo ya lo impide, pero
+   dejá el test como documentación de la regla).
+ - computeHeadExclusion: con orejas a distancia conocida, la elipse cubre el punto de la
+   boca (landmarks 9/10) y el de la nariz (0); devuelve null si la visibilidad de una oreja
+   está por debajo del umbral.
+
+Extender tests/unit/garment-illustration.test.ts:
+ - que los .anchors.json de ilustración tengan ahora un anchor `neck`.
+
+Los tests existentes de garment-assets, back-view, sizing y los de aislamiento no deben
+cambiar de resultado.
+
+=====================================================================
+VALIDACIÓN EN CÁMARA — LA HACE DARÍO, NO LA DECLARES HECHA
+=====================================================================
+Estos tests automatizados verifican la matemática, no la experiencia. Son cosas distintas y
+en el entregable tienen que figurar separadas.
+
+Pauta de prueba con 990F0-BKTM1 y 990F0-BKBW5:
+ - Frontal y desplazamientos laterales.
+ - Brazos abajo, brazos levantados, manos hacia la pantalla.
+ - Acercamiento, alejamiento, giro del cuerpo (acá se verifica el anti-colapso de escala).
+ - Inclinación de cabeza y pérdida de seguimiento (acá se verifica que el recortable se
+   retira en vez de tapar la cara).
+ - Cambio rápido de prenda.
+ - Entrada y salida de FASHN y de Lucy.
+
+Criterios de aceptación:
+ - La relación entre el ancho del bajo y el ancho superior se mantiene constante.
+ - El cuello sigue alineado como está hoy.
+ - Las mangas conservan su contorno completo y definido.
+ - La ilustración nunca cubre el rostro.
+ - Sin saltos bruscos, sin deformación, sin logos espejados.
+ - FASHN y Lucy siguen recibiendo sus referencias fotográficas reales.
+
+=====================================================================
+GATES Y ENTREGABLE
+=====================================================================
+  npx tsc --noEmit
+  npm run lint
+  npm test
+  npm run build
+
+Entregar: diff real archivo por archivo; qué quedó verificado por tests y qué queda
+pendiente de la prueba física; los valores finales de MAX_ROTATION_RAD, los límites de
+escala, los radios de la elipse de cabeza y el `fitFactor` de cada prenda si lo ajustaste;
+y si la capucha del chaleco quedó convincente con la exclusión o si hace falta pedir el
+dibujo con la capucha más baja.
+
+Sin merge, sin deploy, sin tocar las otras 9 ilustraciones todavía.

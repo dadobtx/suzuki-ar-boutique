@@ -1,0 +1,45 @@
+PROMPT PARA CHATGPT — conseguir las fotos de la VISTA POSTERIOR
+
+Necesito la foto de la ESPALDA de cada una de estas prendas de la boutique Suzuki,
+buscándolas por su número de parte en las tiendas oficiales de Suzuki (la tienda
+española auto.suzuki.es publica frente y espalda de casi toda la colección Team
+Black / Team Blue; shop.suzuki.ch y las tiendas de recambios del Reino Unido
+también sirven):
+
+  990F0-BKTM1   Team Black T-Shirt
+  990F0-BKPM5   Team Black Polo
+  990F0-BKHM0   Team Black Hoodie              (ya la tengo, sirve de referencia)
+  990F0-BKBW5   Team Black Vest
+  990F0-BKQJ5   Team Black Reversible Jacket   -> cara ROJA
+  990F0-BKQJ5_2 Team Black Reversible Jacket   -> cara NEGRA
+  990F0-BLMJ4   Team Blue Rain Jacket
+  990F0-BLPK0   Team Blue Parka
+  990F0-RSSM0   GSX-R Softshell Jacket
+  990F0-JYFJ1   Jimny Fleece Jacket (verde)
+  990F0-FCHJ0   Functional Hooded Sweat Jacket (blanca)
+
+CÓMO LAS NECESITO — esto es importante:
+
+1. SIN RETOCAR. No recortes, no centres, no cambies el fondo, no ajustes brillo ni
+   contraste, no apliques superresolución. Tengo un script que normaliza las fotos
+   contra la imagen frontal que ya está en mi catálogo, y si vienen pre-procesadas
+   por otra herramienta el resultado empeora, no mejora.
+
+2. La de MAYOR RESOLUCIÓN que encuentres, descargada del archivo original y no de
+   la miniatura de la página. Dime las dimensiones reales de cada archivo.
+
+3. Nombradas exactamente con el número de parte, tal cual la lista de arriba:
+   990F0-BKHM0.jpg, 990F0-BKQJ5_2.jpg, etc.
+
+4. Que sea la MISMA PRENDA y en lo posible la misma sesión de fotos que el frente:
+   misma pose (colgada o maniquí invisible, de frente a cámara), mismo fondo claro,
+   misma luz. Si la única espalda que encuentras está en otra pose (plana sobre una
+   mesa cuando el frente está en maniquí) o con otro fondo, entrégala igual pero
+   AVÍSAME cuál es, porque esa no va a poder usarse para la animación de volteo.
+
+5. Por cada prenda dime de qué página salió y el enlace directo de la imagen, para
+   poder verificarla.
+
+6. Si de alguna prenda no aparece la vista posterior en ningún lado, dilo
+   explícitamente en vez de sustituirla por una prenda parecida: una espalda que
+   no es la de esa prenda es peor que no tener espalda.

@@ -265,7 +265,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
 
       {/* Image Area */}
       {!resolvedBackView ? (
-        <div className="relative flex-1 w-full bg-surface-2 pointer-events-none flex items-center justify-center p-8 mt-12">
+        <div className="relative flex-1 w-full bg-white pointer-events-none flex items-center justify-center p-8 mt-12">
           {!imgLoaded && !imgError && (
             <div className="absolute inset-0 flex items-center justify-center">
               <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin" />
@@ -286,7 +286,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
       ) : (
         <div
           ref={imgboxRef}
-          className="relative flex-1 w-full bg-surface-2 pointer-events-none flex items-center justify-center mt-12 [perspective:1200px]"
+          className="relative flex-1 w-full bg-white pointer-events-none flex items-center justify-center mt-12 [perspective:1200px]"
         >
           {/* Faces container */}
           <div
