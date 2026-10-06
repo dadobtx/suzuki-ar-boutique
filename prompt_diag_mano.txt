@@ -1,0 +1,92 @@
+PROMPT PARA ANTIGRAVITY — Diagnóstico de detección de mano a distancia (antes de la Fase 2 de gestos)
+Guardar en la raíz del repo como: prompt_diag_mano.txt
+Rama: feature/diag-mano (desde main en 2588285)
+
+====================================================================
+1. OBJETIVO
+====================================================================
+Antes de diseñar los gestos del perchero (Fase 2) necesitamos DATOS: ¿detecta MediaPipe la mano y
+reconoce puño / palma abierta / índice arriba cuando la persona está parada en la marca del piso
+(≈1.5–2.5 m), con la cámara de la laptop y con la Redragon GW911, y cuánto cuesta en FPS correrlo
+JUNTO con el modelo de pose que ya usa el kiosko?
+
+Entregable: una página de diagnóstico interna en /#/diag-mano. NO se enlaza desde el kiosko ni
+cambia nada del flujo existente.
+
+====================================================================
+2. REGLAS
+====================================================================
+- No modificar el flujo del kiosko, el perchero, la vitrina, catálogo, AR, FASHN ni Lucy.
+- No modificar public/catalog.json ni assets de prendas.
+- La página se carga con React.lazy + Suspense para que NO entre en el bundle principal.
+- El modelo se autoaloja como el de pose (public/mediapipe/), nada de cargarlo desde Google en
+  tiempo de ejecución.
+- Sin dependencias nuevas (@mediapipe/tasks-vision 0.10.18 ya trae GestureRecognizer).
+- UTF-8. VITE_AI_BACKEND_URL intacto.
+
+====================================================================
+3. MODELO
+====================================================================
+scripts/download-models.ts: además del pose, descargar
+  https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task
+a public/mediapipe/gesture_recognizer.task, con la misma verificación SHA-256 (la primera vez con
+hash null para imprimirlo; luego fijarlo en el script). Confirmar que el paso de download-models del
+workflow de deploy lo descarga (no agregar el .task a git si public/mediapipe está ignorado; seguir
+exactamente lo que ya se hace con pose_landmarker_full.task).
+
+====================================================================
+4. PÁGINA src/pages/DiagHandPage.tsx  (ruta /diag-mano en App.tsx)
+====================================================================
+4.1 Cámara: reutilizar useCamera / camera-selector del proyecto. Selector de dispositivo visible
+    (para elegir laptop o Redragon) y la resolución real obtenida (track.getSettings()).
+4.2 Video espejado a pantalla completa. Encima, en canvas:
+    - los 21 puntos y conexiones de cada mano detectada,
+    - el recuadro de la mano y su ANCHO DE PALMA en píxeles de la imagen original
+      (distancia landmark 5 → 17), que es la métrica que relaciona distancia y detección,
+    - etiqueta: mano (izq/der), gesto top-1 y su score (Closed_Fist, Open_Palm, Pointing_Up, …).
+4.3 Controles (panel lateral, solo para el técnico):
+    - minHandDetectionConfidence, minHandPresenceConfidence, minTrackingConfidence (sliders 0.3–0.9,
+      default 0.5) → recrear el recognizer al soltar.
+    - numHands 1 / 2.
+    - delegate GPU / CPU.
+    - Frecuencia de inferencia del gesto: cada frame / 15 fps / 10 fps.
+    - Interruptor "Correr pose al mismo tiempo" (PoseLandmarker full, como el kiosko) para medir el
+      costo combinado.
+4.4 Métricas en vivo (ventana móvil de 5 s):
+    - FPS de video, FPS efectivo del gesto, FPS del pose (si está activo).
+    - Tiempo de inferencia del gesto: promedio y p95 en ms (y lo mismo para pose).
+    - Tasa de detección: % de frames procesados con al menos una mano.
+    - Gesto dominante y score promedio del gesto dominante.
+    - Ancho de palma promedio (px).
+    - Si pose está activo: visibility promedio de muñecas (landmarks 15 y 16) y si la muñeca está por
+      encima del hombro (15 vs 11, 16 vs 12). Esto mide la alternativa "levantar la mano +
+      permanencia" que solo usa pose.
+4.5 Registro de pruebas:
+    - Campo "Distancia (m)" y selector "Gesto que estoy haciendo": Palma abierta / Puño /
+      Índice arriba / Mano bajada.
+    - Botón "Grabar 10 s": cuenta regresiva de 3 s y luego 10 s de muestreo; al terminar agrega una
+      fila a una tabla con: cámara, resolución, distancia, gesto pedido, tasa de detección,
+      % de frames donde el gesto reconocido == gesto pedido, score promedio, ancho de palma,
+      FPS gesto, FPS pose, inferencia p95, delegate, umbrales.
+    - Botones "Copiar como CSV" y "Descargar CSV". La tabla se guarda en localStorage
+      ('suzuki-diag-mano') para no perderla al recargar, con botón "Borrar".
+4.6 Instrucción visible arriba: "Párate en la marca del piso. Elige distancia y gesto, pulsa
+    Grabar 10 s y mantén el gesto con la mano a la altura del pecho."
+
+====================================================================
+5. CÓDIGO PURO Y TESTS
+====================================================================
+- src/lib/diag-hand-stats.ts: funciones puras para la ventana móvil (fps, promedio, p95, tasa de
+  detección, coincidencia de gesto, ancho de palma) y para serializar filas a CSV.
+- tests/unit/diag-hand-stats.test.ts: p95 con datos conocidos, tasa de detección, coincidencia
+  de gesto, CSV con comas y tildes escapadas correctamente.
+- Los tests existentes no se editan.
+
+====================================================================
+6. EVIDENCIA
+====================================================================
+- Salida final de tsc --noEmit, npm run lint, npm test, npm run build.
+- Confirmar que el chunk de DiagHandPage es separado (listar los archivos de dist/assets con su
+  tamaño) y que el tamaño de index-*.js no creció más de 2 kB.
+- Captura real de /#/diag-mano con la cámara falsa de Chromium (sin mano, para ver la UI).
+- git diff --stat main: nada en src/components/, public/catalog.json ni public/garments/.

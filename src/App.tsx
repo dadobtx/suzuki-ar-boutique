@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import { HashRouter, Route, Routes } from 'react-router-dom';
 import { useAppStore } from './store/app';
 import { HomePage } from './pages/HomePage';
@@ -10,6 +10,8 @@ import { MobileGalleryPage } from './pages/MobileGalleryPage';
 import { useKioskFlag } from './hooks/useKioskFlag';
 import { setupAutoRecovery } from './lib/auto-recovery';
 import { DiagnosticOverlay } from './components/debug/DiagnosticOverlay';
+
+const DiagHandPage = lazy(() => import('./pages/DiagHandPage'));
 
 // Setup auto recovery before React renders if possible, or here.
 setupAutoRecovery();
@@ -39,6 +41,20 @@ export default function App() {
           <Routes>
             <Route path="/" element={<HomePage />} />
             <Route path="/diag" element={<DiagPage />} />
+            <Route
+              path="/diag-mano"
+              element={
+                <Suspense
+                  fallback={
+                    <div className="min-h-screen flex items-center justify-center font-mono text-cyan-400">
+                      Cargando diagnóstico de mano...
+                    </div>
+                  }
+                >
+                  <DiagHandPage />
+                </Suspense>
+              }
+            />
             <Route path="/analytics" element={<AnalyticsPage />} />
             <Route path="/kiosk" element={<KioskPage />} />
             <Route path="/kiosk/reports" element={<KioskReportsPage />} />

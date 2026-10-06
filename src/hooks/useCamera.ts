@@ -14,7 +14,7 @@ import { selectCamera } from '@/lib/camera-selector';
  *   Attempt 1: drop width/height, keep deviceId + facingMode
  *   Attempt 2: just { video: true }
  */
-export function useCamera() {
+export function useCamera(preferredDeviceId?: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
@@ -119,12 +119,22 @@ export function useCamera() {
 
       const envCameraLabel = import.meta.env.VITE_CAMERA_LABEL as string | undefined;
       const selection = selectCamera(deviceList, envCameraLabel, phase1DeviceId);
-      const selected = selection.device;
+      let selected = selection.device;
+      let useExact = selection.useExact;
+
+      if (preferredDeviceId) {
+        const found = deviceList.find((d) => d.deviceId === preferredDeviceId);
+        if (found) {
+          selected = found;
+          useExact = true;
+        }
+      }
+
       const selectedId = selected?.deviceId ?? undefined;
       const selectedLabel = selected?.label ?? 'Unknown';
 
       console.info(
-        `[useCamera] Camera selected via rule "${selection.rule}": "${selectedLabel}" (id: ${selectedId ?? 'none'}) [exact=${selection.useExact}]`,
+        `[useCamera] Camera selected via rule "${selection.rule}": "${selectedLabel}" (id: ${selectedId ?? 'none'}) [exact=${useExact}]`,
       );
 
       if (selectedId) {
@@ -136,7 +146,7 @@ export function useCamera() {
       let finalStream: MediaStream | null = null;
 
       const deviceIdConstraint = selectedId
-        ? selection.useExact
+        ? useExact
           ? { exact: selectedId }
           : { ideal: selectedId }
         : undefined;
@@ -224,6 +234,7 @@ export function useCamera() {
     setSettings,
     setDevice,
     assignStream,
+    preferredDeviceId,
   ]);
 
   const retry = useCallback(() => {
@@ -232,15 +243,18 @@ export function useCamera() {
     start();
   }, [stopTracks, resetSession, start]);
 
-  // Start on mount
+  // Start on mount / restart on preferredDeviceId change
   useEffect(() => {
+    stopTracks();
+    useCameraStore.getState().setStatus('idle');
+    useCameraStore.getState().setPhase('idle');
     start();
     return () => {
       stopTracks();
       useCameraStore.getState().setStatus('idle');
       useCameraStore.getState().setPhase('idle');
     };
-  }, [start, stopTracks]);
+  }, [start, stopTracks, preferredDeviceId]);
 
   // Protective attach: ensure video gets the stream if it was rendered late
   // and re-trigger play if Chrome silently paused it due to CSS mutations (like objectFit flips).
