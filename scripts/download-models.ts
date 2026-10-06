@@ -8,13 +8,24 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const MODELS_DIR = path.join(__dirname, '..', 'public', 'mediapipe');
-const POSE_MODEL_URL =
-  'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task';
+interface ModelConfig {
+  name: string;
+  url: string;
+  expectedHash: string | null;
+}
 
-// Known SHA-256 for the float16 full model (if it changes, update this or set to null to bypass strict check)
-// Set to null initially to allow the first download to print the actual hash.
-const EXPECTED_HASH: string | null =
-  '4eaa5eb7a98365221087693fcc286334cf0858e2eb6e15b506aa4a7ecdcec4ad';
+const MODELS: ModelConfig[] = [
+  {
+    name: 'pose_landmarker_full.task',
+    url: 'https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/latest/pose_landmarker_full.task',
+    expectedHash: '4eaa5eb7a98365221087693fcc286334cf0858e2eb6e15b506aa4a7ecdcec4ad',
+  },
+  {
+    name: 'gesture_recognizer.task',
+    url: 'https://storage.googleapis.com/mediapipe-models/gesture_recognizer/gesture_recognizer/float16/latest/gesture_recognizer.task',
+    expectedHash: '97952348cf6a6a4915c2ea1496b4b37ebabc50cbbf80571435643c455f2b0482',
+  },
+];
 
 async function computeHash(filePath: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -54,6 +65,37 @@ function downloadFile(url: string, dest: string): Promise<void> {
   });
 }
 
+async function ensureModel(model: ModelConfig) {
+  const destPath = path.join(MODELS_DIR, model.name);
+  console.log(`[download-models] Checking ${destPath}...`);
+
+  if (fs.existsSync(destPath)) {
+    console.log(`[download-models] File ${model.name} exists. Verifying hash...`);
+    const hash = await computeHash(destPath);
+    console.log(`[download-models] ${model.name} current hash: ${hash}`);
+
+    if (model.expectedHash && hash !== model.expectedHash) {
+      console.log(
+        `[download-models] Hash mismatch for ${model.name}! Expected ${model.expectedHash}. Redownloading...`,
+      );
+      fs.unlinkSync(destPath);
+    } else {
+      console.log(
+        `[download-models] Hash verified or skipped for ${model.name}. Model is ready.`,
+      );
+      return;
+    }
+  }
+
+  console.log(`[download-models] Downloading ${model.name} from ${model.url}...`);
+  await downloadFile(model.url, destPath);
+
+  const newHash = await computeHash(destPath);
+  console.log(
+    `[download-models] Download complete for ${model.name}. SHA-256: ${newHash}`,
+  );
+}
+
 async function main() {
   if (!fs.existsSync(MODELS_DIR)) {
     fs.mkdirSync(MODELS_DIR, { recursive: true });
@@ -88,31 +130,9 @@ async function main() {
   }
   console.log(`[download-models] Copied ${wasmFiles.length} wasm files to ${WASM_DEST}`);
 
-  const destPath = path.join(MODELS_DIR, 'pose_landmarker_full.task');
-
-  console.log(`[download-models] Checking ${destPath}...`);
-
-  if (fs.existsSync(destPath)) {
-    console.log(`[download-models] File exists. Verifying hash...`);
-    const hash = await computeHash(destPath);
-    console.log(`[download-models] Current hash: ${hash}`);
-
-    if (EXPECTED_HASH && hash !== EXPECTED_HASH) {
-      console.log(
-        `[download-models] Hash mismatch! Expected ${EXPECTED_HASH}. Redownloading...`,
-      );
-      fs.unlinkSync(destPath);
-    } else {
-      console.log(`[download-models] Hash verified or skipped. Model is ready.`);
-      return;
-    }
+  for (const model of MODELS) {
+    await ensureModel(model);
   }
-
-  console.log(`[download-models] Downloading from ${POSE_MODEL_URL}...`);
-  await downloadFile(POSE_MODEL_URL, destPath);
-
-  const newHash = await computeHash(destPath);
-  console.log(`[download-models] Download complete. SHA-256: ${newHash}`);
 }
 
 main().catch((err) => {
