@@ -85,8 +85,8 @@ export const useKioskStore = create<KioskStore>()(
           analytics.endSession(outcome);
         }
 
-        if (newState === 'ATTRACT') {
-          usePhotoStore.getState().clearPhoto();
+        if (newState === 'ATTRACT' && prev !== 'ATTRACT') {
+          clearVisitorState();
         }
         set({ state: newState, stateStartTime: now });
       },
@@ -101,7 +101,7 @@ export const useKioskStore = create<KioskStore>()(
       reset: () => {
         const analytics = useAnalyticsStore.getState();
         if (analytics.currentSessionId) analytics.endSession('abandoned');
-        usePhotoStore.getState().clearPhoto();
+        clearVisitorState();
         set({ state: 'ATTRACT', stateStartTime: Date.now() });
       },
       restartSession: () => restartSession(),
@@ -118,13 +118,13 @@ export const useKioskStore = create<KioskStore>()(
 );
 
 /**
- * Restart session:
+ * Limpia todo el estado dejado por un visitante previo:
  * a. clearPhoto() del photo store,
  * b. clearGarment() y vaciar wishlist y filtros (line, category, sizes, colors) del garment store,
  * c. useSizingStore.getState().reset(),
- * d. transition('ATTRACT') — NO reset(), para que analytics cierre la sesión con su outcome real.
+ * Sin transicionar ni registrar analytics.
  */
-export function restartSession() {
+export function clearVisitorState() {
   // a. clearPhoto() del photo store
   usePhotoStore.getState().clearPhoto();
 
@@ -136,7 +136,14 @@ export function restartSession() {
 
   // c. useSizingStore.getState().reset()
   useSizingStore.getState().reset();
+}
 
-  // d. transition('ATTRACT') — NO reset(), para que analytics cierre la sesión con su outcome real
+/**
+ * Restart session:
+ * clearVisitorState() + transition('ATTRACT')
+ * Cierra la sesión con su outcome real en analytics.
+ */
+export function restartSession() {
+  clearVisitorState();
   useKioskStore.getState().transition('ATTRACT');
 }

@@ -45,7 +45,7 @@
 .rack-slot {
   position: relative;
   width: 62px;
-  height: 420px;
+  height: calc(var(--gh, 352px) + 55px);
   flex: none;
   transition: width 0.65s cubic-bezier(0.16, 1, 0.3, 1);
   perspective: 1100px;

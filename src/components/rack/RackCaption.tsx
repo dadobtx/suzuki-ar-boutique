@@ -13,6 +13,7 @@ interface RackCaptionProps {
   onToggleWishlist: (sku: string) => void;
   onSelectVariant?: (variantId: string) => void;
   interactive?: boolean;
+  compact?: boolean;
 }
 
 export function RackCaption({
@@ -25,6 +26,7 @@ export function RackCaption({
   onToggleWishlist,
   onSelectVariant,
   interactive = true,
+  compact = false,
 }: RackCaptionProps) {
   const { t } = useTranslation();
   const [view, setView] = useState<'front' | 'back'>('front');
@@ -88,16 +90,26 @@ export function RackCaption({
           opacity,
           transition: `opacity ${fadeDuration}ms ease-out`,
         }}
-        className="w-full h-full flex flex-col items-center justify-center text-center px-10"
+        className={`w-full h-full flex flex-col items-center justify-center text-center ${compact ? 'px-4' : 'px-10'}`}
       >
-        <span className="font-display text-5xl lg:text-6xl text-white tracking-wider uppercase">
+        <span
+          className={
+            compact
+              ? 'font-display text-2xl sm:text-3xl text-white tracking-wider uppercase'
+              : 'font-display text-5xl lg:text-6xl text-white tracking-wider uppercase'
+          }
+        >
           Colección Suzuki
         </span>
-        <div className="flex items-center gap-6 mt-3">
-          <span className="font-mono font-bold text-3xl text-fg tabular-nums">
+        <div className={`flex items-center gap-6 ${compact ? 'mt-1' : 'mt-3'}`}>
+          <span
+            className={`font-mono font-bold text-fg tabular-nums ${compact ? 'text-lg sm:text-xl' : 'text-3xl'}`}
+          >
             {totalCount} prendas
           </span>
-          <span className="text-2xl text-fg-muted font-sans whitespace-nowrap">
+          <span
+            className={`text-fg-muted font-sans whitespace-nowrap ${compact ? 'text-sm sm:text-base' : 'text-2xl'}`}
+          >
             desde {minPriceFormatted}
           </span>
         </div>
@@ -137,7 +149,7 @@ export function RackCaption({
         opacity,
         transition: `opacity ${fadeDuration}ms ease-out`,
       }}
-      className="w-full h-full flex items-center justify-between px-10 gap-8"
+      className={`w-full h-full flex items-center justify-between ${compact ? 'px-6 gap-4' : 'px-10 gap-8'}`}
     >
       {/* ── Izquierda: Placa blanca con foto real y filo rojo inferior ── */}
       <div className="flex-shrink-0">
@@ -150,7 +162,11 @@ export function RackCaption({
           }}
           disabled={!hasBack}
           aria-label={hasBack ? 'Alternar vista frente y espalda' : undefined}
-          className={`relative w-[120px] h-[120px] bg-white rounded-md overflow-hidden flex items-center justify-center p-2 shadow-xl border-b-4 border-b-brand-red ${
+          className={`relative ${
+            compact
+              ? 'w-[54px] h-[54px] p-1 border-b-2'
+              : 'w-[120px] h-[120px] p-2 border-b-4'
+          } bg-white rounded-md overflow-hidden flex items-center justify-center shadow-xl border-b-brand-red ${
             hasBack ? 'cursor-pointer hover:opacity-95' : 'cursor-default'
           }`}
         >
@@ -166,7 +182,13 @@ export function RackCaption({
           )}
 
           {hasBack && (
-            <span className="absolute top-1.5 right-1.5 text-[10px] font-bold tracking-wider uppercase px-1.5 py-0.5 bg-black/70 text-white rounded">
+            <span
+              className={`absolute ${
+                compact
+                  ? 'top-0.5 right-0.5 text-[8px] px-1'
+                  : 'top-1.5 right-1.5 text-[10px] px-1.5 py-0.5'
+              } font-bold tracking-wider uppercase bg-black/70 text-white rounded`}
+            >
               {view === 'front' ? 'Frente' : 'Espalda'}
             </span>
           )}
@@ -175,21 +197,35 @@ export function RackCaption({
 
       {/* ── Centro: Nombre, precio, tallas y chips de variante ── */}
       <div className="flex-1 flex flex-col justify-center min-w-0">
-        <span className="font-display text-4xl sm:text-5xl lg:text-6xl text-white tracking-wide uppercase line-clamp-2 leading-none">
+        <span
+          className={`font-display text-white tracking-wide uppercase line-clamp-1 leading-none ${
+            compact
+              ? 'text-2xl sm:text-3xl'
+              : 'text-4xl sm:text-5xl lg:text-6xl line-clamp-2'
+          }`}
+        >
           {displayedItem.name}
         </span>
 
-        <div className="flex flex-wrap items-baseline gap-4 sm:gap-6 mt-2">
-          <span className="font-mono font-bold text-3xl sm:text-4xl text-fg tabular-nums">
+        <div
+          className={`flex flex-wrap items-baseline ${compact ? 'gap-3 mt-1' : 'gap-4 sm:gap-6 mt-2'}`}
+        >
+          <span
+            className={`font-mono font-bold text-fg tabular-nums ${compact ? 'text-xl sm:text-2xl' : 'text-3xl sm:text-4xl'}`}
+          >
             {priceFormatted}
           </span>
           {sizesText && (
-            <span className="text-xl sm:text-2xl text-fg-muted font-sans">
+            <span
+              className={`text-fg-muted font-sans ${compact ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'}`}
+            >
               {sizesText}
             </span>
           )}
           {colorsText && (
-            <span className="text-xl sm:text-2xl text-fg-muted font-sans">
+            <span
+              className={`text-fg-muted font-sans ${compact ? 'text-base sm:text-lg' : 'text-xl sm:text-2xl'}`}
+            >
               · {colorsText}
             </span>
           )}
@@ -197,7 +233,9 @@ export function RackCaption({
 
         {/* Chips de variante si la prenda abierta está seleccionada y tiene variantes */}
         {isSelected && displayedItem.variants.length > 1 && interactive && (
-          <div className="flex items-center gap-2 mt-3 flex-wrap">
+          <div
+            className={`flex items-center gap-2 ${compact ? 'mt-1' : 'mt-3'} flex-wrap`}
+          >
             {displayedItem.variants.map((v) => {
               const isVarActive =
                 (activeVariantId ?? displayedItem.variants[0]?.id) === v.id;
@@ -208,17 +246,23 @@ export function RackCaption({
                   onClick={() => onSelectVariant?.(v.id)}
                   aria-label={`Color ${v.label ?? v.id}`}
                   aria-pressed={isVarActive}
-                  className={`min-h-[44px] px-3.5 py-1 rounded-full border flex items-center gap-2 transition-all cursor-pointer ${
+                  className={`${
+                    compact
+                      ? 'min-h-[28px] px-2.5 py-0.5 text-xs'
+                      : 'min-h-[44px] px-3.5 py-1 text-sm'
+                  } rounded-full border flex items-center gap-2 transition-all cursor-pointer ${
                     isVarActive
                       ? 'border-white bg-surface-2 text-white shadow-md'
                       : 'border-line bg-surface/80 text-fg-muted hover:text-white'
                   }`}
                 >
                   <span
-                    className="w-4 h-4 rounded-full border border-white/40 flex-shrink-0"
+                    className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} rounded-full border border-white/40 flex-shrink-0`}
                     style={{ backgroundColor: v.color }}
                   />
-                  <span className="text-sm font-semibold tracking-wide">
+                  <span
+                    className={`${compact ? 'text-xs' : 'text-sm'} font-semibold tracking-wide`}
+                  >
                     {v.label ?? v.id}
                   </span>
                 </button>
@@ -228,7 +272,7 @@ export function RackCaption({
         )}
       </div>
 
-      {/* ── Derecha: Botón Favorito (mínimo 64×64) ── */}
+      {/* ── Derecha: Botón Favorito (mínimo 64×64 en normal, 48×48 en compact) ── */}
       <div className="flex-shrink-0">
         <button
           type="button"
@@ -240,14 +284,18 @@ export function RackCaption({
               onToggleWishlist(displayedItem.sku);
             }
           }}
-          className={`w-16 h-16 min-w-[64px] min-h-[64px] rounded-full border border-line bg-surface-2 flex items-center justify-center transition-all cursor-pointer ${
+          className={`${
+            compact
+              ? 'w-12 h-12 min-w-[48px] min-h-[48px]'
+              : 'w-16 h-16 min-w-[64px] min-h-[64px]'
+          } rounded-full border border-line bg-surface-2 flex items-center justify-center transition-all cursor-pointer ${
             interactive
               ? 'hover:border-white/40 active:scale-95'
               : 'opacity-80 cursor-default'
           }`}
         >
           <Heart
-            className={`w-8 h-8 transition-colors ${
+            className={`${compact ? 'w-6 h-6' : 'w-8 h-8'} transition-colors ${
               isWishlisted
                 ? 'fill-brand-red text-brand-red'
                 : 'text-fg-muted hover:text-white'
