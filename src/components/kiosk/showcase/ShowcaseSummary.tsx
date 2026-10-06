@@ -15,6 +15,11 @@ export function ShowcaseSummary({ slide }: ShowcaseSummaryProps) {
 
   const { count, minPriceCents, illustrations } = slide;
 
+  const stripesMask =
+    mode === 'portrait'
+      ? 'linear-gradient(90deg, #000 0%, #000 45%, transparent 58%)'
+      : 'linear-gradient(180deg, #000 0%, #000 45%, transparent 58%)';
+
   return (
     <motion.div
       className="absolute inset-0 w-full h-full bg-surface text-fg select-none overflow-hidden"
@@ -65,10 +70,14 @@ export function ShowcaseSummary({ slide }: ShowcaseSummaryProps) {
         </span>
       </motion.div>
 
-      {/* Three Diagonal Racing Stripes */}
+      {/* Three Diagonal Racing Stripes with Fade Mask */}
       <div
         aria-hidden="true"
         className="absolute inset-0 pointer-events-none select-none overflow-hidden flex items-center justify-center"
+        style={{
+          maskImage: stripesMask,
+          WebkitMaskImage: stripesMask,
+        }}
       >
         <div className="w-[180%] h-36 flex flex-col justify-between -rotate-[20deg] opacity-70">
           <div className="h-[2px] w-full bg-[#C9CED6]/15" />
@@ -167,10 +176,10 @@ export function ShowcaseSummary({ slide }: ShowcaseSummaryProps) {
           <div
             className={`flex flex-col ${
               mode === 'portrait' ? 'items-start' : 'items-center'
-            } gap-2`}
+            } gap-1 font-mono font-bold tabular-nums text-2xl md:text-3xl text-fg`}
           >
-            <span className="font-mono font-bold tabular-nums text-2xl md:text-3xl text-fg">
-              {t('kiosk.attract.showcase.summaryCount', { count })} ·{' '}
+            <span>{t('kiosk.attract.showcase.summaryCount', { count })}</span>
+            <span className="whitespace-nowrap">
               {t('kiosk.attract.showcase.summaryFrom', 'DESDE')} $
               {(minPriceCents / 100).toFixed(2)}
             </span>

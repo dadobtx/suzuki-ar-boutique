@@ -26,8 +26,9 @@ export function AttractPanel() {
     const urlsToPreload: string[] = [];
     if (nextSlide.kind === 'garment') {
       urlsToPreload.push(...nextSlide.illustrations);
-      if (nextSlide.photo.thumb) urlsToPreload.push(nextSlide.photo.thumb);
-      if (nextSlide.photo.full) urlsToPreload.push(nextSlide.photo.full);
+      nextSlide.photos.forEach((p) => {
+        if (p.thumb) urlsToPreload.push(p.thumb);
+      });
     } else if (nextSlide.kind === 'summary') {
       urlsToPreload.push(...nextSlide.illustrations);
     }

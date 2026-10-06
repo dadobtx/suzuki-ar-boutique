@@ -135,10 +135,12 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       );
       expect(garmentSlides).toHaveLength(10);
 
-      // 990F0-BKQJ5 has 2 variants with illustrations
+      // 990F0-BKQJ5 has 2 variants with illustrations and photos
       const bkqj5Slide = garmentSlides.find((s) => s.garment.id === '990F0-BKQJ5');
       expect(bkqj5Slide).toBeDefined();
       expect(bkqj5Slide?.illustrations).toHaveLength(2);
+      expect(bkqj5Slide?.photos).toHaveLength(2);
+      expect(bkqj5Slide?.photos[1]?.thumb).toMatch(/990F0-BKQJ5_2\.thumb\.png$/);
       expect(bkqj5Slide?.colorCount).toBe(2);
 
       // The other 9 garments have 1 illustration
@@ -165,8 +167,10 @@ describe('Attract Showcase & Impeccable Improvements', () => {
           s.illustrations.forEach((url) => {
             expect(url.startsWith(baseUrl)).toBe(true);
           });
-          if (s.photo.thumb) expect(s.photo.thumb.startsWith(baseUrl)).toBe(true);
-          if (s.photo.full) expect(s.photo.full.startsWith(baseUrl)).toBe(true);
+          s.photos.forEach((p) => {
+            if (p.thumb) expect(p.thumb.startsWith(baseUrl)).toBe(true);
+            if (p.full) expect(p.full.startsWith(baseUrl)).toBe(true);
+          });
         } else {
           s.illustrations.forEach((url) => {
             expect(url.startsWith(baseUrl)).toBe(true);
@@ -193,7 +197,7 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       expect(slides).toHaveLength(2); // 1 garment + 1 summary
       const garmentSlide = slides[0] as Extract<ShowcaseSlide, { kind: 'garment' }>;
       expect(garmentSlide.illustrations).toEqual([]);
-      expect(garmentSlide.photo.thumb).toBeDefined();
+      expect(garmentSlide.photos[0]?.thumb).toBeDefined();
 
       useGarmentStore.setState({ catalog: [customGarment] });
       render(<AttractPanel />);

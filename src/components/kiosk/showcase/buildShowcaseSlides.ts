@@ -6,7 +6,7 @@ export type ShowcaseSlide =
       kind: 'garment';
       garment: Garment;
       illustrations: string[]; // 0, 1 o 2 URLs (2 cuando hay variantes con ilustración)
-      photo: { thumb?: string; full?: string };
+      photos: { thumb?: string; full?: string }[]; // en paralelo a illustrations (mismo índice = misma variante)
       colorCount: number; // variants.length si >1, si no colors.length
     }
   | {
@@ -31,8 +31,10 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
   const summaryIllustrations: string[] = [];
 
   for (const garment of maxGarments) {
-    // 1. Resolve illustrations
+    // 1. Resolve illustrations and photos in parallel
     const illustrations: string[] = [];
+    const photos: { thumb?: string; full?: string }[] = [];
+
     if (garment.variants && garment.variants.length > 0) {
       for (const v of garment.variants) {
         const resolved = resolveGarmentIllustration(garment, v.id);
@@ -40,6 +42,25 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
           const formatted = prefixBaseUrl(resolved.illustrationUrl);
           if (formatted && !illustrations.includes(formatted)) {
             illustrations.push(formatted);
+            const thumb = prefixBaseUrl(v.thumbnailUrl || garment.thumbnailUrl);
+            const full = prefixBaseUrl(v.overlayUrl || garment.overlayUrl);
+            photos.push({
+              ...(thumb ? { thumb } : {}),
+              ...(full ? { full } : {}),
+            });
+          }
+        }
+      }
+      // If no variants had illustrations, fallback to variant photos
+      if (photos.length === 0) {
+        for (const v of garment.variants) {
+          const thumb = prefixBaseUrl(v.thumbnailUrl || garment.thumbnailUrl);
+          const full = prefixBaseUrl(v.overlayUrl || garment.overlayUrl);
+          if (thumb || full) {
+            photos.push({
+              ...(thumb ? { thumb } : {}),
+              ...(full ? { full } : {}),
+            });
           }
         }
       }
@@ -51,18 +72,18 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
           illustrations.push(formatted);
         }
       }
+      const thumb = prefixBaseUrl(garment.thumbnailUrl);
+      const full = prefixBaseUrl(garment.overlayUrl);
+      if (thumb || full) {
+        photos.push({
+          ...(thumb ? { thumb } : {}),
+          ...(full ? { full } : {}),
+        });
+      }
     }
 
-    // 2. Resolve photo
-    const firstVariant = garment.variants?.[0];
-    const rawThumb = firstVariant?.thumbnailUrl || garment.thumbnailUrl;
-    const rawFull = firstVariant?.overlayUrl || garment.overlayUrl;
-
-    const thumb = prefixBaseUrl(rawThumb);
-    const full = prefixBaseUrl(rawFull);
-
     // Fallback: Skip if no illustration and no photo
-    if (illustrations.length === 0 && !thumb && !full) {
+    if (illustrations.length === 0 && photos.length === 0) {
       continue;
     }
 
@@ -76,10 +97,7 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
       kind: 'garment',
       garment,
       illustrations,
-      photo: {
-        ...(thumb ? { thumb } : {}),
-        ...(full ? { full } : {}),
-      },
+      photos,
       colorCount,
     });
 

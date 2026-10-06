@@ -26,10 +26,10 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
   const shouldReduceMotion = useReducedMotion();
   const mode = useLayoutStore((s) => s.mode);
 
-  const { garment, illustrations, photo, colorCount } = slide;
+  const { garment, illustrations, photos, colorCount } = slide;
   const hasIllustration = illustrations.length > 0;
 
-  // Handle multi-variant illustration cycling (e.g., 990F0-BKQJ5)
+  // Handle multi-variant cycling (e.g., 990F0-BKQJ5)
   const [variantIdx, setVariantIdx] = useState(0);
 
   useEffect(() => {
@@ -39,6 +39,9 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
     }, 1600);
     return () => clearInterval(interval);
   }, [shouldReduceMotion, illustrations.length]);
+
+  // Current photo for the active variant
+  const currentPhoto = photos[variantIdx] ?? photos[0];
 
   // Layer A: Background Glow Color Calculation
   const firstColor = garment.colors?.[0];
@@ -55,6 +58,11 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
     !firstColor || luminance < 0.12 || isReddish
       ? 'rgba(201, 206, 214, 0.12)'
       : `${firstColor}40`;
+
+  const stripesMask =
+    mode === 'portrait'
+      ? 'linear-gradient(90deg, #000 0%, #000 45%, transparent 58%)'
+      : 'linear-gradient(180deg, #000 0%, #000 45%, transparent 58%)';
 
   return (
     <motion.div
@@ -105,10 +113,14 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
         </span>
       </motion.div>
 
-      {/* Layer C: Three Diagonal Racing Stripes */}
+      {/* Layer C: Three Diagonal Racing Stripes with Fade Mask */}
       <div
         aria-hidden="true"
         className="absolute inset-0 pointer-events-none select-none overflow-hidden flex items-center justify-center"
+        style={{
+          maskImage: stripesMask,
+          WebkitMaskImage: stripesMask,
+        }}
       >
         <div className="w-[180%] h-36 flex flex-col justify-between -rotate-[20deg] opacity-70">
           <div className="h-[2px] w-full bg-[#C9CED6]/15" />
@@ -193,7 +205,9 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                             : { rotateY: 90, opacity: 0 }
                         }
                         animate={
-                          shouldReduceMotion ? { opacity: 1 } : { rotateY: 0, opacity: 1 }
+                          shouldReduceMotion
+                            ? { rotateY: 0, opacity: 1 }
+                            : { rotateY: 0, opacity: 1 }
                         }
                         exit={
                           shouldReduceMotion
@@ -215,7 +229,7 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                 </motion.div>
 
                 {/* Layer E: Real Photo Card Superimposed on bottom-right */}
-                {(photo.thumb || photo.full) && (
+                {currentPhoto?.thumb && (
                   <motion.div
                     className="absolute bottom-[2%] right-[2%] w-[36%] aspect-square bg-white rounded-sm p-[6%] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] border-b-[3px] border-b-brand-red flex flex-col justify-between z-20 pointer-events-none"
                     initial={
@@ -241,19 +255,20 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                     <span className="font-mono text-[10px] sm:text-xs font-bold tracking-wider text-[#17191E] uppercase select-none">
                       {t('kiosk.attract.showcase.realOne', 'ASÍ ES LA REAL')}
                     </span>
-                    <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-0">
-                      <img
-                        src={photo.thumb || photo.full}
-                        srcSet={
-                          photo.thumb && photo.full
-                            ? `${photo.thumb} 512w, ${photo.full} 2048w`
-                            : undefined
-                        }
-                        sizes="20vw"
-                        alt={garment.name}
-                        draggable={false}
-                        className="w-full h-full object-contain select-none pointer-events-none"
-                      />
+                    <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-0 relative">
+                      <AnimatePresence mode="wait">
+                        <motion.img
+                          key={currentPhoto.thumb}
+                          src={currentPhoto.thumb}
+                          alt={garment.name}
+                          draggable={false}
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          exit={{ opacity: 0 }}
+                          transition={{ duration: 0.2, ease: 'easeInOut' }}
+                          className="w-full h-full object-contain select-none pointer-events-none"
+                        />
+                      </AnimatePresence>
                     </div>
                   </motion.div>
                 )}
@@ -267,10 +282,10 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                 transition={{ duration: 0.4 }}
               >
                 <img
-                  src={photo.thumb || photo.full}
+                  src={photos[0]?.thumb || photos[0]?.full}
                   srcSet={
-                    photo.thumb && photo.full
-                      ? `${photo.thumb} 512w, ${photo.full} 2048w`
+                    photos[0]?.thumb && photos[0]?.full
+                      ? `${photos[0].thumb} 512w, ${photos[0].full} 2048w`
                       : undefined
                   }
                   sizes="40vw"

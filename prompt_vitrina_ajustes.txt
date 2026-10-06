@@ -1,0 +1,60 @@
+PROMPT PARA ANTIGRAVITY — Ajustes de la vitrina antes de mergear
+Guardar en la raíz del repo como: prompt_vitrina_ajustes.txt
+Rama: feature/vitrina-attract (la misma). Un solo commit nuevo encima.
+
+Revisión del código y de las capturas: typecheck, lint y 198 tests pasan, y las mejoras de la sección 6
+están bien. Quedan 4 ajustes. Mismas reglas que prompt_vitrina_attract.txt (no tocar public/,
+catalog.json ni el camino AR/FASHN/Lucy; rojo solo como acento; UTF-8).
+
+--------------------------------------------------------------------
+1. [P1] La foto real no coincide con la variante (990F0-BKQJ5)
+--------------------------------------------------------------------
+Captura d_..._var2: la ilustración muestra la chompa NEGRA, pero la tarjeta "ASÍ ES LA REAL" sigue
+mostrando la ROJA. La tarjeta dice "así es la real", así que tiene que ser la misma prenda.
+- buildShowcaseSlides.ts: reemplazar `photo` por `photos: { thumb?: string; full?: string }[]`,
+  en paralelo a `illustrations` (mismo índice = misma variante). Para prendas sin variantes, un
+  solo elemento con garment.thumbnailUrl / overlayUrl.
+- ShowcaseSlide.tsx: la tarjeta usa photos[variantIdx] (o photos[0] si no hay ese índice), y
+  cambia en el mismo momento que la ilustración. Puede hacer un fundido de 200 ms, sin giro.
+- Test: para 990F0-BKQJ5, photos[1].thumb termina en "990F0-BKQJ5_2.thumb.png".
+
+--------------------------------------------------------------------
+2. [P2] No precargar el PNG de 2048
+--------------------------------------------------------------------
+AttractPanel.tsx precarga photo.full (PNG de 2048×2048, 1–4 MB) en cada diapositiva y llama a
+decode(). Con sizes="20vw" el navegador nunca usa esa versión, así que es descarga y
+decodificación de ~16 MB de bitmap por diapositiva desperdiciada en la mini PC, que además corre
+MediaPipe.
+- Precargar solo las ilustraciones y photos[*].thumb. Quitar photo.full de la precarga.
+- Quitar `full` del srcSet de la tarjeta (sizes 20vw nunca lo elige). Dejarlo solo en el fallback
+  de placa grande (sección 3.5), que sí puede necesitarlo.
+
+--------------------------------------------------------------------
+3. [P2] La franja roja cruza el nombre de la prenda
+--------------------------------------------------------------------
+Capturas b, d y c (portrait): la franja diagonal roja pasa por encima de las letras del nombre
+("TEAM BLACK", "FUNCTIONAL HOODED") y del precio. Compite con lo que hay que leer desde 3 m.
+- Capa C (franjas) en ShowcaseSlide.tsx y ShowcaseSummary.tsx: aplicar una máscara para que las
+  franjas se desvanezcan antes de llegar al bloque de texto.
+    portrait:  mask-image: linear-gradient(90deg, #000 0%, #000 45%, transparent 58%)
+    landscape: mask-image: linear-gradient(180deg, #000 0%, #000 45%, transparent 58%)
+  (incluir también -webkit-mask-image). Así las franjas quedan detrás de la ilustración y se
+  apagan antes del texto.
+
+--------------------------------------------------------------------
+4. [P3] Texto del resumen mal cortado
+--------------------------------------------------------------------
+Captura e: queda "10 PRENDAS · DESDE" en una línea y "$35.29" sola en la siguiente.
+- ShowcaseSummary.tsx: dos líneas intencionales, sin el punto medio:
+    línea 1: "10 PRENDAS"
+    línea 2: "DESDE $35.29"   (este span con whitespace-nowrap)
+- Mismo tamaño y estilo actuales.
+
+--------------------------------------------------------------------
+EVIDENCIA
+--------------------------------------------------------------------
+- Salida final de tsc --noEmit, npm run lint, npm test, npm run build.
+- Volver a generar con scripts/capture_vitrina.ts y reemplazar en scripts/qa_output/vitrina/:
+  b, c, d_var1, d_var2 y e. En d_var2, la tarjeta tiene que mostrar la chompa negra.
+- git diff --stat HEAD~1: solo src/components/kiosk/**, tests/unit/attract-showcase.test.tsx y
+  las 5 capturas. Nada en public/.

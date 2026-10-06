@@ -94,8 +94,8 @@ async function main() {
     const pathD1 = path.join(OUT_DIR, 'd_1080x1920_portrait_bkqj5_var1.png');
     await pageStream.screenshot({ path: pathD1 });
     console.log(`Saved: ${pathD1}`);
-    // Wait for flip to variant 2 (negra, flips at ~1.6s)
-    await pageStream.waitForTimeout(1600);
+    // Wait for flip to variant 2 (negra, flips at 1.6s from slide mount, photo fades in 200ms)
+    await pageStream.waitForTimeout(1400);
     const pathD2 = path.join(OUT_DIR, 'd_1080x1920_portrait_bkqj5_var2.png');
     await pageStream.screenshot({ path: pathD2 });
     console.log(`Saved: ${pathD2}`);
