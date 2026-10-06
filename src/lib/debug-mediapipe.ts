@@ -4,8 +4,11 @@ export interface MediaPipeDebugState {
   delegate: 'GPU' | 'CPU' | null;
   error: string | null;
   fps: number;
+  fps5s?: number;
   landmarksCount: number;
   latency: number;
+  latencyP95?: number;
+  heapUsedMB?: number | null;
   modelVersion: string | null;
 }
 
@@ -38,8 +41,11 @@ export const debugTelemetry: DebugTelemetry = {
     delegate: null,
     error: null,
     fps: 0,
+    fps5s: 0,
     landmarksCount: 0,
     latency: 0,
+    latencyP95: 0,
+    heapUsedMB: null,
     modelVersion: null,
   },
   presence: {

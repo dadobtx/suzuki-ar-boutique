@@ -1,0 +1,50 @@
+PROMPT PARA ANTIGRAVITY — Ajustes de la zona activa antes de mergear
+Guardar en la raíz del repo como: prompt_zona_activa_ajustes.txt
+Rama: feature/zona-activa (la misma). Un solo commit nuevo encima de d1992f2.
+
+Revisión: tsc, lint y 257 tests pasan; el interruptor, el modo OFF, el cierre de TODAS las máscaras,
+la selección por puntaje, la histéresis y el overlay de debug están bien. Quedan 2 ajustes y 1
+corrección de evidencia. Mismas reglas que prompt_zona_activa.txt.
+
+--------------------------------------------------------------------
+1. [P1] Los filtros One-Euro se reinician en casi todos los frames
+--------------------------------------------------------------------
+En usePose.ts la "identidad" de la persona fijada se arma con su posición:
+  `${lockedPerson.lastMidX.toFixed(2)}_${lockedPerson.lastMidY.toFixed(2)}`
+lastMidX/lastMidY se actualizan en cada frame (active-zone.ts, nextLockedPerson), así que basta
+que la persona se mueva 0.01 para que la clave cambie y se llame f.reset() a los 33 filtros.
+Resultado con ?zona=1: el AR pierde el suavizado y tiembla.
+- Usar como identidad `lockedPerson.lockedSinceMs` (no cambia mientras dura la fijación y es
+  distinto en cada fijación nueva). Reiniciar filtros SOLO cuando esa clave cambia o pasa a null.
+- Test nuevo (sin editar los existentes): con un PoseLandmarker simulado que devuelve la misma
+  persona desplazándose 0.02 por frame durante 30 frames, los filtros se reinician 1 sola vez
+  (al fijar). Con una segunda fijación (soltar y volver a fijar), se reinician de nuevo.
+
+--------------------------------------------------------------------
+2. [P2] La velocidad no debe soltar a la persona ya fijada
+--------------------------------------------------------------------
+En active-zone.ts, `stillInZone` exige `m.speed <= SPEED_MAX`. La velocidad sirve para NO FIJAR a
+quien cruza, pero la persona ya fijada puede moverse rápido de forma legítima (dar un paso al
+costado, girar para verse la espalda en el AR). Hoy eso abre el período de gracia y, si dura más
+de 1.5 s, la suelta.
+- Quitar la condición de velocidad de `stillInZone` (mantenerla en la elegibilidad para fijar).
+- Test nuevo: persona fijada con speed 0.8 durante 2 s, dentro de la banda y con sw suficiente →
+  sigue fijada.
+
+--------------------------------------------------------------------
+3. Evidencia de rendimiento
+--------------------------------------------------------------------
+scripts/qa_output/zona_activa/benchmark_metrics.json tiene "samples": [] en los dos modos y un solo
+valor de heap, así que no mide FPS ni fuga. No hace falta repetirlo con la cámara falsa: Dario lo
+medirá con su cámara. Solo:
+- Mostrar en el overlay de ?debug=1 (panel MEDIAPIPE) el FPS y la latencia p95 del pose de los
+  últimos 5 s, y el heap JS (performance.memory.usedJSHeapSize en MB, si existe), para que se pueda
+  leer en vivo con ?zona=1 y ?zona=0.
+- Eliminar benchmark_metrics.json del commit (o dejarlo con una nota de que no es una medición).
+
+--------------------------------------------------------------------
+EVIDENCIA
+--------------------------------------------------------------------
+- Salida final de tsc --noEmit, npm run lint, npm test (raíz y backend/), npm run build.
+- git diff --stat HEAD~1: solo src/hooks/usePose.ts, src/lib/active-zone.ts, el overlay de debug,
+  tests nuevos y scripts/qa_output/zona_activa/.

@@ -8,6 +8,10 @@ import {
   computeContainOffset,
   videoToCssContain,
 } from '@/lib/center-crop';
+import type { ActiveZonePoseTelemetry } from '@/hooks/usePose';
+import { parseActiveZoneConfig, type CandidateReason } from '@/lib/active-zone';
+import { useDebugToggle } from '@/hooks/useDebugToggle';
+import { isDebugMode } from '@/lib/debug-mode';
 
 interface PoseDebugProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -15,9 +19,8 @@ interface PoseDebugProps {
   landmarks: NormalizedLandmark[] | null;
   mask: Uint8ClampedArray | null;
   layout: 'landscape' | 'portrait';
+  activeZone?: ActiveZonePoseTelemetry;
 }
-
-import { useDebugToggle } from '@/hooks/useDebugToggle';
 
 export function PoseDebug({
   canvasRef,
@@ -25,8 +28,10 @@ export function PoseDebug({
   landmarks,
   mask,
   layout,
+  activeZone,
 }: PoseDebugProps) {
   const { showDebug } = useDebugToggle();
+  const shouldDraw = isDebugMode() || showDebug;
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -39,17 +44,11 @@ export function PoseDebug({
     // Clear canvas every frame
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (!showDebug || !video || video.videoWidth === 0 || video.videoHeight === 0) {
+    if (!shouldDraw || !video || video.videoWidth === 0 || video.videoHeight === 0) {
       return;
     }
 
     const { videoWidth, videoHeight } = video;
-
-    // canvas.width is the native backing store (CSS width * DPR)
-    // For math, we need CSS width. useDprCanvas already sets width/height attributes to backing store,
-    // and styles width/height to CSS sizes.
-    // Wait, useDprCanvas scales the context by DPR. So drawing in ctx can use CSS coordinates!
-    // We just need the CSS dimensions of the canvas.
     const cssWidth = canvas.clientWidth;
     const cssHeight = canvas.clientHeight;
 
@@ -57,20 +56,10 @@ export function PoseDebug({
 
     // 1. Draw Segmentation Mask
     if (mask) {
-      // Create ImageData from mask. Mask is videoWidth x videoHeight.
-      // But we can't easily draw an unscaled Uint8ClampedArray directly.
-      // We must create an ImageData, put it on an offscreen canvas, and drawImage with scaling/cropping.
-
-      // Fast path: drawImage with OffscreenCanvas
       const offscreen = new OffscreenCanvas(videoWidth, videoHeight);
       const offCtx = offscreen.getContext('2d');
       if (offCtx) {
         const imgData = offCtx.createImageData(videoWidth, videoHeight);
-
-        // mask is a single channel (confidence 0-255) or 4 channels depending on mediapipe?
-        // MP Tasks outputSegmentationMasks: "The mask is represented as a single channel uint8 array..."
-        // Oh wait, getAsUint8Array() might be 1 byte per pixel. ImageData needs 4 bytes per pixel (RGBA).
-        // Let's manually copy and tint cyan (0, 255, 255).
         if (mask.length === videoWidth * videoHeight) {
           for (let i = 0; i < mask.length; i++) {
             const alpha = mask[i] ?? 0;
@@ -78,32 +67,30 @@ export function PoseDebug({
             imgData.data[px] = 0; // R
             imgData.data[px + 1] = 255; // G
             imgData.data[px + 2] = 255; // B
-            imgData.data[px + 3] = 255 - alpha; // A (invertir: persona opaca)
+            imgData.data[px + 3] = 255 - alpha; // A
           }
           offCtx.putImageData(imgData, 0, 0);
 
           ctx.save();
           ctx.globalAlpha = 0.3; // Translucent mask
 
-          // Apply mirroring
+          // Mirroring
           ctx.translate(cssWidth, 0);
           ctx.scale(-1, 1);
 
           if (layout === 'portrait') {
-            // Draw cropped
             ctx.drawImage(
               offscreen,
               crop.cropX,
               crop.cropY,
               crop.visibleWidth,
-              crop.visibleHeight, // Source
+              crop.visibleHeight,
               0,
               0,
               cssWidth,
-              cssHeight, // Dest
+              cssHeight,
             );
           } else {
-            // FIX 1: Use proper contain math for landscape
             const fit = computeContainOffset(
               videoWidth,
               videoHeight,
@@ -121,11 +108,10 @@ export function PoseDebug({
     if (landmarks && landmarks.length > 0) {
       ctx.save();
 
-      // Apply mirroring
+      // Mirroring
       ctx.translate(cssWidth, 0);
       ctx.scale(-1, 1);
 
-      // Helper to map normalized [0, 1] coords to CSS canvas coords
       const mapCoord = (normX: number, normY: number) => {
         const vx = normX * videoWidth;
         const vy = normY * videoHeight;
@@ -133,7 +119,6 @@ export function PoseDebug({
         if (layout === 'portrait') {
           return videoToCss(vx, vy, crop);
         } else {
-          // FIX 1: Use proper contain math for landscape
           const fit = computeContainOffset(videoWidth, videoHeight, cssWidth, cssHeight);
           return videoToCssContain(vx, vy, fit);
         }
@@ -154,7 +139,7 @@ export function PoseDebug({
         ctx.beginPath();
         ctx.moveTo(pt1.x, pt1.y);
         ctx.lineTo(pt2.x, pt2.y);
-        ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)'; // Cyan lines
+        ctx.strokeStyle = 'rgba(0, 229, 255, 0.5)';
         ctx.stroke();
       }
 
@@ -168,11 +153,11 @@ export function PoseDebug({
         ctx.arc(pt.x, pt.y, 4, 0, 2 * Math.PI);
 
         if (vis > 0.7) {
-          ctx.fillStyle = '#00FF00'; // Green
+          ctx.fillStyle = '#00FF00';
         } else if (vis > 0.4) {
-          ctx.fillStyle = '#FFFF00'; // Yellow
+          ctx.fillStyle = '#FFFF00';
         } else {
-          ctx.fillStyle = '#FF0000'; // Red
+          ctx.fillStyle = '#FF0000';
         }
 
         ctx.fill();
@@ -180,7 +165,86 @@ export function PoseDebug({
 
       ctx.restore();
     }
-  }, [canvasRef, videoRef, landmarks, mask, layout, showDebug]);
+
+    // 3. Draw Active Zone Overlay (Lines & Candidate Bounding Boxes)
+    if (activeZone && activeZone.enabled) {
+      const config = parseActiveZoneConfig();
+      const xLeft = (0.5 - config.CENTER_BAND) * cssWidth;
+      const xRight = (0.5 + config.CENTER_BAND) * cssWidth;
+
+      // Líneas verticales de CENTER_BAND
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255, 230, 0, 0.65)';
+      ctx.lineWidth = 2;
+      ctx.setLineDash([8, 8]);
+      ctx.beginPath();
+      ctx.moveTo(xLeft, 0);
+      ctx.lineTo(xLeft, cssHeight);
+      ctx.moveTo(xRight, 0);
+      ctx.lineTo(xRight, cssHeight);
+      ctx.stroke();
+
+      ctx.setLineDash([]);
+      ctx.fillStyle = 'rgba(255, 230, 0, 0.85)';
+      ctx.font = 'bold 11px monospace';
+      ctx.fillText('ZONA ACTIVA', xLeft + 6, 24);
+      ctx.restore();
+
+      // Recuadros por candidata
+      const reasonMap: Record<CandidateReason, string> = {
+        locked: 'FIJADA',
+        far: 'lejos',
+        offCenter: 'descentrada',
+        moving: 'moviéndose',
+        lowVis: 'poco visible',
+        candidate: 'candidata',
+      };
+
+      for (const cand of activeZone.candidates) {
+        if (!cand.box) continue;
+
+        // Las coordenadas visibles en espejo selfie:
+        // screenX = (1 - visX) * cssWidth
+        const screenLeft = (1 - cand.box.maxX) * cssWidth;
+        const screenRight = (1 - cand.box.minX) * cssWidth;
+        const screenTop = cand.box.minY * cssHeight;
+        const screenBottom = cand.box.maxY * cssHeight;
+
+        const boxWidth = Math.max(30, screenRight - screenLeft);
+        const boxHeight = Math.max(40, screenBottom - screenTop);
+
+        const isLocked = cand.reason === 'locked';
+        const strokeColor = isLocked ? '#00FF66' : 'rgba(160, 160, 160, 0.8)';
+        const bgColor = isLocked ? 'rgba(0, 255, 102, 0.12)' : 'rgba(0, 0, 0, 0.35)';
+        const tagBg = isLocked ? '#00FF66' : 'rgba(120, 120, 120, 0.85)';
+        const tagTextColor = isLocked ? '#000000' : '#FFFFFF';
+
+        ctx.save();
+        ctx.strokeStyle = strokeColor;
+        ctx.lineWidth = isLocked ? 3 : 1.5;
+        ctx.fillStyle = bgColor;
+        ctx.strokeRect(screenLeft, screenTop, boxWidth, boxHeight);
+        ctx.fillRect(screenLeft, screenTop, boxWidth, boxHeight);
+
+        const reasonText = reasonMap[cand.reason] ?? cand.reason;
+        const metricsText = `sw: ${cand.sw.toFixed(2)} | cx: ${cand.cx.toFixed(2)} | spd: ${cand.speed.toFixed(2)}`;
+
+        // Etiqueta superior
+        ctx.font = 'bold 11px monospace';
+        const tagWidth = ctx.measureText(reasonText).width + 12;
+        ctx.fillStyle = tagBg;
+        ctx.fillRect(screenLeft, Math.max(0, screenTop - 20), tagWidth, 18);
+        ctx.fillStyle = tagTextColor;
+        ctx.fillText(reasonText, screenLeft + 6, Math.max(0, screenTop - 20) + 13);
+
+        // Métricas inferiores
+        ctx.font = '10px monospace';
+        ctx.fillStyle = isLocked ? '#00FF66' : '#D0D0D0';
+        ctx.fillText(metricsText, screenLeft + 2, screenTop + boxHeight + 14);
+        ctx.restore();
+      }
+    }
+  }, [canvasRef, videoRef, landmarks, mask, layout, showDebug, activeZone, shouldDraw]);
 
   return null;
 }
