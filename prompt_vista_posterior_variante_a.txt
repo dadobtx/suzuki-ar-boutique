@@ -1,0 +1,225 @@
+PROMPT PARA ANTIGRAVITY — Vista posterior en la tarjeta del catálogo (variante A: voltear)
+Repo: C:\Users\Dario\Documents\Suzuki Boutique
+
+=====================================================================
+CONTEXTO
+=====================================================================
+Las prendas del catálogo ahora pueden tener foto de la ESPALDA. Los datos y las
+imágenes YA ESTÁN en el repo, no hay que generarlos ni tocarlos:
+
+  public/garments/<PN>.back.png        2048x2048, fondo blanco
+  public/garments/<PN>.back.thumb.png  512x512
+  public/catalog.json                  tres campos nuevos en las prendas que la tienen:
+        "backImageUrl": "/garments/<PN>.back.png",
+        "backThumbnailUrl": "/garments/<PN>.back.thumb.png",
+        "flip": true
+
+Tienen espalda 7 de las 10 prendas: BKTM1, BKPM5, BKHM0, BLMJ4, BLPK0, JYFJ1 y
+FCHJ0. NO la tienen BKBW5, RSSM0 ni la reversible BKQJ5 — esas prendas se quedan
+sin el control, y la tarjeta no debe cambiar en nada para ellas.
+
+Las dos fotos de cada par fueron normalizadas para que la prenda quede al mismo
+tamaño y en el mismo centro (alineadas por ancho de hombros), que es lo que hace
+que el volteo no "salte". El campo `flip` dice si ese par pasó la comprobación.
+
+OBJETIVO: que el cliente pueda voltear la prenda en la tarjeta con un toque y ver
+la espalda, con un giro 3D de media vuelta.
+
+REGLA QUE NO SE NEGOCIA: la vista posterior es SOLO catálogo. No entra al overlay
+AR, ni a FASHN, ni a Lucy 2. Los anchors están calculados sobre la silueta frontal
+y los dos motores esperan una referencia de frente. En concreto: NO agregar la
+espalda a `ResolvedGarmentAssets` ni tocar `resolveGarmentAssets` en
+src/lib/garment-assets.ts. Si en algún momento parece que hace falta, está mal.
+
+REFERENCIA VISUAL: docs/mockup_frente_atras.html en este mismo repo. Es el mockup
+aprobado, HTML plano, se abre con doble clic. La variante A es la que hay que
+construir; el archivo trae también B y C, que NO van. El CSS del volteo está en
+las líneas ~108 a 116 — copiá ese bloque, no el archivo entero.
+
+=====================================================================
+IMPLEMENTACIÓN
+=====================================================================
+
+--- 1) Tipos: src/types/garment.ts ---------------------------------
+Agregar a la interface Garment, opcionales:
+
+  /** Foto de la ESPALDA. Solo catálogo: nunca se manda al overlay AR,
+   *  a FASHN ni a Lucy 2, que esperan la vista frontal. */
+  backImageUrl?: string;
+  backThumbnailUrl?: string;
+  /** true si el par frente/espalda pasó la comprobación de encuadre y
+   *  aguanta la animación de volteo. Lo calcula scripts/normalize_back_views.py;
+   *  no se pone a mano. */
+  flip?: boolean;
+
+Agregar los mismos tres campos, también opcionales, a GarmentVariant: la chompa
+reversible tendrá una espalda por cara cuando consigamos esas fotos.
+
+--- 2) Lógica: src/lib/back-view.ts (ARCHIVO NUEVO) ----------------
+Módulo puro, sin React, para poder testearlo:
+
+  export type BackViewMode = 'flip' | 'fade';
+
+  export interface ResolvedBackView {
+    imageUrl: string;
+    thumbnailUrl: string;
+    mode: BackViewMode;
+  }
+
+  export function resolveBackView(
+    garment: Garment,
+    variantId?: string | null,
+  ): ResolvedBackView | null
+
+Reglas:
+ - Si la prenda tiene `variants` y la variante activa (misma resolución que hace
+   resolveGarmentAssets: por id, y si no existe o es null cae a variants[0])
+   trae `backImageUrl`, mandan los campos de LA VARIANTE.
+ - Si no, se usan los de la prenda.
+ - Sin `backImageUrl` -> devuelve null. Es el caso de BKBW5, RSSM0 y BKQJ5.
+ - `thumbnailUrl` cae a `imageUrl` si no viene.
+ - mode: 'flip' solo si `flip === true`. Con `false` O con `undefined` -> 'fade'.
+   El fundido es el modo seguro: un par sin verificar no gira.
+
+--- 3) Tarjeta: src/components/catalog/CatalogCard.tsx -------------
+Hoy el área de la imagen (línea ~103) es un div con
+`onClick={() => selectGarment(garment.id)}` y dentro un solo <img> (línea ~112)
+con el fundido de `imgLoaded`. Hay que convertirlo en un contenedor de dos caras:
+
+ - Estado local del componente (NO en el store de zustand: es estado de UI de esa
+   tarjeta): `const [view, setView] = useState<'front'|'back'>('front')`.
+ - `resolveBackView(garment, X)` recibe `activeVariantId` SOLO si esta tarjeta es
+   la activa (`isActive`, que ya existe en el componente); para las demás pasa
+   null y deja que caiga a variants[0]. El `activeVariantId` del store es la cara
+   de la prenda ACTIVA y no significa nada para las otras tarjetas.
+ - EL FRENTE NO PUEDE CAMBIAR. Al reestructurar el área de la imagen, la vista
+   frontal tiene que seguir renderizándose exactamente igual que hoy: mismo
+   `p-8`, mismo `object-contain`, mismo tamaño aparente, mismo fundido de
+   `imgLoaded`. Esa imagen ya está en producción y el catálogo no debe verse
+   distinto en ninguna otra cosa.
+ - Estructura:
+     <div class="imgbox">            perspective
+       <div class="faces">           preserve-3d + transition de transform
+         <div class="face front"><img .../></div>
+         <div class="face back"><img ... loading="lazy" /></div>
+       </div>
+       <button class="flip-btn" .../>
+     </div>
+   El <img> de la espalda usa `backThumbnailUrl` (512px), NUNCA el de 2048.
+ - Si `resolveBackView(...)` devuelve null: renderizar la imagen como hoy, sin
+   contenedor de caras y sin botón. Nada de huecos ni de espacios reservados.
+ - mode 'fade': mismo marcado, pero sin rotación — las caras cambian por opacidad.
+ - El botón va abajo a la derecha de la imagen, redondo, con ícono de giro y la
+   palabra debajo: "Atrás" cuando se ve el frente, "Frente" cuando se ve la
+   espalda. Mismo lenguaje visual que el resto del HUD del kiosko: fondo casi
+   negro translúcido, borde zinc, y estado activo con rojo de marca.
+ - TAMAÑO DEL BOTÓN: ~11% del ancho de la tarjeta, con un mínimo de 72px. NUNCA
+   44px fijos. En el mockup mide 44px porque ahí la pantalla está dibujada a
+   escala (1 px del mockup ≈ 1 mm de la pantalla real); copiar ese número a la app
+   da un botón diminuto en el kiosko. A 11% son unos 4 cm de lado en la pantalla
+   de 32" en vertical, que es lo que se toca de pie y sin apuntar.
+ - EL BOTÓN VA FUERA DE `.faces`: hermano del contenedor que rota, nunca hijo. Si
+   queda dentro hereda la rotación, se voltea con la prenda y desaparece a mitad
+   del giro. Es el error clásico de esta animación.
+ - CRÍTICO: el onClick del botón tiene que hacer `e.stopPropagation()`. Si no,
+   voltear la prenda también la selecciona y arranca la prueba.
+ - `aria-label` que diga qué hace ("Ver la prenda por detrás" / "Volver a la vista
+   de frente"), y `aria-pressed` según la vista.
+ - Al cambiar de prenda activa o al reiniciarse la sesión, la tarjeta vuelve a
+   'front'. Nadie debe encontrarse una tarjeta mostrando la espalda de arranque.
+
+--- 4) La insinuación (esto es lo que hace que se descubra) --------
+Nadie lee un ícono de rotación en dos segundos, pero todo el mundo entiende una
+prenda que se da la vuelta sola. UNA vez por sesión, la primera tarjeta con
+espalda que entre en pantalla gira sola: a los 700 ms voltea, y 1500 ms después
+vuelve al frente. Ver la función `tease()` del mockup.
+
+ - UNA sola vez por sesión y UNA sola tarjeta. Nada de siete tarjetas girando a la
+   vez: es un kiosko, no una vidriera animada.
+ - Disparador: la tarjeta entra en el viewport del catálogo (IntersectionObserver),
+   no el montaje del componente.
+ - LA MARCA DE "YA INSINUADO" ES COMPARTIDA ENTRE TODAS LAS TARJETAS. CatalogCard
+   se renderiza una vez por prenda: si la marca vive en `useState` o en un `useRef`
+   del componente, cada una de las 7 tarjetas con espalda se insinúa por su cuenta
+   y el catálogo entero se pone a girar. Tiene que vivir FUERA del componente —
+   variable a nivel de módulo o campo del store — clavada al `sessionId` del store
+   de sizing (src/store/sizing.ts), que es lo que se reinicia cuando cambia la
+   persona frente al kiosko. Sesión nueva, insinuación nueva.
+ - NO se dispara si `mode` es 'fade', ni si
+   `matchMedia('(prefers-reduced-motion: reduce)').matches`.
+ - Si el cliente toca el botón mientras corre la insinuación, se cancelan los
+   temporizadores y manda el toque.
+
+--- 5) Analítica ---------------------------------------------------
+En src/lib/analytics-events.ts, evento nuevo:
+
+  { type: 'garment_back_viewed'; sku: string; variantId?: string }
+
+Se dispara SOLO en el primer volteo MANUAL de cada tarjeta por sesión. La
+insinuación automática NO cuenta: si contara, inflaría la señal de interés con
+algo que el cliente no hizo. Ver la espalda es una señal de intención más fuerte
+que un toque cualquiera, y queremos que siga significando eso.
+NO tocar el esquema de D1 ni los endpoints /kiosk/*: esto es solo cliente.
+
+--- 6) i18n --------------------------------------------------------
+Claves nuevas en src/i18n/es.json y en.json:
+  catalog.viewBack   -> "Atrás"  / "Back"
+  catalog.viewFront  -> "Frente" / "Front"
+Nada de texto hardcodeado en el componente.
+
+=====================================================================
+TESTS
+=====================================================================
+tests/unit/back-view.test.ts sobre resolveBackView:
+ - prenda sin backImageUrl -> null
+ - prenda con backImageUrl y flip:true -> mode 'flip'
+ - prenda con backImageUrl y flip:false -> mode 'fade'
+ - prenda con backImageUrl y flip ausente -> mode 'fade'
+ - sin backThumbnailUrl -> thumbnailUrl cae a imageUrl
+ - prenda con variants: si la variante activa trae backImageUrl, mandan los campos
+   de la variante y no los de la prenda
+ - variantId inexistente -> cae a variants[0], no lanza
+
+Los tests existentes de garment-assets no deben cambiar: la resolución de assets
+de prueba (overlay/anchors) es independiente de esto y tiene que seguir igual.
+
+=====================================================================
+VERIFICACIÓN MANUAL
+=====================================================================
+1. npm run dev. En el catálogo, las 7 prendas con espalda muestran el botón;
+   BKBW5, RSSM0 y BKQJ5 no lo muestran y su tarjeta se ve igual que antes.
+2. Tocar el botón voltea la prenda y el logo/estampado de la espalda queda
+   derecho, no espejado.
+3. Voltear 4 o 5 veces seguidas: la prenda vuelve siempre al mismo tamaño y a la
+   misma posición. Si "salta", el problema está en el CSS del contenedor, no en
+   las imágenes: están normalizadas y verificadas.
+4. Tocar el botón NO selecciona la prenda ni arranca la prueba (stopPropagation).
+5. Recargar: la primera tarjeta con espalda que aparece gira sola una vez. Al
+   volver a recargar dentro de la misma sesión no se repite; tras un reinicio de
+   presencia (sessionId nuevo) sí.
+6. Seleccionar otra prenda y volver: la tarjeta está de frente.
+7. En Network, al listar el catálogo se bajan los *.back.thumb.png (100-250 KB) y
+   NO los *.back.png de 2048.
+8. Tomar una foto con FASHN y probar el live de Lucy: la prenda generada es la del
+   FRENTE aunque la tarjeta esté mostrando la espalda. Esta es la comprobación más
+   importante de todas.
+9. Con el sistema en "reducir movimiento", el cambio es por fundido y no hay
+   insinuación.
+
+=====================================================================
+GATES OBLIGATORIOS ANTES DEL COMMIT
+=====================================================================
+  npx tsc --noEmit
+  npm run lint
+  npm test
+  npm --prefix backend test
+  npm run build
+  git diff --stat public/catalog.json    -> VACÍO, el build no toca el catálogo
+
+Notas del repo:
+ - Guardar todo en UTF-8 sin BOM.
+ - No modificar public/catalog.json ni nada dentro de public/garments/: los datos
+   y las imágenes ya están puestos y verificados.
+ - No correr los scripts `legacy:*`: sobrescriben el catálogo real.
+ - Entregar el DIFF real de cada archivo tocado. El walkthrough narrado no sirve
+   como evidencia.

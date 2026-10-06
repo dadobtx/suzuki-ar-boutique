@@ -1,0 +1,139 @@
+PROMPT PARA ANTIGRAVITY — cerrar pendientes, correr gates y desplegar
+Repo: C:\Users\Dario\Documents\Suzuki Boutique
+
+=====================================================================
+ESTADO ACTUAL
+=====================================================================
+Los commits 1d6f75a (infraestructura de assets/build) y efde317 (variantes de prenda
+reversible + thumbnails) ya están hechos y revisados. En la revisión aparecieron dos
+bugs menores que YA ESTÁN CORREGIDOS y escritos en el working tree, SIN COMMITEAR, en
+estos dos archivos:
+
+  src/hooks/useGarmentRenderer.ts
+  src/store/garment.ts
+
+Tu trabajo acá NO es reimplementar nada. Es verificar esos dos cambios, correr los
+gates, commitear, desplegar y verificar el deploy real.
+
+=====================================================================
+PASO 0 — Verificar el working tree (no reescribir)
+=====================================================================
+  git status --short
+
+Debe mostrar SOLO esos dos archivos modificados (más, si acaso, los archivos
+prompt_*.txt de la raíz, que son notas y pueden commitearse igual o quedar fuera).
+Si aparece cualquier otra cosa modificada, PARÁ y reportalo antes de seguir.
+
+  git diff src/hooks/useGarmentRenderer.ts src/store/garment.ts
+
+Confirmá que el diff contiene exactamente estos dos arreglos y NADA más:
+
+1. `loadGarmentAssets` en useGarmentRenderer.ts:
+   - El branch que espera una carga en curso ahora es
+     `new Promise((resolve, reject) => ...)` y, dentro del setInterval, después de
+     revisar el caché, si la key ya NO está en `loadingKeys` hace clearInterval y
+     `reject(new Error(...))`.
+     Por qué: antes, si la otra carga fallaba (404), quien esperaba se quedaba
+     haciendo polling cada 50 ms para siempre, sin resolver ni rechazar.
+   - La carga de imagen + anchors quedó dentro de un `try { ... } finally {
+     loadingKeys.delete(key); }`, y ya NO hay un `loadingKeys.delete(key)` suelto en
+     el camino de éxito.
+     Por qué: la key tiene que salir de `loadingKeys` también cuando la carga falla.
+
+2. `selectVariant` en store/garment.ts:
+   - Ahora destructura también `activeVariantId` del estado y hace
+     `if (variantId === activeVariantId) return;` ANTES de trackear la analítica.
+     Por qué: tocar el chip de la cara que ya está activa no es un cambio de cara, y
+     si se trackea igual infla el conteo de preferencia roja/negra.
+
+Si algo de eso no está, avisá; no lo rehagas por tu cuenta.
+
+=====================================================================
+PASO 1 — Gates, en este orden, reportando la SALIDA REAL de cada uno
+=====================================================================
+  npx tsc --noEmit
+  npm run lint
+  npm test
+  npm --prefix backend test
+  npm run build
+
+Reglas si algo falla:
+ - Arreglo MÍNIMO y puntual. Nada de refactors, ni de "aprovechar para limpiar".
+ - Si falla por formato (prettier/eslint), corré `npm run format` y volvé a correr el
+   gate; no reescribas la lógica.
+ - Si un test falla, mostrá el output completo del test antes de tocar nada.
+ - Guardá todo en UTF-8 sin BOM. Editar archivos de este repo con otra codificación ya
+   corrompió KioskPage.tsx una vez.
+
+=====================================================================
+PASO 2 — Verificaciones del catálogo y los assets (post-build)
+=====================================================================
+  git diff --stat public/catalog.json
+     -> VACÍO. El build no puede modificar el catálogo.
+
+  node -e "const c=require('./public/catalog.json'); console.log(c.length, c.map(g=>g.sku).join(','))"
+     -> exactamente 10 y solo números de parte 990F0-*.
+
+  git check-ignore -v public/garments/990F0-BKTM1.png
+     -> sin salida.
+
+  ls dist/garments/990F0* | wc -l
+     -> 33 (11 PNG + 11 thumb + 11 anchors).
+
+=====================================================================
+PASO 3 — Commit y push
+=====================================================================
+Un solo commit con los dos arreglos. Mensaje sugerido:
+
+  fix(garments): evitar polling infinito al fallar la carga de assets y no trackear
+  la variante ya activa
+
+  - loadGarmentAssets: try/finally para liberar siempre la key de loadingKeys y
+    rechazar a quien espera si la carga en curso terminó sin dejar caché
+  - selectVariant: early return cuando la variante no cambia, para no inflar el
+    conteo de preferencia de cara
+
+Después:
+  git push origin main
+
+Eso dispara el workflow de GitHub Pages. Esperá a que termine y reportá si quedó en
+verde (podés usar `gh run list --limit 1` y `gh run watch` si tenés gh configurado).
+
+=====================================================================
+PASO 4 — Verificación del deploy real (esto es lo que importa)
+=====================================================================
+Estas comprobaciones no las cubre ningún gate. Hacelas DESPUÉS de que el workflow
+termine (GitHub Pages puede tardar un par de minutos extra en propagar):
+
+  curl -sI https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png | head -1
+  curl -sI https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.anchors.json | head -1
+  curl -sI https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKTM1.thumb.png | head -1
+
+Las tres tienen que devolver 200. La primera es CRÍTICA: esa URL exacta es la que
+recibe fal/Lucy 2 como reference_image_url, y si da 404 el live try-on no falla con
+error visible, simplemente no cambia la prenda.
+
+  curl -s https://dadobtx.github.io/suzuki-ar-boutique/catalog.json | node -e "let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const c=JSON.parse(s);console.log(c.length, c.map(g=>g.sku+':'+(g.priceCents/100)).join(' '))})"
+     -> 10 prendas con los precios reales (35.29, 50.29, 81.13, 86.48, 256.71,
+        162.1, 314.86, 177.73, 117.4, 81.13). Si salen 26 o 29, quedó vivo algún
+        camino que reescribe el catálogo.
+
+Y en el navegador, sobre el sitio desplegado:
+ - Las pestañas de línea muestran Team Black / Team Blue / GSX-R / Jimny / Lifestyle.
+ - En la pestaña Network, al listar el catálogo se descargan los *.thumb.png
+   (100-250 KB), NO los PNG de 2048px.
+ - Con la 990F0-BKQJ5 activa aparece el selector de cara; alternar Roja/Negra 3 o 4
+   veces seguidas cambia el overlay AR todas las veces (si se queda pegada, algo pasa
+   con la key del caché).
+
+=====================================================================
+QUÉ REPORTAR
+=====================================================================
+ - El `git diff` real de lo que hayas tenido que tocar (si tocaste algo).
+ - La salida real de cada gate, no un resumen narrado.
+ - El resultado de cada curl con su código de estado.
+ - El hash del commit y si el workflow quedó en verde.
+
+Si algo falla y no estás seguro de cómo arreglarlo sin cambiar comportamiento, parás y
+lo reportás. Es preferible eso a improvisar sobre el catálogo o sobre el pipeline de
+assets, que ya nos costó dos rondas dejarlos bien.

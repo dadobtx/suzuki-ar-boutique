@@ -72,7 +72,17 @@
     "attract": {
       "cta": "ACÉRCATE PARA EMPEZAR",
       "title": "PRUÉBATE LA COLECCIÓN SUZUKI",
-      "standOnMark": "PÁRATE EN LA MARCA DEL PISO"
+      "standOnMark": "PÁRATE EN LA MARCA DEL PISO",
+      "showcase": {
+        "realOne": "ASÍ ES LA REAL",
+        "sizes": "TALLAS",
+        "colors": "{{count}} COLORES",
+        "cta": "PRUÉBATELA EN EL ESPEJO",
+        "summaryTitle": "COLECCIÓN SUZUKI",
+        "summaryCount": "{{count}} PRENDAS",
+        "summaryFrom": "DESDE",
+        "summaryCta": "PÁRATE FRENTE AL ESPEJO Y PRUÉBATELAS"
+      }
     },
     "awakening": {
       "greeting": "¡VAMOS!"

@@ -1,18 +1,51 @@
-import { useState, useEffect } from 'react';
-import { useTranslation } from 'react-i18next';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useEffect, useMemo } from 'react';
+import { AnimatePresence } from 'framer-motion';
 import { useGarmentStore } from '@/store/garment';
+import { buildShowcaseSlides } from './showcase/buildShowcaseSlides';
+import { ShowcaseSlide } from './showcase/ShowcaseSlide';
+import { ShowcaseSummary } from './showcase/ShowcaseSummary';
+import { ShowcaseProgress } from './showcase/ShowcaseProgress';
+
+const SLIDE_MS = 5500;
 
 export function AttractPanel() {
-  const { t } = useTranslation();
   const catalog = useGarmentStore((s) => s.catalog);
+  const slides = useMemo(() => buildShowcaseSlides(catalog), [catalog]);
   const [currentIndex, setCurrentIndex] = useState(0);
 
-  // Take up to 10 garments from catalog
-  const garments = catalog.slice(0, 10);
+  // Safety clamp if slides length changes
+  const activeIndex = slides.length > 0 ? currentIndex % slides.length : 0;
 
+  // Preload next slide images
   useEffect(() => {
-    if (garments.length === 0) return;
+    if (slides.length <= 1) return;
+    const nextIdx = (activeIndex + 1) % slides.length;
+    const nextSlide = slides[nextIdx];
+    if (!nextSlide) return;
+
+    const urlsToPreload: string[] = [];
+    if (nextSlide.kind === 'garment') {
+      urlsToPreload.push(...nextSlide.illustrations);
+      if (nextSlide.photo.thumb) urlsToPreload.push(nextSlide.photo.thumb);
+      if (nextSlide.photo.full) urlsToPreload.push(nextSlide.photo.full);
+    } else if (nextSlide.kind === 'summary') {
+      urlsToPreload.push(...nextSlide.illustrations);
+    }
+
+    urlsToPreload.forEach((url) => {
+      try {
+        const img = new Image();
+        img.src = url;
+        img.decode?.().catch(() => {});
+      } catch {
+        // Ignore preload errors
+      }
+    });
+  }, [activeIndex, slides]);
+
+  // Timer orchestration with document visibility check
+  useEffect(() => {
+    if (slides.length <= 1) return;
 
     let timer: ReturnType<typeof setInterval> | null = null;
 
@@ -20,9 +53,9 @@ export function AttractPanel() {
       if (timer) clearInterval(timer);
       timer = setInterval(() => {
         if (!document.hidden) {
-          setCurrentIndex((prev) => (prev + 1) % garments.length);
+          setCurrentIndex((prev) => (prev + 1) % slides.length);
         }
-      }, 4000);
+      }, SLIDE_MS);
     };
 
     const handleVisibilityChange = () => {
@@ -43,83 +76,46 @@ export function AttractPanel() {
       if (timer) clearInterval(timer);
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [garments.length]);
+  }, [slides.length]);
 
-  const currentGarment = garments[currentIndex] ?? null;
+  if (slides.length === 0) {
+    return null;
+  }
+
+  const currentSlide = slides[activeIndex];
+  if (!currentSlide) {
+    return null;
+  }
 
   return (
-    <div className="w-full h-full flex flex-col justify-between items-center p-8 bg-surface text-fg select-none overflow-hidden">
-      {/* Top Banner: Call to Action */}
-      <div className="flex flex-col items-center text-center mt-2">
-        <span className="font-display text-3xl md:text-4xl tracking-widest text-fg uppercase">
-          {t('kiosk.attract.standOnMark', 'PÁRATE EN LA MARCA DEL PISO')}
-        </span>
-        <div className="w-20 h-1 bg-brand-red mt-3" />
-      </div>
-
-      {/* Carousel Central Area */}
-      <div className="relative flex-1 w-full flex items-center justify-center my-4 min-h-0">
-        <AnimatePresence mode="wait">
-          {currentGarment && (
-            <motion.div
-              key={currentGarment.id}
-              initial={{ opacity: 0, scale: 0.92, y: 10 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: -10 }}
-              transition={{ duration: 0.5, ease: 'easeOut' }}
-              className="flex flex-col items-center text-center max-w-sm w-full h-full justify-center"
-            >
-              {(() => {
-                const baseUrl = import.meta.env.BASE_URL;
-                const src = currentGarment.thumbnailUrl || currentGarment.overlayUrl;
-                const imageUrl = src ? `${baseUrl}${src.replace(/^\//, '')}` : '';
-
-                return (
-                  <div className="relative w-48 h-48 md:w-56 md:h-56 mb-4 flex items-center justify-center">
-                    {imageUrl ? (
-                      <img
-                        src={imageUrl}
-                        alt={currentGarment.name}
-                        className="max-w-full max-h-full object-contain drop-shadow-2xl"
-                      />
-                    ) : (
-                      <div className="w-32 h-32 rounded-xl bg-surface-2 border border-line flex items-center justify-center text-fg-muted text-4xl">
-                        👕
-                      </div>
-                    )}
-                  </div>
-                );
-              })()}
-
-              <span className="font-mono text-xs uppercase tracking-widest text-fg-muted mb-1">
-                {currentGarment.line}
-              </span>
-              <h3 className="font-display text-2xl md:text-3xl text-fg tracking-wide uppercase line-clamp-1 mb-2">
-                {currentGarment.name}
-              </h3>
-              {typeof currentGarment.priceCents === 'number' && (
-                <span className="font-mono text-xl text-fg font-bold">
-                  ${(currentGarment.priceCents / 100).toFixed(2)}
-                </span>
-              )}
-            </motion.div>
+    <section
+      role="region"
+      aria-roledescription="carrusel"
+      aria-label="Colección Suzuki"
+      className="relative w-full h-full bg-surface text-fg select-none overflow-hidden"
+    >
+      {/* Active Slide Stage (Crossfade via AnimatePresence without mode='wait') */}
+      <div className="absolute inset-0 w-full h-full">
+        <AnimatePresence>
+          {currentSlide.kind === 'garment' ? (
+            <ShowcaseSlide
+              key={`slide-${currentSlide.garment.id}-${activeIndex}`}
+              slide={currentSlide}
+            />
+          ) : (
+            <ShowcaseSummary key={`slide-summary-${activeIndex}`} slide={currentSlide} />
           )}
         </AnimatePresence>
       </div>
 
-      {/* Dots Indicator */}
-      {garments.length > 1 && (
-        <div className="flex gap-2 items-center justify-center mb-2">
-          {garments.map((g, idx) => (
-            <div
-              key={g.id}
-              className={`h-1.5 rounded-full transition-all duration-300 ${
-                idx === currentIndex ? 'w-6 bg-brand-red' : 'w-1.5 bg-line'
-              }`}
-            />
-          ))}
-        </div>
-      )}
-    </div>
+      {/* Segmented Progress Bar */}
+      <div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-30 w-full max-w-md px-6 flex justify-center pointer-events-none">
+        <ShowcaseProgress
+          total={slides.length}
+          currentIndex={activeIndex}
+          slideDurationMs={SLIDE_MS}
+        />
+      </div>
+    </section>
   );
 }

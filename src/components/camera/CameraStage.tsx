@@ -559,8 +559,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           </div>
         )}
 
-        {/* Degraded camera indicator: 12px amber dot if height < expected (always visible if degraded, without text) */}
-        {camera.status === 'granted' &&
+        {/* Degraded camera indicator: 12px amber dot if height < expected (only in operator mode) */}
+        {isOperatorMode() &&
+          camera.status === 'granted' &&
           kioskState !== 'PHOTO_COUNTDOWN' &&
           camera.settings &&
           camera.settings.height !== undefined &&

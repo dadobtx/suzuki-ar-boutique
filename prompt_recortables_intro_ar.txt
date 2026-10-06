@@ -1,0 +1,346 @@
+PROMPT PARA ANTIGRAVITY — Recortables ilustrados en el adelanto AR (intro interactiva)
+Repo: C:\Users\Dario\Documents\Suzuki Boutique  (React + TS + Vite, MediaPipe Pose, FASHN AI, Lucy 2 VTON)
+Paquete de origen: C:\Users\Dario\Downloads\Suzuki_Recortables_AR_v1
+  Leé primero, en ese orden: LEEME.md, manifest.json, PROMPT_CLAUDE_ANTIGRAVITY.md, VISTA_GENERAL.jpg
+  (VISTA_GENERAL.jpg es solo revisión sobre fondo gris — NO usarla como overlay).
+
+Inspecciona primero el estado actual del código, no asumas que sigue igual a prompts anteriores.
+Este documento ya está escrito contra el código real (rutas y líneas verificadas el 2026-09-15),
+pero el repo puede haber cambiado desde entonces.
+
+=====================================================================
+CONTEXTO
+=====================================================================
+Concepto aprobado: reemplazar el adelanto AR local (la prenda que se superpone al cliente en
+vivo, antes de tomar foto o entrar a Lucy) por ilustraciones tipo recortable — estética adulta,
+deportiva, juvenil, deliberadamente NO fotorrealista. Objetivo: que el visitante se anime a tocar
+y probarse prendas sin la incomodidad de sentirse observado. El juego no mide talla ni promete
+caída real de tela.
+
+El paquete trae 11 PNG para 10 productos (todos con canal alpha, 1254×1254 nativo, SIN reescalar):
+  990F0-BKTM1, 990F0-BKBW5, 990F0-BKHM0, 990F0-BKPM5, 990F0-BKQJ5, 990F0-BKQJ5_2,
+  990F0-BLMJ4, 990F0-BLPK0, 990F0-FCHJ0, 990F0-JYFJ1, 990F0-RSSM0
+
+990F0-BKQJ5.png (cara roja) y 990F0-BKQJ5_2.png (cara negra) son las DOS CARAS de UN SOLO
+producto reversible — igual que ya funciona hoy para las fotos reales. NO es frente/espalda,
+NO se crea un producto nuevo. La camiseta (BKTM1) ya trae la corrección de pecho plano aprobada;
+el chaleco (BKBW5) es el concepto aprobado tal cual.
+
+Ninguna ilustración tiene todavía anchors de colocación (manifest.json: "calibracion_anchors":
+"pendiente; no reutilizar anchors fotograficos automaticamente"). Eso es la mitad de este trabajo.
+
+Alcance de ESTA tarea: prototipo local con 990F0-BKTM1 (camiseta) y 990F0-BKBW5 (chaleco)
+solamente. No publicar, no desplegar, no tocar gh-pages ni main. Trabajar en una rama o copia
+aislada que se pueda comparar contra la versión actual, conservando cualquier cambio ajeno que
+ya esté en el working tree.
+
+=====================================================================
+RIESGO DE FONDO A EVITAR — verificado leyendo el código, no supongas otra cosa
+=====================================================================
+Hoy `resolveGarmentAssets` (src/lib/garment-assets.ts) tiene exactamente TRES consumidores, y
+los tres reciben la MISMA foto real:
+
+  1. src/hooks/useGarmentRenderer.ts (L154-158) — el overlay AR local. ESTE es el único que
+     debe empezar a usar ilustración.
+  2. src/components/kiosk/AIProcessing.tsx (L61) — arma fullOverlayUrl para FASHN. NO TOCAR.
+  3. src/components/camera/CameraStage.tsx (L182 y L246) — arma referenceImageUrl para Lucy 2
+     (fal). NO TOCAR.
+
+La forma correcta de no romper 2 y 3 no es "tener cuidado": es que el código de ilustración
+viva en un resolver NUEVO Y SEPARADO (ver Implementación, paso 2) que ni AIProcessing.tsx ni
+CameraStage.tsx importen. Si en algún momento del trabajo aparece la tentación de agregar
+`illustrationUrl` dentro de `ResolvedGarmentAssets` o de tocar `resolveGarmentAssets`, es la
+señal de que algo se está haciendo mal — pará y repensá.
+
+Hallazgo adicional (no mencionado en el paquete, confirmado leyendo el código, no requiere
+arreglo — solo preservarlo y verificarlo con un test):
+  `src/lib/photo-composer.ts` (composePhoto, L82-87) compone `photoComposed` dibujando
+  `overlayCanvas` sobre el video. Ese parámetro llega desde
+  `src/components/kiosk/PhotoCountdown.tsx` → `overlayCanvasRef`, que en
+  `src/components/camera/CameraStage.tsx` (~L368-373) es el canvas del ESQUELETO DEBUG
+  (el que dibuja `PoseDebug.tsx`, normalmente vacío salvo `?dev=1` con el toggle de esqueleto
+  activo) — NO es el canvas interno de `GarmentOverlay` (que es privado al componente, nunca
+  se expone al padre). O sea: hoy ni la foto real ni la futura ilustración quedan "quemadas"
+  en `photoComposed`, que es lo que se muestra en el fallback `SHARE_QR_FALLBACK`
+  (`PhotoShare.tsx` L25-28: `displayImage = aiGeneratedUrl ?? photoComposed`). Dejalo así.
+  Agregá un test o una verificación manual explícita de que sigue siendo así (ver TESTS) —
+  si alguien "arregla" ese wiring sin saber esto, la ilustración terminaría quemada en el
+  fallback que se descarga/QR-ea como si fuera la foto del cliente.
+
+=====================================================================
+REGLA QUE NO SE NEGOCIA
+=====================================================================
+- Las ilustraciones alimentan EXCLUSIVAMENTE el overlay AR local (GarmentOverlay /
+  useGarmentRenderer). FASHN y Lucy 2 siguen recibiendo SIEMPRE la foto real vía
+  `resolveGarmentAssets` sin modificar.
+- Catálogo, precios, tallas, SKU, vista posterior (backImageUrl/flip) no cambian en nada.
+- 990F0-BKQJ5 / 990F0-BKQJ5_2 son dos caras del mismo producto. El cambio de cara debe seguir
+  afectando a la ilustración, a la prenda activa y a la referencia real que usan los motores,
+  todo sincronizado por el mismo `activeVariantId` que ya existe.
+- No renombrar ni reinterpretar 990F0-BKQJ5_2.png como espalda.
+- No reescalar las ilustraciones a 2048 ni presentar un reescalado como si fuera nativo. Si hace
+  falta un derivado (limpieza de bordes, por ejemplo), se guarda aparte y se documenta la
+  transformación — nunca se sobreescribe el original del paquete.
+- No hay simulación 3D de tela en esta fase. Nada de sombras anatómicas añadidas sobre la
+  camiseta (el "pecho plano" es el concepto aprobado, no un defecto a corregir).
+- El adelanto no bloquea "Disparar foto" ni "Verme en vivo", no agrega esperas artificiales, no
+  fuerza una secuencia AR→FASHN→Lucy. El cliente pasa a cualquiera de los dos cuando quiera.
+
+=====================================================================
+PASO 0 — PREPARACIÓN DE IMÁGENES (antes de tocar código)
+=====================================================================
+1. Copiar SOLO estos dos archivos, sin editarlos, preservando el nombre exacto:
+     C:\Users\Dario\Downloads\Suzuki_Recortables_AR_v1\ilustraciones\990F0-BKTM1.png
+     C:\Users\Dario\Downloads\Suzuki_Recortables_AR_v1\ilustraciones\990F0-BKBW5.png
+   hacia una carpeta NUEVA y separada de las fotos reales:
+     public/garments/illustrations/990F0-BKTM1.png
+     public/garments/illustrations/990F0-BKBW5.png
+   (Separar en subcarpeta propia es a propósito: aunque el resolver nuevo ya aísla los campos,
+   la separación física es una segunda barrera contra que algún código futuro arme una ruta a
+   mano y termine leyendo el dibujo por error — el mismo tipo de bug que ya mordió a este repo
+   con el sku hardcodeado en useGarmentRenderer/liveTryon antes de que existiera el resolver.)
+
+2. Verificar el hash contra manifest.json antes de seguir (evita trabajar sobre una copia
+   corrupta o truncada):
+     990F0-BKTM1.png → sha256 cbaa7e67fb6608c0c72457c197e0c4b0c4e86ea13f68dabb6ee1449f06b4ceb5
+     990F0-BKBW5.png → sha256 42bcebd55fc0d8fab3c7ec2a7e47bfbfba5080f08770351348a952dee56678b1
+
+3. QA visual del canal alpha ANTES de calibrar anchors. Escribí un script chico y descartable
+   (Python + Pillow, mismo patrón que scripts/normalize_back_views.py) que para cada ilustración
+   piloto genere: la imagen compuesta sobre fondo blanco, sobre fondo negro y sobre un gris medio
+   neutro, más un recorte ampliado del borde de la silueta. Mirá especialmente:
+     - residuos de píxeles fuera del borde de pegatina (manifest.json ya avisa que existen).
+     - que no se haya perforado la tela blanca ni los logos.
+     - halos claros/oscuros según el fondo (típico de un canal alpha mal premultiplicado).
+   NO apliques un umbral global para "limpiar" blanco — el LEEME.md lo prohíbe explícitamente y
+   en un PNG con estética ilustrada puede comerse trazos finos legítimos. Si hace falta limpieza
+   puntual, hacela a mano sobre una COPIA (`990F0-BKTM1.clean.png`, por ejemplo) y documentá qué
+   se tocó; el original del paquete queda intacto.
+
+4. Antes de comitear los PNG nuevos, confirmar que no van a quedar excluidos por accidente:
+     git check-ignore -v public/garments/illustrations/990F0-BKTM1.png
+     git check-ignore -v public/garments/illustrations/990F0-BKBW5.png
+   No debe devolver nada (repasá public/pipeline de assets — el .gitignore ya tuvo una vez una
+   línea que excluía silenciosamente los PNG de prendas; hoy no la tiene, pero verificalo).
+
+=====================================================================
+IMPLEMENTACIÓN
+=====================================================================
+
+--- 1) Tipos: src/types/garment.ts ---------------------------------
+Agregar campos opcionales, mismo patrón que backImageUrl/backThumbnailUrl:
+
+  En GarmentVariant:
+    /** Ilustración tipo recortable para el adelanto AR local. Nunca se manda a
+     *  FASHN ni a Lucy 2, que siguen recibiendo overlayUrl (foto real). Los
+     *  anchors están calibrados sobre la resolución NATIVA de la ilustración
+     *  (1254x1254 en este lote): no reusar ni escalar los anchors fotográficos. */
+    illustrationUrl?: string;
+    illustrationAnchorsUrl?: string;
+
+  En Garment: los mismos dos campos, mismo comentario, mismo criterio que
+  backImageUrl/flip (opcional a propósito: las prendas sin ilustración calibrada siguen
+  mostrando la foto real en el AR local exactamente como hoy).
+
+--- 2) Resolver nuevo: src/lib/garment-illustration.ts (ARCHIVO NUEVO) ---
+Módulo puro, sin React, mismo espíritu que garment-assets.ts:
+
+  export interface ResolvedGarmentIllustration {
+    key: string;              // `illust:${sku}` o `illust:${sku}#${variantId}`
+    illustrationUrl: string;
+    illustrationAnchorsUrl: string;
+  }
+
+  export function resolveGarmentIllustration(
+    garment: Garment,
+    variantId?: string | null,
+  ): ResolvedGarmentIllustration | null
+
+Reglas:
+ - Misma lógica de resolución de variante que resolveGarmentAssets (con variants, variantId
+   null/inexistente cae a variants[0]; sin variants, usa los campos de la prenda).
+ - Si la prenda (o la variante resuelta) NO tiene illustrationUrl → devolver null. Esto es lo
+   que mantiene el resto del catálogo funcionando sin tocarlo: sin ilustración calibrada, no
+   hay nada que resolver y el llamador debe caer al overlay real.
+ - El prefijo `illust:` en la key es deliberado: separa el namespace de caché del que usa
+   resolveGarmentAssets, para que nunca puedan chocar aunque en el futuro conviva más de una
+   fuente para el mismo sku.
+ - NO importa nada de AIProcessing.tsx ni de CameraStage.tsx en el otro sentido: este archivo
+   no debe ser importado por ninguno de los dos.
+
+--- 3) Overlay AR: src/hooks/useGarmentRenderer.ts -----------------
+ - Calcular, además de `assets` (ya existe, resolveGarmentAssets), un nuevo
+   `illustration = activeGarment ? resolveGarmentIllustration(activeGarment, activeVariantId) : null`.
+ - Precedencia: si `illustration` no es null, cargar y dibujar la ilustración (illustrationUrl +
+   illustrationAnchorsUrl). Si es null, seguir exactamente con el camino actual (assets.overlayUrl
+   + assets.anchorsUrl, foto real) — CERO cambio de comportamiento para las 8 prendas sin
+   ilustración calibrada todavía (y para BKQJ5 en esta tarea, ver Paso 7).
+ - `loadGarmentAssets`, `garmentCache`, `loadingKeys` no cambian de forma — solo reciben la key/
+   overlayUrl/anchorsUrl que corresponda según la precedencia de arriba. La key ya viene
+   namespaced desde el paso 2, así que no hace falta lógica extra de caché.
+ - `GarmentAnchorsFile` (src/types/garment.ts) se reusa tal cual para los anchors de ilustración
+   — mismo contrato (overlay, overlayWidth, overlayHeight, anchors[], topClipY?, bottomClipY?).
+   overlayWidth/overlayHeight de los anchors de ilustración deben ser 1254, no 2048.
+
+ - Animación de colocación (rebote discreto), SOLO cuando el origen activo es ilustración:
+   al terminar de cargar una key nueva (cambio de prenda o de cara), guardá un timestamp
+   (`illustLoadedAtRef`). Durante los primeros ~300-350ms después de esa carga, aplicá un
+   único rebote de escala tipo ease-out (por ejemplo 0.9 → 1.03 → 1.0) antes de llamar a
+   `warpGarment`, y después quedate estable — nada de animación continua ni looping. Respetar
+   `window.matchMedia('(prefers-reduced-motion: reduce)').matches`: si es true, saltar
+   directo al estado final sin rebote. Esto NO debe tocar el camino de foto real (sin rebote,
+   como hoy).
+
+ - Límites de movimiento y retiro suave ante tracking insuficiente, SOLO en modo ilustración
+   (no toques el comportamiento ya calibrado del overlay fotográfico real):
+     a) Hoy, si `allCriticals.length < 4` (L396-404), el frame simplemente no dibuja nada —
+        sin transición. Para ilustración, contá frames consecutivos por debajo del umbral en
+        un ref; recién después de unos ~10 frames seguidos (~330ms a 30fps, ajustar mirando la
+        cámara) arrancar un fundido de opacidad de ~200ms en vez de un corte duro. Antes de
+        ese umbral, seguí mostrando la última pose válida (no parpadear en bordes).
+     b) Para que un salto puntual de pose (ruido de MediaPipe) no estire la ilustración de
+        golpe, pasá el ancho de hombros y el punto medio de hombros por el
+        `OneEuroFilter`/`Point3DFilter` que ya existe en src/lib/one-euro-filter.ts (hoy no lo
+        usa este renderer) antes de calcular la transformación afín. No reinventes un suavizado
+        nuevo — el filtro ya está en el repo, solo hay que conectarlo.
+     c) Al perder la presencia (`presence === 'absent'`, ya se detecta en CameraStage.tsx
+        L64-68 para resetear el perfil de tallas): resetear también `visibilityBufferRef`, el
+        contador de frames-sin-tracking del punto (a), el/los `OneEuroFilter` del punto (b) y
+        `illustLoadedAtRef`. Nada de esto debe sobrevivir de una persona/sesión a la siguiente.
+        La forma más simple: que el hook reciba `presence` (o un booleano derivado) como
+        parámetro nuevo y limpie esos refs en un efecto cuando cambia a 'absent'.
+ - `topClipY`/`bottomClipY` por ilustración: NO confiar en el default genérico
+   (`shoulderY - 150px`, L457-460) para las ilustraciones — el margen transparente sobre la
+   prenda varía mucho de una a otra (manifest.json, `limites_alpha`: por ejemplo BKBW5 casi no
+   tiene margen arriba, alpha empieza en y=0). Calibrar `topClipY`/`bottomClipY` a mano para
+   cada anchors.json de ilustración, verificando en cámara que la prenda nunca tape ojos ni
+   cara al acercarse (el fade de proximidad de L492-513 sigue funcionando igual, no lo toques)
+   ni al girar moderadamente.
+ - Mangas: mantené la exclusión deliberada de los anchors de codo del set crítico (L426-431,
+   comentario "Non-critical anchors like elbows are intentionally OMITTED..."). El LEEME.md
+   menciona que las mangas pueden tener una rigidez ilustrativa deliberada — no agregues
+   tracking de codo ahora para "mejorarlo".
+
+--- 4) Selector de cara (VariantControls) ---------------------------
+No requiere cambios: ya selecciona `activeVariantId` en el store, y `resolveGarmentIllustration`
+(paso 2) ya resuelve por esa misma variante. Solo confirmá en cámara que al tocar el chip
+"Negra"/"Roja" con la chompa reversible activa (cuando se calibre su ilustración, fuera del
+alcance de este prototipo) el rebote del paso 3 se dispara igual que al cambiar de prenda.
+
+--- 5) Guía cuando se pierde el tracking: src/components/kiosk/KioskGuide.tsx ---
+Agregar una rama más (mismo patrón que las existentes, sin componente nuevo): cuando
+`presence === 'present' && activeGarmentId` y el store reporta tracking insuficiente sostenido
+(reusar `useGarmentStore((s) => s.runtime.lastValidAnchors)`, que ya se actualiza desde
+useGarmentRenderer — no inventes un canal de datos nuevo), mostrar un mensaje corto tipo
+"ACOMODATE FRENTE A LA CÁMARA" con el mismo lenguaje visual. Texto por i18n
+(src/i18n/es.json / en.json), no hardcodeado — mismo criterio que `variant.title`.
+
+--- 6) Verificación de aislamiento con FASHN y Lucy (no debería requerir cambios) ---
+ - `GarmentOverlay`'s `active` prop en CameraStage.tsx (~L337) es
+   `garmentActiveWithProfile && !isLiveActive`. Confirmá en cámara que durante `isLiveLoading`
+   (el hueco entre tocar "Verme en vivo" y que llegue el stream remoto) la ilustración no queda
+   visible un instante de más; si se ve, sumá `&& !isLiveLoading` a esa condición.
+ - `currentPhotoClean` (lo que recibe FASHN) sale de `photo-composer.ts` L64-70, dibujando
+   únicamente `videoEl` — sin overlay de ningún tipo. Confirmá que sigue así.
+ - Ver el hallazgo de la sección "RIESGO DE FONDO": el canvas que compone `photoComposed` es
+   el del esqueleto debug, no el de GarmentOverlay. Agregá el test correspondiente (ver TESTS)
+   en vez de tocar ese wiring.
+ - Al salir de FASHN o de Lucy y volver a TRYON, `activeGarmentId`/`activeVariantId` siguen
+   persistidos en sessionStorage (store/garment.ts, partialize) — no hace falta lógica nueva
+   para que la ilustración y la cara activa se recuperen solas.
+
+--- 7) Alcance exacto de esta tarea en catalog.json -----------------
+Agregar `illustrationUrl` / `illustrationAnchorsUrl` ÚNICAMENTE a estas dos entradas:
+  990F0-BKTM1 → illustrationUrl: "/garments/illustrations/990F0-BKTM1.png"
+                illustrationAnchorsUrl: "/garments/illustrations/990F0-BKTM1.anchors.json"
+  990F0-BKBW5 → illustrationUrl: "/garments/illustrations/990F0-BKBW5.png"
+                illustrationAnchorsUrl: "/garments/illustrations/990F0-BKBW5.anchors.json"
+No toques las otras 8 entradas (ni los dos objetos de `variants` de 990F0-BKQJ5) en esta tarea:
+sin `illustrationUrl`, siguen mostrando la foto real en el AR local exactamente como hoy. Extender
+al resto de las once ilustraciones, cuando corresponda, es repetir este mismo paso 7 (copiar PNG,
+calibrar anchors, agregar dos campos) sin tocar código de nuevo — el mecanismo ya es genérico.
+
+=====================================================================
+TESTS
+=====================================================================
+Agregar tests/unit/garment-illustration.test.ts (mismo estilo que garment-assets.test.ts si ya
+existe, revisalo antes de escribir uno nuevo):
+ - prenda sin illustrationUrl → null.
+ - prenda con illustrationUrl (sin variants) → la devuelve, key = `illust:${sku}`.
+ - prenda con variants e illustrationUrl en la variante activa → la devuelve,
+   key = `illust:${sku}#${variantId}`.
+ - variantId null/inexistente con variants → cae a variants[0].
+ - la key de resolveGarmentIllustration para un sku es SIEMPRE distinta de la key que devuelve
+   resolveGarmentAssets para el mismo sku (namespacing real, no solo de nombre).
+
+Agregar un test (unit si es practicable, o al menos una verificación explícita por lectura de
+código si no lo es) que confirme:
+ - AIProcessing.tsx no importa src/lib/garment-illustration.ts.
+ - CameraStage.tsx / liveTryon.ts no importan src/lib/garment-illustration.ts.
+ - El overlayCanvas que PhotoCountdown pasa a composePhoto sigue siendo el ref del canvas de
+   PoseDebug (esqueleto), no el interno de GarmentOverlay.
+
+Tests existentes de garment-filter, sizing y garment-assets no deben cambiar de resultado.
+
+=====================================================================
+VERIFICACIÓN MANUAL EN CÁMARA — con 990F0-BKTM1 y 990F0-BKBW5
+=====================================================================
+ 1. Brazos: abajo, abiertos, elevados, cruzados.
+ 2. Acercamiento a la cámara — el fade de proximidad debe seguir apagando el overlay antes de
+    que la ilustración quede sobre la cara.
+ 3. Giro moderado del torso.
+ 4. Salir del cuadro y volver — el retiro debe ser un fundido suave (paso 3.a), no un parpadeo,
+    y no debe reaparecer con una pose vieja pegada.
+ 5. Cambio rápido de prenda (camiseta ↔ chaleco) varias veces seguidas — sin que quede pegada
+    la ilustración anterior (garantía de la key namespaced).
+ 6. Nueva persona / nueva sesión (presence pasa por 'absent') — sin herencia de pose ni de
+    animación de colocación a mitad de camino.
+ 7. Disparar foto con FASHN con la ilustración activa: la foto resultante usa la referencia real
+    (verificar en la llamada de red, no solo visualmente) y la ilustración no aparece en ningún
+    punto del flujo de captura ni en el fallback SHARE_QR_FALLBACK.
+ 8. Si VITE_LIVE_TRYON=on: iniciar "Verme en vivo" con la ilustración activa — se oculta al
+    entrar y se recupera correctamente al salir (Salir / countdown / cambio de pestaña).
+ 9. Sistema con "reducir movimiento" activado (prefers-reduced-motion): el rebote de colocación
+    no debe reproducirse.
+10. Consola sin 404 de public/garments/illustrations/*.* ni errores de parseo de anchors.
+11. Nota para cuando se calibre 990F0-BKHM0 (hoodie) más adelante: prestar atención especial a
+    topClipY por la capucha — no forma parte de este prototipo, pero dejalo anotado en el
+    entregable.
+
+Distinguí siempre pruebas simuladas (navegador/emulador, sin hardware del kiosko) de llamadas
+reales a motores y de pruebas en el dispositivo físico del kiosko. No afirmes haber probado el
+kiosco si no lo hiciste — decí explícitamente qué quedó pendiente de validar ahí.
+
+=====================================================================
+GATES OBLIGATORIOS ANTES DE CUALQUIER COMMIT
+=====================================================================
+  npx tsc --noEmit
+  npm run lint
+  npm test
+  npm run build
+
+=====================================================================
+ENTREGABLE
+=====================================================================
+ - Rama o copia aislada, no mergeada, no publicada, no desplegada.
+ - Diff real de cada archivo tocado o creado (no un resumen narrado — se revisa línea por línea).
+ - Confirmación explícita de que AIProcessing.tsx, liveTryon.ts y el efecto de Lucy en
+   CameraStage.tsx no importan ni referencian nada de garment-illustration.ts.
+ - Comparación visual (captura o gif) de camiseta y chaleco: ilustración vs. overlay real
+   anterior, en al menos dos poses.
+ - Lista explícita de qué se probó en cámara real vs. en simulador, y qué queda pendiente de
+   validar en el hardware del kiosko (mini PC + cámara + pantalla táctil 32").
+ - Valores finales usados para el umbral de frames-sin-tracking, la duración del fundido y los
+   parámetros del rebote de colocación, si se ajustaron respecto a los propuestos acá.
+ - Limitaciones pendientes: las otras 8 ilustraciones (incluidas las dos caras de la reversible)
+   sin calibrar todavía, capuchas sin resolver, cualquier borde de ilustración que haya requerido
+   un derivado limpio (`*.clean.png`) y por qué.
+
+=====================================================================
+NOTAS DEL REPO QUE YA NOS HAN MORDIDO ANTES
+=====================================================================
+ - Guardar todo en UTF-8 sin BOM (editar con otra codificación ya corrompió KioskPage.tsx una vez).
+ - No reintroducir VITE_BACKEND_URL — la variable correcta es VITE_AI_BACKEND_URL.
+ - No renombrar 990F0-BKQJ5_2.png ni crear un segundo producto para la cara negra.
+ - Verificar git check-ignore antes de comitear los PNG nuevos (Paso 0.4).
+ - El entregable final es el diff real, no el walkthrough narrado.

@@ -1,0 +1,263 @@
+PROMPT PARA ANTIGRAVITY — Vitrina promocional del panel de atracción + mejoras de la revisión /impeccable
+Guardar en la raíz del repo como: prompt_vitrina_attract.txt
+Rama sugerida: feature/vitrina-attract
+
+====================================================================
+0. CONTEXTO (léelo antes de tocar código)
+====================================================================
+Repo: Suzuki AR Boutique (React + TS + Vite + Tailwind + framer-motion 11 + lucide-react).
+Kiosko vertical 1080×1920 en autoshows. Layout:
+  - portrait:  grid-rows [65% espejo | 35% panel]  → el panel mide ~1080×672 (ANCHO y BAJO)
+  - landscape: grid-cols [70% espejo | 30% panel]  → el panel mide ~570×870 (ANGOSTO y ALTO)
+  (src/components/camera/CameraStage.tsx, líneas ~392-398)
+
+Mientras nadie está frente al espejo (kioskState === 'ATTRACT'), el panel derecho/inferior muestra
+src/components/kiosk/AttractPanel.tsx: hoy es un carrusel con UNA miniatura de 224 px (w-56 fijo)
+sobre fondo oscuro. Se ve pequeña, pegada y sin intención comercial.
+
+Cada prenda del catálogo (public/catalog.json, 10 prendas 990F0-*) tiene DOS imágenes:
+  a) FOTO REAL de producto — thumbnailUrl (512, RGB con fondo BLANCO, sin alfa) y overlayUrl (2048).
+     Es la que se muestra en el menú y la que se envía a Lucy (prueba en vivo) y a FASHN/nano-banana
+     (imágenes generativas).
+  b) ILUSTRACIÓN "RECORTABLE" — illustrationUrl (1254×1254, RGBA transparente, contorno blanco tipo
+     sticker, estilo deportivo/juvenil). Se usa para el AR local.
+     9 de 10 prendas la tienen a nivel raíz. 990F0-BKQJ5 (chompa de 2 colores) la tiene POR VARIANTE
+     (variants[].illustrationUrl: roja y negra).
+
+OBJETIVO: convertir el panel de atracción en una VITRINA PROMOCIONAL que venda las prendas mientras el
+espejo no está activo. La ilustración es la protagonista (llama la atención desde lejos, se ve
+espectacular sobre el fondo oscuro) y la foto real aparece como "prueba" de que el producto existe.
+Además, aplicar 3 mejoras puntuales que salieron de la revisión de diseño (sección 6).
+
+====================================================================
+1. REGLAS QUE NO SE NEGOCIAN
+====================================================================
+1.1 NO modificar src/lib/garment-assets.ts, src/lib/garment-illustration.ts, useGarmentRenderer.ts,
+    AIProcessing.tsx, liveTryon ni nada del camino FASHN / Lucy / AR. La vitrina SOLO LEE el catálogo.
+    Para obtener la ilustración usa resolveGarmentIllustration(garment, variantId) de
+    src/lib/garment-illustration.ts (importarlo desde AttractPanel está permitido; los tests de
+    aislamiento que prohíben ese import en AIProcessing/CameraStage/liveTryon deben seguir en verde).
+1.2 NO modificar public/catalog.json ni ningún asset. No correr scripts legacy:* .
+1.3 La vitrina NO llama a selectGarment, toggleWishlist ni a analytics. Es pasiva.
+1.4 ROJO SOLO COMO ACENTO (decisión de marca de Dario): filos, subrayados, la barra de progreso,
+    un punto. NUNCA como relleno de fondos, placas, botones o chips grandes. El precio NO va en rojo.
+1.5 Sin dependencias nuevas. framer-motion y lucide-react ya están instalados.
+1.6 Guardar TODOS los archivos en UTF-8 (es.json lleva tildes; ya hubo archivos corrompidos en UTF-16).
+1.7 No inventar afirmaciones de marketing (ni "gratis", ni "impermeable", ni "edición limitada", ni
+    descuentos). Todo texto comercial sale de datos del catálogo o de las frases de la sección 3.4.
+
+====================================================================
+2. ESTRUCTURA DE ARCHIVOS
+====================================================================
+Crear:
+  src/components/kiosk/showcase/buildShowcaseSlides.ts   (función pura, testeable)
+  src/components/kiosk/showcase/ShowcaseSlide.tsx        (una diapositiva de prenda)
+  src/components/kiosk/showcase/ShowcaseSummary.tsx      (diapositiva resumen de la colección)
+  src/components/kiosk/showcase/ShowcaseProgress.tsx     (barra segmentada)
+  tests/unit/attract-showcase.test.tsx
+Reescribir:
+  src/components/kiosk/AttractPanel.tsx (orquestador: timer, visibilidad, precarga, layout)
+Tocar (sección 6):
+  src/components/kiosk/AttractLoop.tsx, src/components/camera/CameraStage.tsx (solo el punto ámbar),
+  src/components/catalog/CatalogCard.tsx (solo el fondo del área de imagen), src/i18n/es.json, en.json
+
+--------------------------------------------------------------------
+buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[]
+--------------------------------------------------------------------
+type ShowcaseSlide =
+  | { kind: 'garment'; garment: Garment;
+      illustrations: string[];   // 0, 1 o 2 URLs (2 cuando hay variantes con ilustración)
+      photo: { thumb?: string; full?: string };
+      colorCount: number;        // variants.length si >1, si no colors.length
+    }
+  | { kind: 'summary'; count: number; minPriceCents: number; illustrations: string[] };
+
+Reglas:
+  - Una diapositiva 'garment' por prenda, en el orden del catálogo, máximo 10.
+  - illustrations: si hay variants → resolveGarmentIllustration(g, v.id) para cada variante con
+    ilustración (sin duplicados); si no → resolveGarmentIllustration(g). Prendas sin ilustración
+    quedan con [] (ver fallback 3.5).
+  - Si la variante tiene thumbnailUrl/overlayUrl, la foto de la primera variante es la foto mostrada.
+  - Al final se agrega UNA diapositiva 'summary': count = nº de prendas, minPriceCents = mínimo
+    priceCents numérico, illustrations = hasta 6 ilustraciones (una por prenda).
+  - Todas las URLs pasan por el prefijo import.meta.env.BASE_URL quitando la "/" inicial
+    (mismo patrón que hoy usa AttractPanel) — necesario para GitHub Pages (/suzuki-ar-boutique/).
+
+====================================================================
+3. DISEÑO DE LA VITRINA
+====================================================================
+3.1 Concepto: "del recortable a la prenda real". Cada diapositiva es un pequeño anuncio de 5.5 s.
+    El recortable entra como un sticker que se pega, la foto real aparece como tarjeta de producto
+    inclinada encima, y el nombre + precio se leen desde 3 metros.
+
+3.2 Capas de una diapositiva 'garment' (de atrás hacia adelante):
+  A. FONDO: bg-surface. Encima, un resplandor radial grande y suave detrás de la ilustración usando el
+     color de la prenda (garment.colors[0]). Si ese color es muy oscuro (luminancia relativa < 0.12)
+     usar en su lugar --color-accent-cyan (plata #C9CED6) al 10-14 % de opacidad. Nunca rojo de relleno.
+  B. TIPOGRAFÍA GIGANTE de fondo: garment.line en mayúsculas ("TEAM BLACK", "GSX-R", "JIMNY"...),
+     font-display, solo contorno (-webkit-text-stroke 1px, color fg al 8-10 %, relleno transparente),
+     tamaño ~ 45-60 % de la altura del panel, recortada por los bordes, que se desplaza lentamente en
+     horizontal (≈ 40 px durante toda la diapositiva). Es textura, no texto a leer: aria-hidden.
+  C. TRES FRANJAS DIAGONALES finas (2-3 px, ángulo ~ -20°) de velocidad cruzando detrás de la
+     ilustración, en plata al 15 %; UNA de ellas puede ser rojo de marca (es acento, cumple 1.4).
+  D. ILUSTRACIÓN (protagonista): object-contain, drop-shadow con offset vertical
+     (ej. drop-shadow(0 18px 24px rgba(0,0,0,.55))), ocupa la mayor área posible (ver 3.3).
+     Si illustrations.length === 2 (BKQJ5): alternar entre las dos cada 1.6 s con un giro en Y
+     (rotateY 0→90° sale, 90°→0 entra), como dar vuelta un sticker.
+  E. TARJETA DE FOTO REAL: placa BLANCA (la foto viene con fondo blanco: la placa lo vuelve
+     intencional), esquinas rounded-sm, padding 6 %, sombra con offset
+     (0 18px 36px -10px rgba(0,0,0,.6)), rotada +4°, filo inferior de 3 px en rojo de marca.
+     Encima de la tarjeta, una etiqueta pequeña en mayúsculas mono: "ASÍ ES LA REAL" (i18n).
+     Tamaño ≈ 34-38 % del lado de la ilustración, superpuesta a su esquina inferior derecha
+     (que tape un poco la ilustración: la superposición es lo que hace que se vea como composición
+     y no como dos imágenes sueltas).
+     <img src={thumb} srcSet={`${thumb} 512w, ${full} 2048w`} sizes="20vw">
+  F. BLOQUE DE TEXTO:
+       - Nombre: font-display uppercase, text-4xl en landscape / text-5xl en portrait,
+         leading-none, line-clamp-3, text-wrap: balance. ("Functional Hooded Sweat Jacket" debe
+         verse completo en 2-3 líneas, nunca truncado a una).
+       - Precio: font-mono bold tabular-nums, text-4xl, color fg (no rojo).
+       - Debajo, en una línea, mono, fg-muted, tracking amplio:
+           "TALLAS S · M · L"  (de garment.sizes)
+           y si colorCount > 1: "  ·  2 COLORES"
+       - NO poner la línea ("TEAM BLACK") como etiqueta encima del nombre: ya está en el fondo (B)
+         y casi siempre repite el nombre.
+  G. CTA fija al pie del bloque de texto, igual en todas las diapositivas:
+       "PRUÉBATELA EN EL ESPEJO" (i18n) + ícono lucide <ScanLine> o <Sparkles> 20-24 px,
+       en fg con un subrayado rojo de 2 px. Es la frase que conecta la vitrina con la experiencia.
+
+3.3 Composición por orientación (leer useLayoutStore((s) => s.mode)):
+  PORTRAIT (panel ~1080×672, ancho y bajo):
+     fila: [ ilustración ~58 % del ancho, alto completo, con la tarjeta de foto montada en su esquina
+     inferior derecha ] [ columna de texto ~42 %, centrada verticalmente, alineada a la izquierda ].
+  LANDSCAPE (panel ~570×870, angosto y alto):
+     columna: [ ilustración ~58 % de la altura, ancho completo, tarjeta de foto en su esquina inferior
+     derecha ] [ texto centrado debajo ].
+  Usar container queries para que la ilustración sea cuadrada y lo más grande posible:
+     contenedor con [container-type:size] y el cuadro con w-[min(100cqw,100cqh)] aspect-square.
+  Padding del panel: 32 px; nada pegado a los bordes salvo la tipografía gigante (B).
+  ELIMINAR del panel el título "PÁRATE EN LA MARCA DEL PISO": se muda al espejo (6.1).
+
+3.4 Frases (i18n, namespace kiosk.attract.showcase.*). Usar exactamente estas:
+  es: realOne "ASÍ ES LA REAL" · sizes "TALLAS" · colors "{{count}} COLORES"
+      cta "PRUÉBATELA EN EL ESPEJO"
+      summaryTitle "COLECCIÓN SUZUKI" · summaryCount "{{count}} PRENDAS" · summaryFrom "DESDE"
+      summaryCta "PÁRATE FRENTE AL ESPEJO Y PRUÉBATELAS"
+  en: "THE REAL ONE" · "SIZES" · "{{count}} COLORS" · "TRY IT ON IN THE MIRROR" · "SUZUKI COLLECTION"
+      · "{{count}} ITEMS" · "FROM" · "STAND IN FRONT OF THE MIRROR AND TRY THEM ON"
+
+3.5 Fallback sin ilustración (hoy ninguna prenda raíz, pero el código debe soportarlo):
+  la foto real pasa a ser la protagonista dentro de una placa blanca grande (mismo tamaño que tendría
+  la ilustración), sin tarjeta superpuesta y sin la etiqueta "ASÍ ES LA REAL". Si tampoco hay foto,
+  saltar la diapositiva (no mostrar emojis ni placeholders).
+
+3.6 Diapositiva 'summary' (cierra cada ciclo, 5.5 s):
+  - Las ilustraciones (hasta 6) en abanico/collage solapado, cada una rotada distinto (-8°…+8°),
+    entrando escalonadas cada 80 ms.
+  - Texto: "COLECCIÓN SUZUKI" (display grande), "10 PRENDAS · DESDE $35.29" (calculado, mono),
+    y el CTA summaryCta.
+
+====================================================================
+4. COREOGRAFÍA Y TIEMPOS
+====================================================================
+SLIDE_MS = 5500. Ciclo ≈ 11 diapositivas ≈ 60 s.
+Por diapositiva 'garment' (t = 0 al entrar):
+  0 ms     fondo (A,B,C) hace fundido 0→1 en 500 ms; B empieza su deriva horizontal lineal.
+  100 ms   ILUSTRACIÓN "se pega": opacity 0→1, scale 1.18→1, rotate -7°→-2°,
+           spring { stiffness: 260, damping: 18 } (un leve rebote, un solo momento protagonista).
+           Después flota: y 0→-6 px→0 en loop de 3.2 s, easeInOut.
+  550 ms   TARJETA DE FOTO entra desde abajo-derecha: x +40→0, y +30→0, rotate 10°→4°, opacity 0→1,
+           420 ms, ease [0.16, 1, 0.3, 1].
+  750 ms   NOMBRE se revela con clip-path inset(0 100% 0 0) → inset(0 0 0 0), 450 ms, misma curva.
+  900 ms   PRECIO y tallas: opacity + y 12→0, 350 ms.
+  ~5000 ms salida: toda la diapositiva opacity→0 y la ilustración x→-30 px, 450 ms.
+Transición entre diapositivas: FUNDIDO CRUZADO (AnimatePresence SIN mode="wait"; cada diapositiva en
+absolute inset-0). Prohibido el hueco vacío que hoy deja mode="wait".
+
+prefers-reduced-motion: reduce → solo fundidos de opacidad de 300 ms; sin rebote, sin flotación,
+sin deriva del texto gigante, sin giro de variantes (mostrar la primera variante).
+Usar useReducedMotion() de framer-motion.
+
+Rendimiento (mini PC del kiosko + MediaPipe corriendo en paralelo):
+  - Animar solo transform, opacity y clip-path. Nada de filter: blur animado ni backdrop-filter.
+  - Precargar las imágenes de la diapositiva SIGUIENTE con new Image() + img.decode() antes de que
+    entre; si decode falla, la diapositiva igual se muestra.
+  - Mantener el comportamiento actual de pausar el timer con document.hidden.
+  - draggable={false} y select-none en todas las imágenes.
+
+ShowcaseProgress: una barra segmentada (un segmento por diapositiva, incluida 'summary'),
+max-w-md, alto 3 px; el segmento activo se llena en rojo de marca de 0→100 % en SLIDE_MS (scaleX,
+origin-left, linear); los anteriores en fg-muted/50; los siguientes en line. aria-hidden.
+
+====================================================================
+5. ACCESIBILIDAD
+====================================================================
+- Contenedor de la vitrina: role="region" aria-roledescription="carrusel"
+  aria-label="Colección Suzuki". El texto de la diapositiva activa en aria-live="off" (no anunciar
+  cada 5 s).
+- alt de la ilustración: `${name} (ilustración)`; de la foto: name.
+- Contraste: textos sobre bg-surface con fg / fg-muted (ya cumplen). La etiqueta "ASÍ ES LA REAL"
+  sobre la tarjeta blanca: texto #17191E.
+
+====================================================================
+6. MEJORAS DE LA REVISIÓN /impeccable
+====================================================================
+6.1 [P2] Jerarquía: el espejo y el panel tenían DOS titulares compitiendo.
+    En AttractLoop.tsx, debajo del titular "PRUÉBATE LA COLECCIÓN SUZUKI" y su filo rojo, agregar la
+    instrucción "PÁRATE EN LA MARCA DEL PISO" (clave existente kiosk.attract.standOnMark) con el ícono
+    lucide <Footprints> 32-40 px a la izquierda. font-display, text-2xl md:text-3xl, tracking-widest,
+    color fg al 85 %, el mismo drop-shadow que el titular. Animación sutil: el ícono hace un pulso de
+    opacidad 0.6↔1 cada 2 s (desactivado con reduced motion). Quitarla del AttractPanel.
+6.2 [P2] Punto ámbar de "cámara en resolución reducida" (CameraStage.tsx, bloque
+    "Degraded camera indicator", ~línea 562): visible al público parece un error. Envolver la
+    condición con isOperatorMode() de src/lib/debug-mode.ts (se ve con ?debug=1 o ?dev=1). No borrar.
+6.3 [P3] Consistencia del catálogo: en CatalogCard.tsx las áreas de imagen (las dos: con y sin vista
+    posterior) usan bg-surface-2 y la foto trae fondo blanco → se ve un cuadro blanco dentro de un
+    cuadro gris. Cambiar el fondo del área de imagen a bg-white (misma lógica de "placa blanca
+    intencional" que la vitrina). El spinner de carga sigue en rojo (es acento). No tocar la lógica de
+    flip/tease ni los tests de catalog-card-auto-back-view.
+6.4 Si todavía existe algún console.log("CLEANUP FIRED!") en src/, eliminarlo.
+
+====================================================================
+7. TESTS (tests/unit/attract-showcase.test.tsx)
+====================================================================
+- buildShowcaseSlides con el catalog.json real:
+    · 11 diapositivas (10 garment + 1 summary).
+    · 990F0-BKQJ5 → illustrations.length === 2 y colorCount === 2.
+    · Las otras 9 → illustrations.length === 1.
+    · summary.count === 10 y summary.minPriceCents === 3529.
+    · Todas las URLs empiezan con BASE_URL.
+- Prenda sin ilustración → illustrations [] y se renderiza la foto en placa (sin "ASÍ ES LA REAL").
+- Prenda sin ilustración NI foto → no genera diapositiva.
+- Render de AttractPanel con fake timers: avanza tras SLIDE_MS; con document.hidden = true no avanza.
+- AttractPanel NO llama a selectGarment ni toggleWishlist (spy sobre el store).
+- AttractPanel ya no contiene el texto "PÁRATE EN LA MARCA DEL PISO"; AttractLoop sí.
+- CameraStage: el punto ámbar (aria-label "Cámara en resolución reducida") NO aparece sin ?debug=1
+  aunque la resolución sea menor a VITE_EXPECTED_CAMERA_HEIGHT; SÍ aparece con ?debug=1.
+- Los tests existentes (stage-panel, aislamiento de garment-illustration, catalog-card-auto-back-view,
+  kiosk-scale-acceptance) siguen en verde SIN modificarlos. Si alguno falla, arreglar el código, no
+  el test, y explicar por qué.
+
+====================================================================
+8. EVIDENCIA OBLIGATORIA (no aceptaré solo el walkthrough)
+====================================================================
+8.1 Gates: tsc --noEmit, npm run lint, npm test, npm run build — pegar la salida final de cada uno.
+8.2 Capturas REALES de la app corriendo (npm run build && npx vite preview), con Playwright/Chromium y
+    flags --use-fake-ui-for-media-stream --use-fake-device-for-media-stream:
+      a) 1907×870 landscape, a los ~2.5 s de una diapositiva (BKTM1).
+      b) 1080×1920 con ?layout=portrait, misma diapositiva.
+      c) 1080×1920 portrait sobre 990F0-FCHJ0 (nombre largo, comprobar que no se trunca).
+      d) 1080×1920 portrait sobre 990F0-BKQJ5 (las 2 variantes).
+      e) 1080×1920 portrait sobre la diapositiva summary.
+    Guardarlas en scripts/qa_output/vitrina/ con esos nombres. Deben ser capturas del navegador, NO
+    composiciones hechas con Python/PIL.
+8.3 Lista exacta de archivos creados/modificados (git diff --stat) y confirmar que
+    git diff --stat public/ está VACÍO.
+
+====================================================================
+9. FUERA DE ALCANCE
+====================================================================
+- Generar recortes con alfa de las fotos reales, cambiar el pipeline de assets o el catálogo.
+- Cambiar la máquina de estados del kiosko, KioskGuide, presencia u onboarding de talla.
+- Gestos de mano, Lucy, FASHN, estilos virales.
+- El mockup F12 / brand guidelines.

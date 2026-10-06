@@ -1,0 +1,169 @@
+PROMPT PARA ANTIGRAVITY — Extender los recortables a las 9 ilustraciones restantes
+Repo: C:\Users\Dario\Documents\Suzuki Boutique
+Rama: seguir en feature/recortables-ar-intro. NO mergear, NO desplegar.
+
+El piloto (990F0-BKTM1 y 990F0-BKBW5) pasó la prueba en cámara real: brazos arriba y abajo
+sin cambio de escala, giro de cabeza con la camiseta, llegada con los brazos ya levantados,
+y la ruta portrait. El motor de similitud, la exclusión facial y el respaldo por orejas
+quedaron validados. Esta tarea es mecánica: aplicar lo mismo a las otras nueve ilustraciones.
+
+=====================================================================
+ALCANCE
+=====================================================================
+Las 9 ilustraciones que faltan, todas ya en el paquete de origen
+C:\Users\Dario\Downloads\Suzuki_Recortables_AR_v1\ilustraciones\ :
+
+  990F0-BKPM5   polo Team Black
+  990F0-BKHM0   hoodie Team Black
+  990F0-BKQJ5   chompa reversible, CARA ROJA
+  990F0-BKQJ5_2 chompa reversible, CARA NEGRA
+  990F0-BLMJ4   rain jacket Team Blue
+  990F0-BLPK0   parka Team Blue
+  990F0-RSSM0   softshell GSX-R
+  990F0-JYFJ1   fleece Jimny
+  990F0-FCHJ0   hooded sweat jacket blanca (Lifestyle)
+
+BKQJ5 y BKQJ5_2 son las dos caras del MISMO producto. Van dentro del array `variants` de
+990F0-BKQJ5 en catalog.json, cada una con su propio illustrationUrl y
+illustrationAnchorsUrl. `resolveGarmentIllustration` ya resuelve por variante: no hay que
+tocar código para eso. NO crear un producto nuevo.
+
+=====================================================================
+MEDIDAS YA HECHAS — punto de partida de los anchors
+=====================================================================
+Medidas sobre los PNG originales (alpha > 128, coordenadas nativas 1254x1254), con el mismo
+método automático que produjo los anchors del piloto y que coincidió exactamente con lo que
+se calibró a mano. Está también en `medidas_ilustraciones_recortables.md` en la raíz del repo.
+
+  prenda          hombros Y   shoulderL X   shoulderR X   span   sobre hombros   ratio
+  990F0-BKTM1        189          290           957        667        120         0.18   (piloto, hecho)
+  990F0-BKPM5        223          298           957        659        163         0.25
+  990F0-BKHM0        275          322           933        611        239         0.39
+  990F0-BKBW5        245          321           921        600        235         0.39   (piloto, hecho)
+  990F0-BKQJ5        264          318           929        611        227         0.37
+  990F0-BKQJ5_2      270          306           944        638        241         0.38
+  990F0-BLMJ4        307          303           938        635        271         0.43
+  990F0-BLPK0        274          365           886        521        218         0.42
+  990F0-RSSM0        212          313           926        613        193         0.31
+  990F0-JYFJ1        233          298           953        655        177         0.27
+  990F0-FCHJ0        216          287           965        678        190         0.28
+
+"ratio" = cuánto sobresale la prenda por encima de la línea de hombros, en anchos de hombro.
+Referencias humanas desde la línea de hombros: mentón ~0.30, boca ~0.40, ojos ~0.55.
+Verificado en cámara: BKTM1 (0.18) se ve bien sin exclusión; BKBW5 (0.39) tapaba la boca.
+
+Verificá cada par de hombros a ojo sobre el dibujo antes de darlo por bueno. Son un punto de
+partida fiable, no un reemplazo de mirar.
+
+=====================================================================
+LA EXCLUSIÓN FACIAL NO ES GRATIS — criterio para activarla
+=====================================================================
+Con `headExclusion.enabled: false` la prenda se dibuja aunque se pierdan las orejas. Con la
+exclusión activa, si no hay orejas fiables no hay elipse, y sin elipse NO SE DIBUJA la
+prenda. Eso es correcto para una capucha —mejor no dibujar que taparle la cara a alguien—
+pero es una fragilidad real: pelo suelto, gorro, audífonos o cabeza girada pueden dejar sin
+overlay a un cliente.
+
+Por eso: activá la exclusión SOLO donde la geometría la exige, y dejá el resto con
+`enabled: false`.
+
+  Exclusión obligatoria (ratio > 0.33, la prenda llega a la altura de la boca):
+    990F0-BKHM0, 990F0-BKQJ5, 990F0-BKQJ5_2, 990F0-BLMJ4, 990F0-BLPK0
+    Arrancá con la calibración validada del chaleco: rx 0.85 / ryUp 1.10 / ryDown 1.30.
+    BLMJ4 (0.43) y BLPK0 (0.42) sobresalen más que BKBW5 (0.39): probablemente necesiten
+    algo más de ryDown, arrancá en 1.35 y ajustá en cámara. Ojo de no pasarte: si el recorte
+    llega a la clavícula empieza a comerse el cierre de la prenda.
+
+  A decidir en cámara (ratio 0.24 a 0.33, cuellos altos):
+    990F0-BKPM5 (0.25), 990F0-JYFJ1 (0.27), 990F0-FCHJ0 (0.28), 990F0-RSSM0 (0.31)
+    Probá PRIMERO con `enabled: false`. Si en cámara el cuello no llega al mentón —que es lo
+    que esperamos por el número— dejalo así: es la opción más robusta. Solo si roza la cara,
+    activá la exclusión con los valores por defecto (0.75 / 1.05 / 1.05).
+    FCHJ0 tiene capucha, pero dibujada baja y plana; por eso queda en este grupo y no en el
+    anterior. Miralo con atención igual.
+
+En todos los casos, poné el campo `headExclusion` EXPLÍCITO en el .anchors.json (con los
+valores o con `enabled: false`). Nada por defecto implícito: que se lea en el archivo qué
+decidimos para cada prenda.
+
+=====================================================================
+PASOS
+=====================================================================
+1. Copiar los 9 PNG originales, sin editarlos y sin renombrarlos, a
+   public/garments/illustrations/. Verificar sha256 contra manifest.json del paquete.
+   Confirmar con `git check-ignore -v` que ninguno queda excluido.
+
+2. Un .anchors.json por ilustración, con la misma estructura que los dos del piloto:
+   - overlayWidth / overlayHeight: 1254.
+   - shoulderL / shoulderR con landmarkIndex 11 y 12 y el mismo offset { x: 0, y: -0.02 }
+     que el piloto — ese offset es parte de por qué el cuello cae bien.
+   - neck con landmarkIndex -1, como referencia de calibración (MediaPipe no tiene landmark
+     de cuello). Para las prendas con capucha, calibralo en la BASE del cuello, donde la
+     capucha se encuentra con el cuerpo, no en el borde alto de la capucha.
+   - headExclusion explícito según el criterio de arriba.
+   - hipL / hipR / topClipY / bottomClipY: se conservan por compatibilidad con el camino
+     fotográfico, pero NO se usan en modo ilustración. Dejá el mismo _comment que ya tienen
+     los dos del piloto para que quede escrito en el archivo.
+
+3. catalog.json: agregar illustrationUrl e illustrationAnchorsUrl a las 8 prendas restantes.
+   Para 990F0-BKQJ5 los campos van DENTRO de cada objeto de `variants` (cara roja y cara
+   negra), no en la prenda. No tocar ningún otro campo: precio, tallas, SKU, backImageUrl,
+   thumbnailUrl y overlayUrl quedan como están.
+
+4. Feature flag. Agregá `VITE_AR_RECORTABLES` (patrón igual a VITE_LIVE_TRYON) que decida si
+   el overlay AR usa ilustración o la foto real. Apagado, el comportamiento debe ser
+   exactamente el de hoy en producción. Sumalo a .env.example con un comentario.
+   Esto es lo que nos permite publicar sin encender: la URL de GitHub Pages es la que se usa
+   en el evento.
+
+=====================================================================
+TESTS
+=====================================================================
+Extender tests/unit/garment-illustration.test.ts para cubrir las 11 ilustraciones, no solo
+las dos del piloto:
+ - cada prenda del catálogo con illustrationUrl tiene su .anchors.json y el archivo existe.
+ - todos los .anchors.json de ilustración: overlayWidth y overlayHeight = 1254, y anchors
+   shoulderL (landmarkIndex 11) y shoulderR (landmarkIndex 12) presentes.
+ - todos tienen `headExclusion` EXPLÍCITO (o con rx/ryUp/ryDown, o con enabled:false).
+   Este test es el que evita que una prenda con capucha se cuele con los defaults.
+ - las dos caras de 990F0-BKQJ5 resuelven a ilustraciones DISTINTAS y a keys distintas.
+ - el aislamiento de FASHN y Lucy sigue en verde para todas las prendas, no solo las dos.
+ - con VITE_AR_RECORTABLES apagado, resolveGarmentIllustration no se consulta / el overlay
+   resuelve a la foto real.
+
+=====================================================================
+VALIDACIÓN EN CÁMARA — la hace Darío
+=====================================================================
+Las seis con capucha son las que importan: BKHM0, BKQJ5 en sus dos caras, BLMJ4, BLPK0 y el
+ya validado BKBW5. Para cada una: que el mentón y la boca queden despejados, que los bordes
+internos de la capucha no invadan las mejillas, y que al inclinar la cabeza siga limpio.
+Las cuatro de cuello alto: confirmar que con `enabled: false` no rozan la cara.
+Todas: cambio rápido de prenda, brazos arriba y abajo, y cambio de cara en la reversible.
+
+PENDIENTE QUE NO SE PUEDE CERRAR DESDE EL CÓDIGO: probar con una persona de pelo suelto y
+con gorro. Con la exclusión activa, si se pierden las orejas la prenda no se dibuja. Si esa
+prueba falla, la corrección es estimar el tamaño de cabeza desde la distancia interocular
+(landmarks 1 a 6, que el pelo casi nunca tapa) con las orejas como respaldo, y para el caso
+sin ojos ni orejas fiables caer a una zona conservadora derivada de los hombros en vez de no
+dibujar. No lo implementes todavía: primero la prueba.
+
+=====================================================================
+PESO DE LOS ASSETS
+=====================================================================
+Las once ilustraciones suman ~11.6 MB. El navegador solo baja la de la prenda activa (~1 MB)
+más los thumbs de 512 px del catálogo, que siguen siendo fotos reales. Antes de publicar,
+decidí si generás derivados optimizados para web —documentados como derivados, conservando
+los originales intactos— o si 1 MB por prenda es aceptable en la red del evento. Si generás
+derivados, que sea un paso explícito y reversible, nunca sobreescribiendo el original.
+
+=====================================================================
+GATES Y ENTREGABLE
+=====================================================================
+  npx tsc --noEmit
+  npm run lint
+  npm test
+  npm run build
+
+Entregar: diff real archivo por archivo; la tabla de qué headExclusion quedó en cada prenda
+y por qué; qué quedó verificado por tests y qué espera la prueba en cámara. Sin merge y sin
+deploy: el merge va después de la validación visual de las seis con capucha.
