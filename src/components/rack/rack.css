@@ -1,0 +1,189 @@
+/* Estilos 3D y mecánicas físicas del Perchero Suzuki */
+.rack-rail {
+  position: absolute;
+  left: 54px;
+  right: 54px;
+  top: 58px;
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #e9ebef 0%, #a7abb3 45%, #5d6168 100%);
+  box-shadow: 0 6px 10px -4px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.rack-rail::before,
+.rack-rail::after {
+  content: '';
+  position: absolute;
+  top: -10px;
+  width: 14px;
+  height: 32px;
+  border-radius: 4px;
+  background: linear-gradient(180deg, #c9ced6, #5d6168);
+}
+
+.rack-rail::before {
+  left: -6px;
+}
+
+.rack-rail::after {
+  right: -6px;
+}
+
+.rack-container {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 56px;
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  z-index: 3;
+}
+
+.rack-slot {
+  position: relative;
+  width: 62px;
+  height: 420px;
+  flex: none;
+  transition: width 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  perspective: 1100px;
+  outline: none;
+  cursor: pointer;
+}
+
+.rack-slot.open {
+  width: var(--ow);
+}
+
+.rack-swing {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: var(--gw);
+  height: 100%;
+  margin-left: calc(var(--gw) / -2);
+  transform-origin: 50% 0;
+}
+
+.rack-swing.kick {
+  animation: rack-swing-anim 1.5s cubic-bezier(0.3, 0.6, 0.4, 1);
+}
+
+.rack-swing.kick2 {
+  animation: rack-swing-anim 1.5s cubic-bezier(0.3, 0.6, 0.4, 1);
+}
+
+@keyframes rack-swing-anim {
+  0% {
+    transform: rotate(0deg);
+  }
+  18% {
+    transform: rotate(5deg);
+  }
+  40% {
+    transform: rotate(-3.5deg);
+  }
+  62% {
+    transform: rotate(2deg);
+  }
+  82% {
+    transform: rotate(-0.8deg);
+  }
+  100% {
+    transform: rotate(0deg);
+  }
+}
+
+.rack-turn {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+  transition:
+    transform 0.65s cubic-bezier(0.16, 1, 0.3, 1),
+    filter 0.65s cubic-bezier(0.16, 1, 0.3, 1);
+  transform: rotateY(var(--ry, 76deg));
+  filter: brightness(0.62);
+}
+
+.rack-slot.left .rack-turn {
+  --ry: -76deg;
+}
+
+.rack-slot.open .rack-turn {
+  --ry: 0deg;
+  filter: brightness(1);
+}
+
+.rack-hanger {
+  position: absolute;
+  left: 50%;
+  top: 0;
+  width: 150px;
+  height: 70px;
+  transform: translateX(-50%);
+  color: #8e939b;
+  pointer-events: none;
+}
+
+.rack-slot.empty .rack-hanger {
+  color: #c9ced6;
+}
+
+.rack-garment {
+  position: absolute;
+  left: 0;
+  top: 50px;
+  width: var(--gw);
+  height: var(--gh);
+  display: block;
+  transition: opacity 0.25s;
+  filter: drop-shadow(0 14px 16px rgba(0, 0, 0, 0.5));
+}
+
+.rack-slot.empty .rack-garment {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.rack-focusbar {
+  position: absolute;
+  left: 50%;
+  top: -8px;
+  width: 0;
+  height: 4px;
+  background: #e60012;
+  transform: translateX(-50%);
+  transition: width 0.45s cubic-bezier(0.16, 1, 0.3, 1);
+  pointer-events: none;
+}
+
+.rack-slot.open .rack-focusbar {
+  width: 56px;
+}
+
+.rack-slot.empty .rack-focusbar {
+  width: 0;
+}
+
+.rack-flyer {
+  position: fixed;
+  left: 0;
+  top: 0;
+  pointer-events: none;
+  z-index: 100;
+  transform-origin: 0 0;
+  filter: drop-shadow(0 26px 30px rgba(0, 0, 0, 0.6));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rack-swing.kick,
+  .rack-swing.kick2 {
+    animation: none;
+  }
+  .rack-turn,
+  .rack-slot {
+    transition-duration: 0.01s;
+  }
+}

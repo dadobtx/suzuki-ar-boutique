@@ -1,0 +1,178 @@
+PROMPT PARA ANTIGRAVITY — Perchero (Fase 1) conviviendo con la interfaz actual
+Guardar en la raíz del repo como: prompt_perchero_fase1.txt
+Rama: feature/perchero  (creada desde main DESPUÉS del tag v1.0-autoshow; ver sección 0)
+
+====================================================================
+0. PRERREQUISITO (lo hace Dario, no Antigravity)
+====================================================================
+La versión actual está congelada con el tag v1.0-autoshow y la rama release/v1.
+Antigravity NO toca release/v1 ni el tag. Todo el trabajo va en feature/perchero.
+
+====================================================================
+1. OBJETIVO Y PRINCIPIO
+====================================================================
+Agregar una segunda interfaz de selección de prendas, "el perchero", SIN cambiar el comportamiento de la
+interfaz actual ("clásica": AttractPanel + CatalogPanel con tarjetas).
+
+Ambas viven en el MISMO build. Se elige por URL:
+  ?ui=perchero  → perchero
+  ?ui=clasico   → interfaz actual
+  (sin parámetro) → clásica  ← el default NO cambia
+Esto permite mergear a main sin riesgo: producción sigue igual hasta que alguien abra la URL con
+?ui=perchero. Volver atrás en un evento = cambiar la URL del kiosko, sin redeploy.
+
+Referencia visual e interacción: el prototipo aprobado "Perchero Suzuki — prototipo de selección"
+(se adjunta el HTML: perchero-suzuki.html). Replicar su comportamiento del perchero; NO copiar su
+espejo con silueta (en la app el espejo es la cámara real).
+
+====================================================================
+2. REGLAS QUE NO SE NEGOCIAN
+====================================================================
+2.1 NO modificar: CatalogPanel.tsx, CatalogCard.tsx, CatalogLineTabs.tsx, CatalogCategoryChips.tsx,
+    AttractPanel.tsx, ni sus tests. La interfaz clásica debe quedar byte a byte igual.
+2.2 NO tocar el camino AR / FASHN / Lucy: garment-assets.ts, garment-illustration.ts,
+    useGarmentRenderer.ts, AIProcessing.tsx, liveTryon, photo-composer.ts. El perchero solo LEE el
+    catálogo y llama acciones EXISTENTES del store (selectGarment, setActiveVariant/equivalente,
+    toggleWishlist). No crear acciones nuevas en garment.ts.
+2.3 NO modificar public/catalog.json ni assets. No correr scripts legacy:*.
+2.4 Rojo solo como acento (filos, barra de foco, anillo). Nunca rellenos.
+2.5 Sin dependencias nuevas (framer-motion, lucide-react y zustand ya están).
+2.6 UTF-8 en todos los archivos. Verificar VITE_AI_BACKEND_URL (no reintroducir VITE_BACKEND_URL).
+2.7 Los tests existentes NO se editan. Si alguno falla, el error está en el código nuevo.
+
+====================================================================
+3. INTERRUPTOR DE INTERFAZ
+====================================================================
+Crear src/store/selectionUi.ts (zustand), mismo patrón que src/store/layout.ts + useLayout.ts:
+  type SelectionUi = 'clasico' | 'perchero'
+  Prioridad: sessionStorage('suzuki-selection-ui') > URL ?ui= (search o hash, como debug-mode.ts)
+             > import.meta.env.VITE_SELECTION_UI > 'clasico'.
+  Valores inválidos → 'clasico'.
+Hook src/hooks/useSelectionUi.ts que devuelve la interfaz EFECTIVA:
+  - Si la elegida es 'perchero' pero layout === 'landscape' → devolver 'clasico'
+    (el panel horizontal mide ~570 px de ancho: no cabe un perchero de 10 prendas). El kiosko real es
+    vertical; esto solo protege pruebas en laptop.
+Agregar VITE_SELECTION_UI al bloque env de .github/workflows/deploy.yml, igual que VITE_AR_RECORTABLES
+(${{ vars.VITE_SELECTION_UI }}). Si la variable no existe en GitHub queda vacía → 'clasico'.
+
+Único punto de bifurcación: src/components/camera/StagePanel.tsx
+  - vista 'attract':  efectiva==='perchero' ? <RackPanel mode="attract"/> : <AttractPanel/>
+  - vista 'catalog':  efectiva==='perchero' ? <RackPanel mode="interactive"/> : <CatalogPanel/>
+    (conservar el mismo contenedor con ref, inert y aria-hidden que ya tiene el catálogo; el perchero
+    también queda montado siempre en modo perchero para no recargar imágenes)
+  - 'onboarding', 'status', 'capture' NO cambian.
+Ningún otro componente debe preguntar por la interfaz (salvo el vuelo de la sección 5.4).
+
+====================================================================
+4. ESTRUCTURA
+====================================================================
+src/components/rack/
+  RackPanel.tsx        orquestador (modo attract/interactive, foco, teclado)
+  RackSlot.tsx         gancho + recortable que gira
+  RackCaption.tsx      nombre, precio, tallas, foto real, favorito
+  buildRack.ts         función pura: catálogo → items del perchero
+  rack.css o clases Tailwind (lo que ya use el repo)
+tests/unit/rack-panel.test.tsx
+tests/unit/selection-ui.test.ts
+
+buildRack(catalog): RackItem[]
+  - Orden del catálogo, máximo 12 (si hay más, tomar las 12 primeras y registrar console.warn una vez).
+  - Imagen del perchero = ilustración vía resolveGarmentIllustration(garment, variantId) de
+    src/lib/garment-illustration.ts (variante activa si la prenda es la activa, si no la primera).
+  - Fallback sin ilustración: la foto thumbnailUrl recortada en una placa blanca del mismo tamaño
+    (no ocultar la prenda: las 10 deben poder elegirse).
+  - URLs con prefijo import.meta.env.BASE_URL quitando la "/" inicial.
+
+====================================================================
+5. COMPORTAMIENTO DEL PERCHERO (replicar el prototipo)
+====================================================================
+5.1 Geometría (panel portrait ≈ 1080×672, medir con el contenedor, no con window):
+  - Riel horizontal metálico a ~58 px del borde superior, de lado a lado con 54 px de margen.
+  - Cada prenda cuelga de un gancho SVG (hook + barra) cuyo gancho toca el riel.
+  - Recortable de alto fijo ≈ 52 % del alto del panel (352 px en 672). Ancho por proporción.
+  - Slot cerrado: 62 px de ancho; slot abierto: ancho del recortable + 22 px. Transición de width
+    650 ms ease [0.16,1,0.3,1].
+  - Cerrado: el grupo gancho+recortable con rotateY(76deg) (o -76deg si está a la IZQUIERDA de la
+    prenda abierta, para que todas "miren" hacia ella), brightness .62, perspective 1100px en el slot.
+    Abierto: rotateY(0), brightness 1.
+  - Barra roja de 4 px × 56 px sobre el riel en el slot abierto.
+5.2 Mecida: al abrirse una prenda, su grupo hace un péndulo con transform-origin en el gancho:
+  0→5°→-3.5°→2°→-0.8°→0 en 1.5 s. Al despertar (attract → interactive) TODAS se mecen escalonadas
+  desde el centro (delay 120 + |k - centro| × 55 ms). Sin mecida con prefers-reduced-motion.
+5.3 Modo "attract" (kioskState ATTRACT):
+  - Recorre las prendas abriendo una cada 2600 ms (pausar con document.hidden, como AttractPanel).
+  - Pasiva: NO llama selectGarment, toggleWishlist ni analytics.
+5.4 Modo "interactive" (estado del catálogo):
+  - Puntero/táctil sobre el panel: abre la prenda más cercana al eje X del puntero, con histéresis
+    (si el puntero sigue dentro del slot abierto, no cambiar).
+  - Tap/clic en una prenda → selectGarment(garment.id). Eso dispara el AR igual que hoy.
+  - VUELO: al seleccionar, clonar la imagen del slot en un elemento position:fixed y animarla hasta el
+    centro de la celda del espejo (data-stage="mirror"), a la altura del pecho (≈ 38 % del alto de la
+    celda), con un arco hacia arriba y escala hasta ~45 % del ancho de la celda; 760 ms
+    cubic-bezier(.35,.7,.2,1). Al terminar, fundido de 250 ms del clon mientras aparece el overlay AR.
+    Mientras la prenda está puesta, su slot queda con el gancho vacío (recortable en opacity 0) y el
+    gancho se mece. Con reduced motion: sin vuelo, solo fundido.
+  - Tocar otra prenda: la actual vuelve a su gancho (vuelo inverso más corto, arco -60) y la nueva sale.
+  - Tocar la prenda que está puesta (en el slot vacío) o la acción de deseleccionar existente →
+    selectGarment(null) y vuelo de regreso.
+  - Teclado: ← → mueven el foco, Enter selecciona, Escape deselecciona. role="listbox" en el riel,
+    role="option" + aria-selected en los slots, aria-label "Nombre, $precio".
+5.5 Leyenda (RackCaption), debajo del perchero, para la prenda abierta (o un resumen si no hay):
+  - Izquierda: placa blanca ~120 px con la foto real thumbnailUrl (de la variante activa) y filo rojo
+    inferior; si la prenda tiene vista posterior, al tocar la placa alterna frente/espalda.
+  - Centro: nombre (font-display, ~72 px, line-clamp-2), precio (font-mono bold tabular-nums ~44 px,
+    color fg), tallas "Tallas S, M, L" y, si hay variantes, "2 colores".
+  - Si la prenda abierta es la seleccionada y tiene variantes: chips de color que llaman a la acción
+    existente de cambio de variante (como VariantControls).
+  - Derecha: botón favorito (Heart de lucide, 64×64 mínimo) → toggleWishlist(garment.sku).
+    IMPORTANTE: el favorito alimenta el ranking de demanda prenda×talla; NO puede perderse en esta
+    interfaz. Mismo aria-label que CatalogCard (catalog.addWishlist / catalog.removeWishlist).
+  - Sin prenda abierta: "Colección Suzuki", "10 prendas", "desde $35.29" (calculado).
+5.6 Rendimiento (mini PC + MediaPipe):
+  - Animar solo transform, opacity y width del slot. Sin filter blur animado ni backdrop-filter.
+  - Precargar las ilustraciones una vez al montar (new Image + decode).
+  - draggable={false} y select-none en imágenes.
+
+====================================================================
+6. FUERA DE ALCANCE DE ESTA FASE
+====================================================================
+- Gestos con la mano (cursor por pose, permanencia, puño). Va en la Fase 2, con su propio prompt y
+  detrás de ?hand=1. En esta fase NO cargar el reconocedor de gestos.
+- Vuelta 360° generada con IA.
+- Cambiar la máquina de estados, onboarding de talla, KioskGuide, botones del espejo (foto, en vivo).
+- Modo landscape del perchero.
+
+====================================================================
+7. TESTS
+====================================================================
+selection-ui.test.ts:
+  - sin parámetro → 'clasico'; ?ui=perchero → 'perchero'; #/?ui=perchero (hash) → 'perchero';
+    ?ui=xyz → 'clasico'; sessionStorage gana sobre la URL; VITE_SELECTION_UI se usa como default.
+  - 'perchero' + layout landscape → efectiva 'clasico'.
+rack-panel.test.tsx:
+  - buildRack con el catalog.json real: 10 items, 990F0-BKQJ5 resuelve 2 ilustraciones por variante,
+    todas las URLs con BASE_URL.
+  - StagePanel: sin flag renderiza CatalogPanel/AttractPanel (data-testid actuales); con
+    'perchero' + portrait renderiza RackPanel; con 'perchero' + landscape renderiza la clásica.
+  - attract: avanza con fake timers cada 2600 ms; no llama selectGarment ni toggleWishlist.
+  - interactive: clic en un slot → selectGarment(id); clic en el seleccionado → selectGarment(null);
+    favorito → toggleWishlist(sku); teclado ← → Enter Escape.
+  - Prenda sin ilustración → se renderiza con la foto (fallback), no desaparece.
+Los tests existentes (stage-panel, catalog-card-auto-back-view, aislamiento de garment-illustration,
+kiosk-scale-acceptance, restart-button) pasan SIN modificarlos.
+
+====================================================================
+8. EVIDENCIA OBLIGATORIA
+====================================================================
+8.1 Salida final de: tsc --noEmit, npm run lint, npm test (raíz y backend/), npm run build.
+8.2 Capturas REALES del navegador (vite preview + Playwright/Chromium con
+    --use-fake-ui-for-media-stream --use-fake-device-for-media-stream), en scripts/qa_output/perchero/:
+      a) clasico-portrait.png        1080×1920 ?layout=portrait            (debe verse como hoy)
+      b) perchero-attract.png        1080×1920 ?layout=portrait&ui=perchero, estado ATTRACT
+      c) perchero-abierta.png        mismo, interactive con una prenda abierta
+      d) perchero-seleccionada.png   mismo, con prenda seleccionada (gancho vacío + leyenda + favorito)
+      e) perchero-landscape.png      1907×870 ?ui=perchero  (debe caer a la clásica)
+    Nada de composiciones con Python/PIL.
+8.3 git diff --stat main...feature/perchero, y confirmar que:
+      - CatalogPanel.tsx, CatalogCard.tsx, AttractPanel.tsx y sus tests NO aparecen en el diff.
+      - git diff --stat main -- public/ está VACÍO.

@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { CatalogPanel } from '@/components/catalog';
 import { SizingOnboardingPanel } from '@/components/SizingOnboarding';
 import { AttractPanel } from '@/components/kiosk';
+import { RackPanel } from '@/components/rack';
+import { useSelectionUi } from '@/hooks/useSelectionUi';
 import { useGarmentStore } from '@/store/garment';
 import { useSizingStore } from '@/store/sizing';
 import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
@@ -17,6 +19,8 @@ interface StagePanelProps {
 
 export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps) {
   const { t } = useTranslation();
+  const { effectiveSelectionUi } = useSelectionUi();
+  const isPerchero = effectiveSelectionUi === 'perchero';
   const catalogRef = useRef<HTMLDivElement>(null);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
   const catalog = useGarmentStore((s) => s.catalog);
@@ -76,7 +80,7 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
       {/* 2. AttractPanel */}
       {activeView === 'attract' && (
         <div data-testid="panel-attract" className="w-full h-full bg-surface">
-          <AttractPanel />
+          {isPerchero ? <RackPanel mode="attract" /> : <AttractPanel />}
         </div>
       )}
 
@@ -145,7 +149,7 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
         }`}
         aria-hidden={!isCatalogVisible}
       >
-        <CatalogPanel />
+        {isPerchero ? <RackPanel mode="interactive" /> : <CatalogPanel />}
       </div>
     </div>
   );
