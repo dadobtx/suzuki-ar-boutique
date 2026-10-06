@@ -453,10 +453,7 @@ export function selectUser(
       const swHyst = config.SW_MIN * config.HYST_SW;
       const bandHyst = config.CENTER_BAND + config.HYST_BAND;
       const stillInZone =
-        m.sw >= swHyst &&
-        Math.abs(m.cx - 0.5) <= bandHyst &&
-        m.vis >= config.VIS_MIN &&
-        m.speed <= config.SPEED_MAX;
+        m.sw >= swHyst && Math.abs(m.cx - 0.5) <= bandHyst && m.vis >= config.VIS_MIN;
 
       if (stillInZone) {
         // Se mantiene fijada y activa

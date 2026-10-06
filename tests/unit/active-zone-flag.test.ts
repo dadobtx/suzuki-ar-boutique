@@ -11,6 +11,7 @@ import {
 } from '@/lib/active-zone';
 import { usePose, _resetLandmarkerForTesting } from '@/hooks/usePose';
 import { PoseLandmarker } from '@mediapipe/tasks-vision';
+import { Point3DFilter } from '@/lib/one-euro-filter';
 
 vi.mock('@mediapipe/tasks-vision', () => {
   const mockLandmarker = {
@@ -239,5 +240,125 @@ describe('Active Zone - Interruptor y prioridad', () => {
     expect(mask0.close).toHaveBeenCalledTimes(1);
     expect(mask1.close).toHaveBeenCalledTimes(1);
     expect(mask2.close).toHaveBeenCalledTimes(1);
+  });
+
+  it('Filtros One-Euro: se reinician 1 sola vez al fijar y NO en cada frame al desplazarse; se reinician al soltar y volver a fijar', async () => {
+    window.location = new URL('http://localhost/?zona=1') as unknown as Location;
+
+    type FrameCb = (now: DOMHighResTimeStamp, meta: VideoFrameCallbackMetadata) => void;
+    let savedCallback: FrameCb | null = null;
+    const dummyVideo = {
+      readyState: 4,
+      videoWidth: 1280,
+      videoHeight: 720,
+      clientWidth: 1080,
+      clientHeight: 1920,
+      requestVideoFrameCallback: vi.fn((cb: FrameCb) => {
+        savedCallback = cb;
+        return 201;
+      }),
+      cancelVideoFrameCallback: vi.fn(),
+    } as unknown as HTMLVideoElement;
+
+    const resetSpy = vi.spyOn(Point3DFilter.prototype, 'reset');
+
+    function createLandmarks(cx: number) {
+      const sw = 0.14;
+      const lms = [];
+      for (let i = 0; i < 33; i++) {
+        lms.push({ x: cx, y: 0.5, z: 0, visibility: 0.9 });
+      }
+      lms[0] = { x: cx, y: 0.25, z: 0, visibility: 0.9 };
+      lms[11] = { x: cx - sw / 2, y: 0.4, z: 0, visibility: 0.9 };
+      lms[12] = { x: cx + sw / 2, y: 0.4, z: 0, visibility: 0.9 };
+      lms[23] = { x: cx - sw / 2, y: 0.7, z: 0, visibility: 0.9 };
+      lms[24] = { x: cx + sw / 2, y: 0.7, z: 0, visibility: 0.9 };
+      return lms;
+    }
+
+    let currentLandmarks = createLandmarks(0.5);
+    const mockLandmarkerInstance = {
+      detectForVideo: vi.fn().mockImplementation(() => ({
+        landmarks: currentLandmarks.length > 0 ? [currentLandmarks] : [],
+        worldLandmarks: currentLandmarks.length > 0 ? [currentLandmarks] : [],
+        segmentationMasks: [],
+      })),
+      setOptions: vi.fn().mockResolvedValue(undefined),
+    };
+    (
+      PoseLandmarker.createFromOptions as unknown as {
+        mockResolvedValue: (v: unknown) => void;
+      }
+    ).mockResolvedValue(mockLandmarkerInstance);
+
+    const videoRef = { current: dummyVideo };
+
+    await act(async () => {
+      renderHook(() => usePose(videoRef));
+      await new Promise((r) => setTimeout(r, 10));
+    });
+
+    resetSpy.mockClear();
+
+    // Simular tiempo pasando
+    let time = 1000;
+    const nowPerfSpy = vi.spyOn(performance, 'now');
+
+    // 1. Frame inicial a t = 1000: candidato elegible pero no fijado (LOCK_MS = 600)
+    nowPerfSpy.mockReturnValue(time);
+    await act(async () => {
+      savedCallback!(time, { presentationTime: time } as VideoFrameCallbackMetadata);
+    });
+
+    // 2. Frame a t = 1700 (> 600ms después): ahora se fija -> debe reiniciar filtros exactamente 1 vez (33 llamadas)
+    time = 1700;
+    nowPerfSpy.mockReturnValue(time);
+    await act(async () => {
+      savedCallback!(time, { presentationTime: time } as VideoFrameCallbackMetadata);
+    });
+    expect(resetSpy).toHaveBeenCalledTimes(33);
+
+    // 3. 30 frames desplazándose 0.02 por frame:
+    // Los filtros NO deben reiniciarse durante estos 30 frames
+    for (let f = 0; f < 30; f++) {
+      time += 33;
+      nowPerfSpy.mockReturnValue(time);
+      currentLandmarks = createLandmarks(0.5 + (f % 2 === 0 ? 0.02 : -0.02));
+      await act(async () => {
+        savedCallback!(time, { presentationTime: time } as VideoFrameCallbackMetadata);
+      });
+    }
+    // Sigue siendo 33 llamadas (0 llamadas adicionales en 30 frames con movimiento)
+    expect(resetSpy).toHaveBeenCalledTimes(33);
+
+    // 4. La persona desaparece por > 1500 ms (t = 1700 + 30*33 + 1600 = 4290) -> se suelta
+    currentLandmarks = [];
+    time += 1600;
+    nowPerfSpy.mockReturnValue(time);
+    await act(async () => {
+      savedCallback!(time, { presentationTime: time } as VideoFrameCallbackMetadata);
+    });
+    // Al soltarse, se reinician los filtros (33 + 33 = 66)
+    expect(resetSpy).toHaveBeenCalledTimes(66);
+
+    // 5. Segunda fijación: la persona vuelve a t = 4500 y se fija a t = 5200 (cumple 600ms)
+    currentLandmarks = createLandmarks(0.5);
+    time = 4500;
+    nowPerfSpy.mockReturnValue(time);
+    await act(async () => {
+      savedCallback!(time, { presentationTime: time } as VideoFrameCallbackMetadata);
+    });
+    expect(resetSpy).toHaveBeenCalledTimes(66);
+
+    time = 5200;
+    nowPerfSpy.mockReturnValue(time);
+    await act(async () => {
+      savedCallback!(time, { presentationTime: time } as VideoFrameCallbackMetadata);
+    });
+    // Se fijó de nuevo con una nueva lockedSinceMs -> se reinician otra vez (66 + 33 = 99)
+    expect(resetSpy).toHaveBeenCalledTimes(99);
+
+    resetSpy.mockRestore();
+    nowPerfSpy.mockRestore();
   });
 });

@@ -223,6 +223,24 @@ function DiagnosticOverlayInner() {
                 <span className="text-zinc-500">({mp.latency.toFixed(1)}ms)</span>
               </div>
               <div>
+                <span className="text-zinc-400">5s Window: </span>
+                <span className="text-emerald-400 font-bold">
+                  {mp.fps5s ?? mp.fps} fps
+                </span>{' '}
+                <span className="text-zinc-500">
+                  (p95:{' '}
+                  {mp.latencyP95 !== undefined ? `${mp.latencyP95.toFixed(1)}ms` : 'N/A'})
+                </span>
+              </div>
+              <div>
+                <span className="text-zinc-400">JS Heap: </span>
+                <span className="text-zinc-200 font-mono">
+                  {mp.heapUsedMB !== null && mp.heapUsedMB !== undefined
+                    ? `${mp.heapUsedMB} MB`
+                    : 'N/A'}
+                </span>
+              </div>
+              <div>
                 <span className="text-zinc-400">Landmarks: </span>
                 <span className="text-zinc-200 font-medium">{mp.landmarksCount}</span>
               </div>

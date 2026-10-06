@@ -164,6 +164,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
   const callbackId = useRef(0);
   const activeRef = useRef(false);
   const latencyHistory = useRef<number[]>([]);
+  const recentInferencesRef = useRef<Array<{ time: number; latency: number }>>([]);
   const lastProcessTime = useRef(performance.now());
   const activeZoneStateRef = useRef<ActiveZoneState | null>(null);
   const lastLockedPersonKeyRef = useRef<string | null>(null);
@@ -323,12 +324,12 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
                 right: pose[16] ?? null,
               };
 
-              const currentPersonMid = selectionResult.state.lockedPerson
-                ? `${selectionResult.state.lockedPerson.lastMidX.toFixed(2)}_${selectionResult.state.lockedPerson.lastMidY.toFixed(2)}`
+              const currentPersonKey = selectionResult.state.lockedPerson
+                ? String(selectionResult.state.lockedPerson.lockedSinceMs)
                 : null;
-              if (lastLockedPersonKeyRef.current !== currentPersonMid) {
+              if (lastLockedPersonKeyRef.current !== currentPersonKey) {
                 filterRef.current.forEach((f) => f.reset());
-                lastLockedPersonKeyRef.current = currentPersonMid;
+                lastLockedPersonKeyRef.current = currentPersonKey;
               }
             } else {
               pose = null;
@@ -361,9 +362,51 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
           setActiveZone(nextActiveZoneTelemetry);
           setLockedWrists(currentLockedWrists);
 
+          const nowPerf = performance.now();
+          recentInferencesRef.current.push({ time: nowPerf, latency: lat });
+          const cutoff = nowPerf - 5000;
+          recentInferencesRef.current = recentInferencesRef.current.filter(
+            (item) => item.time >= cutoff,
+          );
+
+          const count5s = recentInferencesRef.current.length;
+          const fps5s =
+            count5s > 1
+              ? Math.round(
+                  (count5s * 1000) /
+                    Math.max(1, nowPerf - recentInferencesRef.current[0]!.time),
+                )
+              : Math.round(1000 / lat);
+
+          const sortedLats = recentInferencesRef.current
+            .map((item) => item.latency)
+            .sort((a, b) => a - b);
+          const p95Idx = Math.min(
+            sortedLats.length - 1,
+            Math.floor(sortedLats.length * 0.95),
+          );
+          const latencyP95 = sortedLats[p95Idx] ?? lat;
+
+          let heapUsedMB: number | null = null;
+          if (
+            typeof performance !== 'undefined' &&
+            (performance as unknown as { memory?: { usedJSHeapSize: number } }).memory
+          ) {
+            heapUsedMB = Number(
+              (
+                (performance as unknown as { memory: { usedJSHeapSize: number } }).memory
+                  .usedJSHeapSize /
+                (1024 * 1024)
+              ).toFixed(1),
+            );
+          }
+
           if (isDebugMode()) {
             debugTelemetry.mediapipe.fps = Math.round(1000 / lat);
             debugTelemetry.mediapipe.latency = lat;
+            debugTelemetry.mediapipe.fps5s = fps5s;
+            debugTelemetry.mediapipe.latencyP95 = latencyP95;
+            debugTelemetry.mediapipe.heapUsedMB = heapUsedMB;
             debugTelemetry.mediapipe.landmarksCount = pose ? pose.length : 0;
             debugTelemetry.mediapipe.modelVersion = POSE_MODEL_VERSION;
             debugTelemetry.mediapipe.error = null;
@@ -378,7 +421,9 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             setLandmarks(filtered);
           } else {
             setLandmarks(null);
-            filterRef.current.forEach((f) => f.reset());
+            if (!isZonaEnabled) {
+              filterRef.current.forEach((f) => f.reset());
+            }
           }
           setWorldLandmarks(worldPose);
 

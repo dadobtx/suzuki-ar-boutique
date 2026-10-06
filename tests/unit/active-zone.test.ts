@@ -298,4 +298,39 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
       DEFAULT_ACTIVE_ZONE_CONFIG.CENTER_BAND,
     );
   });
+
+  it('Persona fijada con speed alta (> SPEED_MAX) durante 2 s sigue fijada si está dentro de la banda', () => {
+    const person = createDummyLandmarks({ cx: 0.5, sw: 0.14 });
+
+    // Fijamos a t = 600
+    let state = selectUser(
+      [{ landmarks: person }],
+      null,
+      DEFAULT_ACTIVE_ZONE_CONFIG,
+      0,
+    ).state;
+    state = selectUser(
+      [{ landmarks: person }],
+      state,
+      DEFAULT_ACTIVE_ZONE_CONFIG,
+      600,
+    ).state;
+
+    // Movimiento rápido durante 2s (20 frames de 100ms oscilando 0.45 <-> 0.55, speed ~1.0 > SPEED_MAX 0.35)
+    let curTime = 700;
+    for (let frame = 0; frame < 20; frame++) {
+      const cx = frame % 2 === 0 ? 0.55 : 0.45;
+      const movingLms = createDummyLandmarks({ cx, sw: 0.14 });
+      const res = selectUser(
+        [{ landmarks: movingLms }],
+        state,
+        DEFAULT_ACTIVE_ZONE_CONFIG,
+        curTime,
+      );
+      expect(res.lockedIndex).toBe(0);
+      expect(res.reasons[0]).toBe('locked');
+      state = res.state;
+      curTime += 100;
+    }
+  });
 });
