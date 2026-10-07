@@ -1,0 +1,42 @@
+PROMPT PARA ANTIGRAVITY — Ajustes de la Fase 2 (mano) antes de mergear
+Guardar en la raíz del repo como: prompt_perchero_fase2_ajustes.txt
+Rama: feature/perchero-mano (la misma). Un solo commit nuevo encima de 34229d7. NO mergear.
+
+====================================================================
+0. IMPORTANTE SOBRE LA VERIFICACIÓN DE TIPOS
+====================================================================
+El tsconfig.json raíz tiene "files": [] y solo referencias. Por eso `npx tsc --noEmit` en la raíz
+NO revisa ningún archivo y siempre da 0 errores. El chequeo real es `npx tsc -b` (lo que corre
+`npm run build`) o `npx tsc --noEmit -p tsconfig.app.json`.
+Con 34229d7, `npm run build` FALLA:
+  src/components/camera/CameraStage.tsx(100,54): error TS2304: Cannot find name 'UsePoseResult'.
+  src/components/camera/CameraStage.tsx(108,55): error TS2304: Cannot find name 'UsePoseResult'.
+Si esto se mergea, el deploy de GitHub Pages se cae (el workflow corre npm run build).
+De ahora en adelante, reportar SIEMPRE la salida de `npx tsc -b` y de `npm run build` completas.
+
+====================================================================
+1. CAMBIOS
+====================================================================
+1.1 [P0] Arreglar el error de tipos
+  - En CameraStage.tsx: `import type { UsePoseResult } from '@/hooks/usePose';` (o volver a
+    `typeof pose.landmarks` / `typeof pose.activeZone` como estaba en main).
+  - Confirmar con `npx tsc -b` y `npm run build`.
+
+1.2 [P3] Indicación incoherente
+  En tomada.png el banner dice "MANTÉN LA MANO QUIETA PARA DEVOLVERLA" sin cursor visible.
+  Las indicaciones de "mantén la mano quieta…" solo se muestran con cursor activo; sin cursor,
+  "LEVANTA LA MANO Y MUÉVELA PARA RECORRER EL PERCHERO".
+  Test nuevo en rack-hand.test.tsx o un archivo nuevo (sin editar los existentes): con cursor
+  inactivo y prenda puesta, la indicación es la de "levanta la mano".
+
+1.3 Capturas
+  Regenerar tomada.png y devolver.png. En devolver.png la prenda debe verse puesta en el AR (hoy
+  no aparece sobre el cuerpo); si es una limitación de los landmarks inyectados, decirlo en el
+  reporte en lugar de presentarlo como evidencia del AR.
+
+====================================================================
+2. EVIDENCIA
+====================================================================
+- Salida final de `npx tsc -b`, `npm run lint`, `npm test` (raíz y backend/), `npm run build`.
+- git diff --stat HEAD~1: solo CameraStage.tsx, KioskGuide.tsx (si aplica), tests nuevos y las
+  capturas.

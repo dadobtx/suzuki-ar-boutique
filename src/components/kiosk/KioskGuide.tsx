@@ -71,7 +71,10 @@ export function KioskGuide({
       : -1;
 
     if (!handCursor.active) {
-      handTitle = t('kiosk.hand.raiseHand', 'LEVANTA LA MANO ABIERTA PARA ELEGIR');
+      handTitle = t(
+        'kiosk.hand.raiseHand',
+        'LEVANTA LA MANO Y MUÉVELA PARA RECORRER EL PERCHERO',
+      );
     } else if (handCursor.index < 0 || handCursor.index >= catalog.length) {
       handTitle = t('kiosk.hand.moveHand', 'MUEVE LA MANO SOBRE EL PERCHERO');
     } else if (handCursor.index === activeGarmentIndex) {

@@ -4,7 +4,7 @@ import { useCamera } from '@/hooks/useCamera';
 import { useLayout } from '@/hooks/useLayout';
 import { useDprCanvas } from '@/hooks/useDprCanvas';
 import { useFps } from '@/hooks/useFps';
-import { usePose } from '@/hooks/usePose';
+import { usePose, type UsePoseResult } from '@/hooks/usePose';
 import { usePresence, type PresenceState } from '@/hooks/usePresence';
 import { useGarmentStore } from '@/store/garment';
 import { CameraView } from './CameraView';
@@ -477,7 +477,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         <GarmentOverlay
           videoRef={camera.videoRef}
           containerRef={overlayContainerRef}
-          landmarks={pose.landmarks}
+          landmarks={effectiveLandmarks}
           mask={pose.mask}
           layout={layout}
           active={garmentActiveWithProfile && !isLiveActive && !isLiveLoading}

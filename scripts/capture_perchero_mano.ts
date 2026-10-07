@@ -107,6 +107,8 @@ async function main() {
         lms.push({ x: cx, y: cy, z: 0, visibility: 0.95 });
       }
       lms[0] = { x: cx, y: 0.28, z: 0, visibility: 0.95 }; // nose
+      lms[7] = { x: cx - 0.035, y: 0.28, z: 0, visibility: 0.95 }; // left ear
+      lms[8] = { x: cx + 0.035, y: 0.28, z: 0, visibility: 0.95 }; // right ear
       lms[11] = { x: cx - sw / 2, y: 0.38, z: 0, visibility: 0.95 }; // left shoulder
       lms[12] = { x: cx + sw / 2, y: 0.38, z: 0, visibility: 0.95 }; // right shoulder
       lms[13] = { x: cx - sw / 2 - 0.04, y: 0.5, z: 0, visibility: 0.95 }; // left elbow
@@ -139,6 +141,30 @@ async function main() {
       window.dispatchEvent(new CustomEvent('kiosk-landmarks'));
       window.dispatchEvent(new CustomEvent('kiosk-active-zone'));
       window.dispatchEvent(new CustomEvent('kiosk-presence'));
+
+      // Persistent refresh interval to prevent presence timeout in headless browser
+      setInterval(() => {
+        (window as any).__landmarksOverride = lms;
+        (window as any).__activeZoneOverride = mockActiveZone;
+        (window as any).__presenceOverride = 'present';
+        window.dispatchEvent(new CustomEvent('kiosk-landmarks'));
+        window.dispatchEvent(new CustomEvent('kiosk-active-zone'));
+        window.dispatchEvent(new CustomEvent('kiosk-presence'));
+        const s = (window as any).__stores;
+        if (s) {
+          if (!s.useSizingStore.getState().hasProfile) {
+            s.useSizingStore.setState({ hasProfile: true });
+          }
+          if (s.useKioskStore.getState().state !== 'TRYON') {
+            s.useKioskStore.setState({ state: 'TRYON' });
+          }
+          if (s.useGarmentStore.getState().runtime.trackingLostSustained) {
+            s.useGarmentStore.setState((prev: any) => ({
+              runtime: { ...prev.runtime, trackingLostSustained: false },
+            }));
+          }
+        }
+      }, 100);
     });
 
     await page.waitForTimeout(1000);
@@ -207,7 +233,7 @@ async function main() {
     console.log(`Saved: ${pathA}`);
 
     // -------------------------------------------------------------
-    // b) tomada.png: después de 1.2 s: prenda volando o puesta, gancho vacío
+    // b) tomada.png: después de 1.2 s: prenda volando o puesta, gancho vacío, mano bajada (sin cursor)
     // -------------------------------------------------------------
     console.log('Capturing b) tomada.png...');
     // Wait until dwell completes and garment is selected
@@ -215,7 +241,8 @@ async function main() {
       const s = (window as any).__stores?.useGarmentStore?.getState();
       return s && s.activeGarmentId !== null;
     });
-    // Allow animation to settle
+    // Hand drops after taking garment: cursor inactive
+    await leaveSim();
     await page.waitForTimeout(600);
     const pathB = path.join(OUT_DIR, 'tomada.png');
     await page.screenshot({ path: pathB });
@@ -230,8 +257,6 @@ async function main() {
       const s = (window as any).__stores?.useHandCursorStore?.getState();
       return s && !s.isBusy;
     });
-    await leaveSim();
-    await page.waitForTimeout(400);
     await moveSim(0.388, 0.45);
     await pollCondition(() => {
       const s = (window as any).__stores?.useHandCursorStore?.getState();

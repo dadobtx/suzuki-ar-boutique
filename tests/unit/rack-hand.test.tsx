@@ -5,8 +5,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { Garment } from '@/types/garment';
 import { RackPanel } from '@/components/rack/RackPanel';
+import { KioskGuide } from '@/components/kiosk/KioskGuide';
 import { useGarmentStore } from '@/store/garment';
 import { useHandCursorStore } from '@/store/handCursor';
+import { useKioskStore } from '@/store/kiosk';
+import { useSizingStore } from '@/store/sizing';
+import { useLayoutStore } from '@/store/layout';
+import { useSelectionUiStore } from '@/store/selectionUi';
 
 const catalogJson: Garment[] = JSON.parse(
   fs.readFileSync(path.resolve(process.cwd(), 'public/catalog.json'), 'utf-8'),
@@ -168,5 +173,36 @@ describe('RackPanel - Hand Interaction Integration (tests/unit/rack-hand.test.ts
     const pausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
     expect(pausedUntilMs).toBeGreaterThanOrEqual(now + 1900);
     expect(pausedUntilMs).toBeLessThanOrEqual(now + 2500);
+  });
+
+  it('con cursor inactivo y prenda puesta, la indicación es la de levanta la mano', () => {
+    sessionStorage.setItem('suzuki-hand-input', '1');
+    sessionStorage.setItem('suzuki-selection-ui', 'perchero');
+
+    useLayoutStore.setState({ mode: 'portrait' });
+    useSelectionUiStore.setState({ ui: 'perchero', source: 'session' });
+    useKioskStore.setState({ state: 'TRYON' });
+    useSizingStore.setState({ hasProfile: true });
+    useGarmentStore.setState({
+      activeGarmentId: '990F0-BKTM1',
+      catalog: catalogJson,
+    });
+    useHandCursorStore.setState({
+      cursor: {
+        active: false,
+        x: 0.5,
+        y: 0.5,
+        index: 2,
+        dwellProgress: 0,
+        gesture: 'None',
+      },
+    });
+
+    render(<KioskGuide presence="present" layout="portrait" />);
+
+    expect(
+      screen.getByText('LEVANTA LA MANO Y MUÉVELA PARA RECORRER EL PERCHERO'),
+    ).toBeDefined();
+    expect(screen.queryByText(/MANTÉN LA MANO QUIETA PARA DEVOLVERLA/i)).toBeNull();
   });
 });
