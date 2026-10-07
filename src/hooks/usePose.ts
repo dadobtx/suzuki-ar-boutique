@@ -8,7 +8,6 @@ import type { NormalizedLandmark } from '@/types/pose';
 import { isDebugMode } from '@/lib/debug-mode';
 import { debugTelemetry, setMediaPipeStatus } from '@/lib/debug-mediapipe';
 import {
-  isActiveZoneEnabled,
   POSE_MAX_PERSONS,
   selectUser,
   toVisibleCoordinates,
@@ -18,6 +17,7 @@ import {
   type CandidateInput,
   type CandidateBoundingBox,
 } from '@/lib/active-zone';
+import { isEffectiveActiveZoneEnabled } from '@/lib/hand-input-flag';
 import { useLayoutStore } from '@/store/layout';
 
 export interface ActiveZoneCandidateTelemetry {
@@ -145,7 +145,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
   const [inferring, setInferring] = useState(false);
   const [frameId, setFrameId] = useState(0);
 
-  const isZonaEnabled = isActiveZoneEnabled();
+  const isZonaEnabled = isEffectiveActiveZoneEnabled();
   const [activeZone, setActiveZone] = useState<ActiveZonePoseTelemetry>({
     enabled: isZonaEnabled,
     lockedIndex: null,

@@ -126,6 +126,12 @@
     "restart": {
       "idle": "RESTART",
       "confirm": "TAP AGAIN TO RESTART"
+    },
+    "hand": {
+      "raiseHand": "RAISE YOUR HAND AND MOVE IT TO BROWSE THE RACK",
+      "moveHand": "MOVE HAND OVER THE RACK",
+      "holdToTry": "HOLD HAND STILL TO TRY ON",
+      "holdToReturn": "HOLD HAND STILL TO RETURN"
     }
   },
   "share": {

@@ -10,6 +10,8 @@ import {
   PRESENCE_LANDMARK_INDICES,
 } from '@/hooks/usePresence';
 import { usePwaStore } from '@/lib/pwa-update';
+import { useHandCursorStore } from '@/store/handCursor';
+import { isHandInputEnabled } from '@/lib/hand-input-flag';
 
 function DiagnosticOverlayInner() {
   const [isCollapsed, setIsCollapsed] = useState(false);
@@ -248,6 +250,75 @@ function DiagnosticOverlayInner() {
                 <div className="text-red-400 text-[11px] truncate">Err: {mp.error}</div>
               )}
             </div>
+
+            {/* 3.5 Hand Gestures Telemetry */}
+            {isHandInputEnabled() && (
+              <div className="bg-zinc-950/60 p-2 rounded border border-zinc-800/60">
+                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+                  🖐️ Gestos & Mano
+                </div>
+                <div>
+                  <span className="text-zinc-400">Cursor: </span>
+                  <span
+                    className={
+                      useHandCursorStore.getState().cursor.active
+                        ? 'text-emerald-400 font-bold'
+                        : 'text-zinc-500 font-bold'
+                    }
+                  >
+                    {useHandCursorStore.getState().cursor.active ? 'ACTIVO' : 'INACTIVO'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Índice: </span>
+                  <span className="text-zinc-200 font-mono">
+                    {useHandCursorStore.getState().cursor.index}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Progreso dwell: </span>
+                  <span className="text-emerald-300 font-mono font-bold">
+                    {(useHandCursorStore.getState().cursor.dwellProgress * 100).toFixed(
+                      0,
+                    )}
+                    %
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Gesto: </span>
+                  <span className="text-zinc-200 font-mono">
+                    {useHandCursorStore.getState().cursor.gesture}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Manos (Total / Usuario): </span>
+                  <span className="text-zinc-200 font-medium">
+                    {useHandCursorStore.getState().detectedHandsCount} /{' '}
+                    {useHandCursorStore.getState().userHandsCount}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">FPS Gesto: </span>
+                  <span className="text-emerald-300 font-bold">
+                    {useHandCursorStore.getState().inferenceFps}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Frecuencia adaptativa: </span>
+                  <span className="text-zinc-200 font-medium">
+                    {useHandCursorStore.getState().adaptiveTargetFps === 'auto'
+                      ? 'Auto (cada frame)'
+                      : `${useHandCursorStore.getState().adaptiveTargetFps} fps`}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">p95 Combinado (Pose+Gesto): </span>
+                  <span className="text-amber-300 font-mono">
+                    {useHandCursorStore.getState().p95} ms
+                  </span>
+                </div>
+              </div>
+            )}
 
             {/* 4. Presence Inputs & State */}
             <div className="bg-zinc-950/60 p-2 rounded border border-zinc-800/60">

@@ -12,6 +12,8 @@ import type { ActiveZonePoseTelemetry } from '@/hooks/usePose';
 import { parseActiveZoneConfig, type CandidateReason } from '@/lib/active-zone';
 import { useDebugToggle } from '@/hooks/useDebugToggle';
 import { isDebugMode } from '@/lib/debug-mode';
+import { REACH } from '@/lib/hand-cursor';
+import { isHandInputEnabled } from '@/lib/hand-input-flag';
 
 interface PoseDebugProps {
   canvasRef: RefObject<HTMLCanvasElement | null>;
@@ -242,6 +244,38 @@ export function PoseDebug({
         ctx.fillStyle = isLocked ? '#00FF66' : '#D0D0D0';
         ctx.fillText(metricsText, screenLeft + 2, screenTop + boxHeight + 14);
         ctx.restore();
+      }
+
+      // 4. Rango del mapeo de mano (dos líneas verticales en cx ± REACH · sw)
+      if (isHandInputEnabled()) {
+        const lockedCand =
+          activeZone.lockedIndex !== null
+            ? activeZone.candidates[activeZone.lockedIndex]
+            : null;
+        if (lockedCand) {
+          const screenCx = (1 - lockedCand.cx) * cssWidth;
+          const rangeHalfW = REACH * lockedCand.sw * cssWidth;
+          const xLeftHand = screenCx - rangeHalfW;
+          const xRightHand = screenCx + rangeHalfW;
+
+          ctx.save();
+          ctx.strokeStyle = 'rgba(0, 240, 255, 0.75)';
+          ctx.lineWidth = 2;
+          ctx.setLineDash([6, 6]);
+          ctx.beginPath();
+          ctx.moveTo(xLeftHand, 0);
+          ctx.lineTo(xLeftHand, cssHeight);
+          ctx.moveTo(xRightHand, 0);
+          ctx.lineTo(xRightHand, cssHeight);
+          ctx.stroke();
+
+          ctx.setLineDash([]);
+          ctx.fillStyle = 'rgba(0, 240, 255, 0.9)';
+          ctx.font = 'bold 11px monospace';
+          ctx.fillText('RANGO MANO', xLeftHand + 6, 40);
+          ctx.fillText('RANGO MANO', xRightHand - 85, 40);
+          ctx.restore();
+        }
       }
     }
   }, [canvasRef, videoRef, landmarks, mask, layout, showDebug, activeZone, shouldDraw]);

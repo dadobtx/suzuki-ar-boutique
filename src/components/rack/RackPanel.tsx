@@ -4,6 +4,8 @@ import { useKioskStore } from '@/store/kiosk';
 import { buildRack, type RackItem } from './buildRack';
 import { RackSlot } from './RackSlot';
 import { RackCaption } from './RackCaption';
+import { useHandCursorStore } from '@/store/handCursor';
+import { useAnalyticsStore } from '@/store/analytics';
 import './rack.css';
 
 interface RackPanelProps {
@@ -96,6 +98,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     setFocusIdx(mode === 'attract' ? 0 : null);
     setReturningId(null);
     isBusyRef.current = false;
+    useHandCursorStore.getState().setBusy(false);
     setKickClasses(new Array(items.length).fill(''));
   }, [clearAllTimeouts, cancelAllFlyers, mode, items.length]);
 
@@ -366,9 +369,11 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     [],
   );
 
+  type TakeMethod = 'hand_dwell' | 'hand_point' | 'touch' | 'keyboard';
+
   // Tomar o devolver una prenda
   const handleTakeOrReturn = useCallback(
-    async (index: number) => {
+    async (index: number, method: TakeMethod = 'touch') => {
       if (mode !== 'interactive' || !active || isBusyRef.current) return;
       const item = items[index];
       if (!item) return;
@@ -380,6 +385,16 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
       const flySrc = item.illustrationUrl || item.fallbackPhotoUrl;
 
       isBusyRef.current = true;
+      useHandCursorStore.getState().setBusy(true);
+
+      // Si se toma una prenda, registrar analytics
+      if (!isAlreadySelected) {
+        useAnalyticsStore.getState().track({
+          type: 'garment_take_input',
+          method,
+          sku: item.id,
+        });
+      }
 
       try {
         if (isAlreadySelected) {
@@ -454,6 +469,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
       } finally {
         setReturningId(null);
         isBusyRef.current = false;
+        useHandCursorStore.getState().setBusy(false);
       }
     },
     [
@@ -469,9 +485,37 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     ],
   );
 
+  const handCursor = useHandCursorStore((s) => s.cursor);
+  const handLastEvent = useHandCursorStore((s) => s.lastEvent);
+
+  // Cambio de foco por cursor de mano
+  useEffect(() => {
+    if (mode !== 'interactive' || !active || isBusyRef.current) return;
+    if (handCursor.active && handCursor.index >= 0 && handCursor.index < items.length) {
+      setFocus(handCursor.index);
+    }
+  }, [handCursor.active, handCursor.index, mode, active, items.length, setFocus]);
+
+  // Evento take por mano
+  useEffect(() => {
+    if (mode !== 'interactive' || !active || isBusyRef.current) return;
+    if (handLastEvent && handLastEvent.type === 'take') {
+      handleTakeOrReturn(handLastEvent.index, handLastEvent.method ?? 'hand_dwell');
+      useHandCursorStore.getState().clearLastEvent();
+    }
+  }, [handLastEvent, mode, active, handleTakeOrReturn]);
+
   // Interacción táctil / puntero con histéresis
   const handlePointerMove = (e: React.PointerEvent) => {
     if (mode !== 'interactive' || !active || isBusyRef.current) return;
+
+    // Si el cursor de mano está activo, el puntero no cambia el foco (y viceversa durante la pausa)
+    const isHandActive = useHandCursorStore.getState().cursor.active;
+    const isPaused = useHandCursorStore.getState().pausedUntilMs > Date.now();
+    if (isHandActive && !isPaused) return;
+
+    useHandCursorStore.getState().pause(2000);
+
     const x = e.clientX;
 
     // Histéresis: si el cursor permanece dentro del slot abierto, no cambiar
@@ -529,7 +573,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
         if (e.target instanceof HTMLButtonElement) return;
         e.preventDefault();
         if (focusIdx !== null && items[focusIdx]) {
-          handleTakeOrReturn(focusIdx);
+          handleTakeOrReturn(focusIdx, 'keyboard');
         }
       } else if (e.key === 'Escape') {
         e.preventDefault();
@@ -537,7 +581,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
         if (currentActiveId) {
           const activeIdx = items.findIndex((it) => it.id === currentActiveId);
           if (activeIdx !== -1) {
-            handleTakeOrReturn(activeIdx);
+            handleTakeOrReturn(activeIdx, 'keyboard');
           } else {
             selectGarment(null);
           }
@@ -590,6 +634,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
       data-testid="rack-panel"
       data-mode={mode}
       aria-label="Perchero Suzuki"
+      onPointerDown={() => useHandCursorStore.getState().pause(2000)}
       onPointerMove={handlePointerMove}
       className="relative w-full h-full bg-surface border-t border-line overflow-hidden select-none"
     >
@@ -618,7 +663,8 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
               garmentHeight={garmentHeight}
               onClick={() => {
                 if (mode === 'interactive' && active) {
-                  handleTakeOrReturn(idx);
+                  useHandCursorStore.getState().pause(2000);
+                  handleTakeOrReturn(idx, 'touch');
                 }
               }}
             />

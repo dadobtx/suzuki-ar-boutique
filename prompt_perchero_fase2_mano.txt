@@ -1,0 +1,181 @@
+PROMPT PARA ANTIGRAVITY — Perchero Fase 2: elegir prendas con la mano
+Guardar en la raíz del repo como: prompt_perchero_fase2_mano.txt
+Rama: feature/perchero-mano (desde main DESPUÉS de mergear feature/zona-activa)
+
+====================================================================
+0. PRERREQUISITOS
+====================================================================
+- La zona activa (prompt_zona_activa.txt) debe estar en main: este prompt usa
+  pose.activeZone y pose.lockedWrists. Si no existen, DETENERSE y avisar; no reimplementarlos.
+- El modelo public/mediapipe/gesture_recognizer.task ya se descarga en el deploy
+  (scripts/download-models.ts, lo agregó el diagnóstico /#/diag-mano).
+
+====================================================================
+1. DISEÑO (decidido con datos reales)
+====================================================================
+Mediciones de Dario con /#/diag-mano (laptop 1280×720, gestos + pose a la vez, umbrales 0.5):
+  Gesto           1.5 m          2.0 m          2.5 m       (mano detectada / gesto correcto)
+  Palma abierta   99 % / 99 %    91 % / 91 %    100 % / 100 %
+  Índice arriba   97 % / 80 %    100 % / 100 %  100 % / 81 %
+  Puño            100 % / 79 %   41 % / 36 %    65 % / 60 %    ← se pierde la mano: NO se usa
+  Mano bajada     0 %            10 % sin gesto 0 %           ← bajar la mano apaga todo
+  FPS 20–26, inferencia p95 ~22–35 ms por modelo.
+
+Interacción:
+  1. LEVANTAR LA PALMA ABIERTA activa el cursor. Moverla a izquierda/derecha recorre el perchero.
+  2. QUEDARSE QUIETO 1.2 s sobre una prenda la toma (anillo que se llena, como el prototipo).
+     Sobre la prenda que ya está puesta (gancho vacío) la devuelve. Sobre otra, la cambia.
+     Es exactamente la acción que hoy hace el tap (handleTakeOrReturn).
+  3. ATAJO: pasar de palma abierta a ÍNDICE ARRIBA sobre la prenda enfocada la toma al instante.
+  4. BAJAR LA MANO pausa: el cursor desaparece y nada se dispara.
+  NO hay puño.
+
+====================================================================
+2. INTERRUPTOR Y ALCANCE
+====================================================================
+- ?hand=1 / ?hand=0 (search o hash) > sessionStorage('suzuki-hand-input') > VITE_HAND_INPUT > OFF.
+  Agregar VITE_HAND_INPUT al env del workflow de deploy.
+- La mano solo funciona si a la vez: interfaz efectiva = perchero, zona activa ON (hand=1 la fuerza
+  ON), kioskState con el catálogo visible (el mismo `active` que ya recibe RackPanel) y hay
+  persona fijada. En cualquier otro caso el GestureRecognizer NO procesa frames (cero costo).
+- Con hand OFF todo queda exactamente como hoy (táctil + teclado).
+- El táctil sigue funcionando siempre. Cualquier pointerdown/pointermove táctil o de mouse pausa el
+  cursor de mano 2 s (evita que compitan).
+
+====================================================================
+3. REGLAS
+====================================================================
+- No modificar kiosk.ts, usePresence, useKioskPresenceSync, active-zone.ts (solo consumirlo), la
+  vitrina, el catálogo clásico, public/, catalog.json, el camino FASHN/Lucy.
+- Sin dependencias nuevas (@mediapipe/tasks-vision 0.10.18 ya trae GestureRecognizer).
+- No editar tests existentes; agregar tests nuevos.
+- Rojo solo como acento. UTF-8. VITE_AI_BACKEND_URL intacto.
+
+====================================================================
+4. ARQUITECTURA
+====================================================================
+4.1 src/lib/hand-cursor.ts  (PURO, sin React ni MediaPipe; toda la lógica testeable)
+    Entrada por frame: { nowMs, hands: [{ wrist, palmCenter (landmark 9), gesture, score }],
+                         user: { lockedWrists, sw, cx } (de pose.activeZone), itemCount,
+                         busy, pausedUntilMs }
+    Todo en coordenadas de lo VISIBLE (usar center-crop.ts igual que active-zone).
+    a) Dueño de la mano: una mano es del usuario si su muñeca (landmark 0 de la mano) está a
+       ≤ OWNER_DIST (0.08) de lockedWrists.left o .right. Las demás se ignoran. Si hay dos del
+       usuario, usar la más alta (y menor).
+    b) Activación: ventana de 250 ms; el cursor se activa si ≥ 60 % de los frames tienen la mano
+       del usuario con Open_Palm o Pointing_Up (score ≥ 0.5). Se apaga si durante 400 ms no hay
+       mano del usuario o el gesto es otro.
+    c) Posición: x de palmCenter, ESPEJADA (el espejo se ve invertido), suavizada con One-Euro
+       (reutilizar src/lib/one-euro-filter.ts).
+    d) Mapeo a prenda RELATIVO AL CUERPO (la persona no camina, mueve el brazo):
+         rango = [cx − REACH·sw, cx + REACH·sw], REACH = 1.6
+         t = clamp((x − inicio) / ancho, 0, 0.999); índice = floor(t · itemCount)
+       Histéresis: solo cambia de índice si t pasa el borde de la banda en más de 15 % del ancho
+       de una banda.
+    e) Permanencia: si el índice está quieto DWELL_MS (1200) con cursor activo y "armado" →
+       evento { type: 'take', index }. Tras disparar queda DESARMADO hasta que el índice cambie o
+       el cursor se apague (evita que se ponga y quite sola).
+    f) Atajo: con cursor activo e índice estable ≥ 300 ms, si el gesto pasa de Open_Palm a
+       Pointing_Up y se mantiene ≥ 70 % de 300 ms → { type: 'take', index } inmediato (mismo
+       desarme).
+    g) busy (vuelo en curso) o pausedUntilMs > now → no emite eventos y el progreso vuelve a 0.
+    Salida: { state, cursor: { active, x, y, index, dwellProgress 0–1, gesture }, events[] }
+
+4.2 src/hooks/useHandCursor.ts
+    - Crea un GestureRecognizer singleton (VIDEO, GPU con fallback a CPU, numHands 2,
+      umbrales 0.5, modelo ${BASE_URL}mediapipe/gesture_recognizer.task) SOLO cuando se cumplen
+      las condiciones de la sección 2; lo cierra al desactivarse.
+    - Procesa el mismo video del kiosko (camera.videoRef) en su propio requestVideoFrameCallback.
+    - Frecuencia adaptativa: cada frame por defecto; si el p95 de (pose + gesto) en 3 s supera
+      55 ms, pasar a 15 fps; si supera 80 ms, a 10 fps. Volver a subir con 10 s de holgura.
+      Exponer la frecuencia actual para el overlay de debug.
+    - Alimenta hand-cursor.ts y publica el resultado en un store zustand
+      src/store/handCursor.ts { enabled, cursor, lastEvent, inferenceFps, p95 }.
+
+4.3 CameraStage.tsx
+    - Llama useHandCursor(camera.videoRef, pose, { active: isCatalogVisible, ... }).
+    - Dibuja el cursor en la celda del espejo (componente nuevo src/components/hand/HandCursor.tsx):
+      ícono de mano (lucide Hand) de ~64 px con sombra, anillo de progreso alrededor
+      (stroke rojo de marca para el avance, base blanca 22 %), en la posición x/y del cursor.
+      Fundido de 200 ms al activarse/apagarse. Con reduced motion, sin escala.
+    - No dibujar nada si el cursor está inactivo.
+
+4.4 RackPanel.tsx
+    - Se suscribe a src/store/handCursor.ts:
+        cursor.index cambia → setFocus(index) (igual que con el puntero)
+        evento take → handleTakeOrReturn(index) (el mismo de hoy; respeta isBusyRef y active)
+    - Si el cursor de mano está activo, el puntero no cambia el foco (y viceversa durante la pausa).
+    - Pasar busy (isBusyRef) al store para que hand-cursor no dispare durante un vuelo.
+
+4.5 Indicaciones en el espejo (solo con hand ON y catálogo visible), arriba al centro, el mismo
+    estilo de la guía actual:
+      sin cursor:            "LEVANTA LA MANO ABIERTA PARA ELEGIR"
+      cursor sin prenda:     "MUEVE LA MANO SOBRE EL PERCHERO"
+      cursor sobre prenda:   "MANTÉN LA MANO QUIETA PARA PROBÁRTELA"
+      cursor sobre la puesta:"MANTÉN LA MANO QUIETA PARA DEVOLVERLA"
+    Claves i18n nuevas en es.json / en.json (kiosk.hand.*). No reemplazar la guía de 3 pasos ni
+    los mensajes de distancia existentes: si la guía actual muestra un aviso de distancia o
+    encuadre, ese aviso tiene prioridad y la indicación de mano se oculta.
+
+4.6 Analytics: al tomar una prenda, registrar { type: 'garment_take_input', method: 'hand_dwell' |
+    'hand_point' | 'touch' | 'keyboard', sku }. Agregar el tipo al union de eventos sin cambiar los
+    existentes. Sirve para medir en el autoshow cuánta gente usa la mano.
+
+====================================================================
+5. MODO SIMULADO PARA QA (?hand_sim=1, solo con ?debug=1)
+====================================================================
+Sin cámara real no se puede probar la mano. Con ?debug=1&hand_sim=1: el mouse sobre la celda del
+espejo simula la palma del usuario fijado (Open_Palm con score 0.9, muñeca pegada a lockedWrists
+o, si no hay persona, un usuario sintético centrado con sw 0.15). Mantener la tecla "I" simula
+Pointing_Up. Salir del espejo con el mouse = mano bajada. Esto entra a hand-cursor.ts por la misma
+puerta que los datos reales (no hay lógica paralela).
+
+====================================================================
+6. ?debug=1
+====================================================================
+Agregar al overlay: estado del cursor, índice, progreso, gesto, cuántas manos detectadas y
+cuántas son del usuario, fps del gesto, frecuencia adaptativa actual, p95 combinado, y el rango
+del mapeo (dos líneas verticales en cx ± REACH·sw).
+
+====================================================================
+7. TESTS NUEVOS
+====================================================================
+tests/unit/hand-cursor.test.ts:
+- Mano lejos de lockedWrists → ignorada (no activa cursor).
+- Mano del usuario con Open_Palm 60 % de 250 ms → activa; con 50 % → no.
+- Sin mano 400 ms → cursor se apaga y el progreso vuelve a 0.
+- Mapeo: x en cx − REACH·sw → índice 0; en cx + REACH·sw → último; en cx → el del medio.
+- Espejado: mover la mano a la derecha de la imagen = cursor a la izquierda en pantalla.
+- Histéresis: oscilar ±5 % de banda en el borde no cambia el índice.
+- Permanencia: 1199 ms no dispara; 1200 ms dispara una vez; seguir quieto no vuelve a disparar;
+  cambiar de índice y volver rearma.
+- Atajo: Open_Palm → Pointing_Up sostenido 300 ms dispara; Pointing_Up desde el inicio (sin palma
+  previa) no dispara el atajo (solo mueve el cursor).
+- busy o pausa → no hay eventos.
+- Con dos manos del usuario, se usa la más alta.
+tests/unit/hand-input-flag.test.ts: sin parámetro OFF; ?hand=1 ON y fuerza zona ON; sessionStorage gana.
+tests/unit/rack-hand.test.tsx: con el store simulado, cambio de índice → foco del perchero;
+evento take → selectGarment; con active=false nada; pointer pausa 2 s el cursor.
+
+====================================================================
+8. EVIDENCIA
+====================================================================
+- Salida final de tsc --noEmit, npm run lint, npm test (raíz y backend/), npm run build.
+- Capturas reales con ?layout=portrait&ui=perchero&debug=1&hand_sim=1 (cámara falsa, estados con
+  window.__stores), en scripts/qa_output/perchero-mano/:
+    a) cursor-activo.png      cursor sobre una prenda, anillo al ~50 %.
+    b) tomada.png             después de 1.2 s: prenda volando o puesta, gancho vacío.
+    c) devolver.png           cursor sobre el gancho vacío, anillo al ~50 %, indicación
+                              "MANTÉN LA MANO QUIETA PARA DEVOLVERLA".
+    d) sin-mano.png           mouse fuera del espejo: sin cursor, indicación "LEVANTA LA MANO…".
+- FPS y p95 combinados en la laptop con ?hand=1 (overlay de debug), con 1 persona real si es
+  posible; si no, con la cámara falsa e indicarlo.
+- git diff --stat main: nada en kiosk.ts, usePresence*, active-zone.ts, components/catalog,
+  kiosk/AttractPanel, public/.
+
+====================================================================
+9. FUERA DE ALCANCE
+====================================================================
+- Gestos para foto y prueba en vivo (será la Fase 3, con los mismos principios).
+- Gestos en el onboarding de talla.
+- Puño.
