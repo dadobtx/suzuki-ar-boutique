@@ -1,9 +1,12 @@
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
-import { ArrowRight, ArrowDown, UserRound } from 'lucide-react';
+import { ArrowRight, ArrowDown, UserRound, Hand } from 'lucide-react';
 import { useKioskStore } from '@/store/kiosk';
 import { useGarmentStore } from '@/store/garment';
 import { useSizingStore } from '@/store/sizing';
+import { useSelectionUi } from '@/hooks/useSelectionUi';
+import { isHandInputEnabled } from '@/lib/hand-input-flag';
+import { useHandCursorStore } from '@/store/handCursor';
 import type { PresenceState } from '@/hooks/usePresence';
 import type { FramingState } from '@/lib/body-framing';
 import { resolveGuide } from '@/lib/kiosk-guide';
@@ -29,8 +32,14 @@ export function KioskGuide({
   const kioskState = useKioskStore((s) => s.state);
   const hasProfile = useSizingStore((s) => s.hasProfile);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
+  const catalog = useGarmentStore((s) => s.catalog);
   const trackingLostSustained = useGarmentStore((s) => s.runtime.trackingLostSustained);
   const reducedMotion = useReducedMotion();
+
+  const { effectiveSelectionUi } = useSelectionUi();
+  const isPerchero = effectiveSelectionUi === 'perchero';
+  const isHandEnabled = isHandInputEnabled();
+  const handCursor = useHandCursorStore((s) => s.cursor);
 
   const guide = resolveGuide({
     kioskState,
@@ -46,8 +55,39 @@ export function KioskGuide({
 
   if (!guide) return null;
 
-  const ArrowIcon = guide.arrow === 'right' ? ArrowRight : ArrowDown;
   const isBodyNotice = guide.kind === 'body';
+
+  // Modo indicaciones de mano (perchero + hand ON + catálogo visible, sin aviso de cuerpo)
+  const isHandActiveMode =
+    isHandEnabled &&
+    isPerchero &&
+    layout === 'portrait' &&
+    (kioskState === 'TRYON' || (kioskState === 'ATTRACT' && hasProfile));
+
+  let handTitle: string | null = null;
+  if (isHandActiveMode && !isBodyNotice) {
+    const activeGarmentIndex = activeGarmentId
+      ? catalog.findIndex((g) => g.id === activeGarmentId)
+      : -1;
+
+    if (!handCursor.active) {
+      handTitle = t(
+        'kiosk.hand.raiseHand',
+        'LEVANTA LA MANO Y MUÉVELA PARA RECORRER EL PERCHERO',
+      );
+    } else if (handCursor.index < 0 || handCursor.index >= catalog.length) {
+      handTitle = t('kiosk.hand.moveHand', 'MUEVE LA MANO SOBRE EL PERCHERO');
+    } else if (handCursor.index === activeGarmentIndex) {
+      handTitle = t('kiosk.hand.holdToReturn', 'MANTÉN LA MANO QUIETA PARA DEVOLVERLA');
+    } else {
+      handTitle = t('kiosk.hand.holdToTry', 'MANTÉN LA MANO QUIETA PARA PROBÁRTELA');
+    }
+  }
+
+  const effectiveTitle = handTitle ?? guide.title;
+  const isShowingHandPrompt = handTitle !== null;
+
+  const ArrowIcon = guide.arrow === 'right' ? ArrowRight : ArrowDown;
 
   const step1Label = t('kiosk.guide.steps.step1', '① TALLA');
   const step2Label = t('kiosk.guide.steps.step2', '② PRENDA');
@@ -67,7 +107,7 @@ export function KioskGuide({
     >
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${guide.kind}-${guide.title}`}
+          key={`${isBodyNotice ? 'body' : isShowingHandPrompt ? 'hand' : 'step'}-${effectiveTitle}`}
           initial={{ opacity: 0, y: -8 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -8 }}
@@ -78,8 +118,8 @@ export function KioskGuide({
             ${isBodyNotice ? 'border border-fg' : 'border border-line'}
           `}
         >
-          {/* Step indicator row (only in step mode) */}
-          {!isBodyNotice && (
+          {/* Step indicator row (only in step mode when not showing hand prompt) */}
+          {!isBodyNotice && !isShowingHandPrompt && (
             <div className="flex items-center justify-center gap-2 text-xs mb-1 select-none tracking-wider">
               <span
                 className={
@@ -122,16 +162,22 @@ export function KioskGuide({
             {isBodyNotice && (
               <UserRound className="w-6 h-6 text-fg shrink-0" strokeWidth={2.2} />
             )}
+            {isShowingHandPrompt && (
+              <Hand
+                className="w-6 h-6 text-brand-red shrink-0 animate-pulse"
+                strokeWidth={2.2}
+              />
+            )}
 
             <span
               className={`font-display ${
                 layout === 'portrait' ? 'text-2xl' : 'text-xl'
               } tracking-wide text-fg uppercase whitespace-nowrap`}
             >
-              {guide.title}
+              {effectiveTitle}
             </span>
 
-            {!isBodyNotice && guide.arrow && (
+            {!isBodyNotice && !isShowingHandPrompt && guide.arrow && (
               <motion.div
                 animate={
                   reducedMotion
@@ -155,7 +201,7 @@ export function KioskGuide({
           </div>
 
           {/* Hint text */}
-          {!isBodyNotice && guide.hint && (
+          {!isBodyNotice && !isShowingHandPrompt && guide.hint && (
             <p className="text-sm text-fg-muted mt-0.5 text-center select-none">
               {guide.hint}
             </p>

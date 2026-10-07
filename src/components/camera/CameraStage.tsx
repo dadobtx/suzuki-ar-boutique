@@ -4,7 +4,7 @@ import { useCamera } from '@/hooks/useCamera';
 import { useLayout } from '@/hooks/useLayout';
 import { useDprCanvas } from '@/hooks/useDprCanvas';
 import { useFps } from '@/hooks/useFps';
-import { usePose } from '@/hooks/usePose';
+import { usePose, type UsePoseResult } from '@/hooks/usePose';
 import { usePresence, type PresenceState } from '@/hooks/usePresence';
 import { useGarmentStore } from '@/store/garment';
 import { CameraView } from './CameraView';
@@ -25,6 +25,8 @@ import { LiveTryOnManager } from '@/lib/liveTryon';
 import { StagePanel } from './StagePanel';
 import { SizingControls } from './SizingControls';
 import { VariantControls } from './VariantControls';
+import { useHandCursor } from '@/hooks/useHandCursor';
+import { HandCursor } from '@/components/hand';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
@@ -67,10 +69,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Phase 3: Pose & Presence
   const pose = usePose(camera.videoRef);
   const detectedPresence = usePresence(pose.landmarks, pose.frameId);
-  const presence =
+  const [presenceOverride, setPresenceOverride] = useState<PresenceState | null>(
     (typeof window !== 'undefined' &&
       (window as unknown as { __presenceOverride?: PresenceState }).__presenceOverride) ||
-    detectedPresence;
+      null,
+  );
+  const presence = presenceOverride || detectedPresence;
 
   const [landmarksOverride, setLandmarksOverride] = useState<
     typeof pose.landmarks | null
@@ -93,7 +97,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   useEffect(() => {
     const handleUpdate = () => {
       const override = (
-        window as unknown as { __landmarksOverride?: typeof pose.landmarks }
+        window as unknown as { __landmarksOverride?: UsePoseResult['landmarks'] }
       ).__landmarksOverride;
       if (override) {
         setLandmarksOverride(override);
@@ -101,17 +105,26 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     };
     const handleZoneUpdate = () => {
       const override = (
-        window as unknown as { __activeZoneOverride?: typeof pose.activeZone }
+        window as unknown as { __activeZoneOverride?: UsePoseResult['activeZone'] }
       ).__activeZoneOverride;
       if (override) {
         setActiveZoneOverride(override);
       }
     };
+    const handlePresenceUpdate = () => {
+      const override = (window as unknown as { __presenceOverride?: PresenceState })
+        .__presenceOverride;
+      if (override) {
+        setPresenceOverride(override);
+      }
+    };
     window.addEventListener('kiosk-landmarks', handleUpdate);
     window.addEventListener('kiosk-active-zone', handleZoneUpdate);
+    window.addEventListener('kiosk-presence', handlePresenceUpdate);
     return () => {
       window.removeEventListener('kiosk-landmarks', handleUpdate);
       window.removeEventListener('kiosk-active-zone', handleZoneUpdate);
+      window.removeEventListener('kiosk-presence', handlePresenceUpdate);
     };
   }, []);
 
@@ -171,6 +184,19 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
 
   const transition = useKioskStore((s) => s.transition);
   const kioskState = useKioskStore((s) => s.state);
+
+  const isCatalogVisible =
+    hasProfile &&
+    kioskState !== 'ATTRACT' &&
+    kioskState !== 'AWAKENING' &&
+    kioskState !== 'CALIBRATING' &&
+    kioskState !== 'PHOTO_COUNTDOWN';
+
+  const { handleMirrorPointerMove, handleMirrorPointerLeave } = useHandCursor(
+    camera.videoRef,
+    pose,
+    { active: isCatalogVisible },
+  );
 
   // Phase 4: Garment catalog
   const loadCatalog = useGarmentStore((s) => s.loadCatalog);
@@ -426,6 +452,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         ref={(el) => {
           overlayContainerRef.current = el;
         }}
+        onPointerMove={handleMirrorPointerMove}
+        onPointerLeave={handleMirrorPointerLeave}
       >
         <CameraView
           videoRef={camera.videoRef}
@@ -449,7 +477,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         <GarmentOverlay
           videoRef={camera.videoRef}
           containerRef={overlayContainerRef}
-          landmarks={pose.landmarks}
+          landmarks={effectiveLandmarks}
           mask={pose.mask}
           layout={layout}
           active={garmentActiveWithProfile && !isLiveActive && !isLiveLoading}
@@ -537,6 +565,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
             showLiveButton={showLiveButton}
           />
         )}
+
+        {/* Hand Cursor (z-index 40) */}
+        <HandCursor />
 
         {/* Garment Plaque (left mirror) */}
         {(kioskState === 'TRYON' || kioskState === 'PHOTO_COUNTDOWN') &&

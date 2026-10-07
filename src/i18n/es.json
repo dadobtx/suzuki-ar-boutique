@@ -126,6 +126,12 @@
     "restart": {
       "idle": "REINICIAR",
       "confirm": "TOCA OTRA VEZ PARA REINICIAR"
+    },
+    "hand": {
+      "raiseHand": "LEVANTA LA MANO Y MUÉVELA PARA RECORRER EL PERCHERO",
+      "moveHand": "MUEVE LA MANO SOBRE EL PERCHERO",
+      "holdToTry": "MANTÉN LA MANO QUIETA PARA PROBÁRTELA",
+      "holdToReturn": "MANTÉN LA MANO QUIETA PARA DEVOLVERLA"
     }
   },
   "share": {

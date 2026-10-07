@@ -129,6 +129,12 @@ export interface StyleDownloadedEvent extends BaseEvent {
   wishlistCode?: string;
 }
 
+export interface GarmentTakeInputEvent extends BaseEvent {
+  type: 'garment_take_input';
+  method: 'hand_dwell' | 'hand_point' | 'touch' | 'keyboard';
+  sku: string;
+}
+
 export type AnalyticsEvent =
   | SessionStartedEvent
   | SessionEndedEvent
@@ -144,7 +150,8 @@ export type AnalyticsEvent =
   | PhotoDownloadedEvent
   | StyleGeneratedEvent
   | StyleSelectedEvent
-  | StyleDownloadedEvent;
+  | StyleDownloadedEvent
+  | GarmentTakeInputEvent;
 
 export type AnalyticsEventType = AnalyticsEvent['type'];
 
