@@ -11,6 +11,8 @@ import {
   POSE_MAX_PERSONS,
   selectUser,
   toVisibleCoordinates,
+  computeVisibleAspectRatio,
+  getDiagnosticPoseParams,
   parseActiveZoneConfig,
   type ActiveZoneState,
   type CandidateReason,
@@ -22,6 +24,7 @@ import { useLayoutStore } from '@/store/layout';
 
 export interface ActiveZoneCandidateTelemetry {
   sw: number;
+  swWidth?: number;
   cx: number;
   vis: number;
   speed: number;
@@ -67,11 +70,14 @@ export function _resetLandmarkerForTesting() {
   initPromise = null;
 }
 
-async function initLandmarker(numPoses: number = 1) {
+async function initLandmarker(
+  numPoses: number = 1,
+  outputSegmentationMasks: boolean = true,
+) {
   if (initPromise) {
     const res = await initPromise;
     try {
-      await res.landmarker.setOptions({ numPoses });
+      await res.landmarker.setOptions({ numPoses, outputSegmentationMasks });
     } catch (e) {
       console.warn('[usePose] setOptions failed:', e);
     }
@@ -97,7 +103,7 @@ async function initLandmarker(numPoses: number = 1) {
             delegate: 'GPU',
           },
           runningMode: 'VIDEO',
-          outputSegmentationMasks: true,
+          outputSegmentationMasks,
           numPoses,
         });
       } catch (e) {
@@ -108,7 +114,7 @@ async function initLandmarker(numPoses: number = 1) {
             delegate: 'CPU',
           },
           runningMode: 'VIDEO',
-          outputSegmentationMasks: true,
+          outputSegmentationMasks,
           numPoses,
         });
         backend = 'CPU';
@@ -179,8 +185,9 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
   // Initialize MediaPipe once
   useEffect(() => {
     let cancelled = false;
-    const targetNumPoses = isZonaEnabled ? POSE_MAX_PERSONS : 1;
-    initLandmarker(targetNumPoses)
+    const { poseN, outputMasks } = getDiagnosticPoseParams();
+    const targetNumPoses = isZonaEnabled ? (poseN ?? POSE_MAX_PERSONS) : 1;
+    initLandmarker(targetNumPoses, outputMasks)
       .then(({ backend }) => {
         if (cancelled) return;
         setBackend(backend);
@@ -242,9 +249,6 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             latencyHistory.current.shift();
           }
           lastProcessTime.current = performance.now();
-
-          setFps(Math.round(1000 / lat));
-          setLatency(lat);
           setInferring(true);
           setError(null);
 
@@ -270,6 +274,13 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
               video.clientWidth || (layout === 'portrait' ? 1080 : 1920);
             const containerHeight =
               video.clientHeight || (layout === 'portrait' ? 1920 : 1080);
+            const visibleAspectRatio = computeVisibleAspectRatio(
+              layout,
+              video.videoWidth,
+              video.videoHeight,
+              containerWidth,
+              containerHeight,
+            );
 
             const candidateInputs: CandidateInput[] = rawLandmarksList.map((lms) => {
               const visibleLandmarks = lms.map((lm) =>
@@ -291,6 +302,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
               activeZoneStateRef.current,
               config,
               performance.now(),
+              visibleAspectRatio,
             );
             activeZoneStateRef.current = selectionResult.state;
 
@@ -299,6 +311,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
               lockedIndex: selectionResult.lockedIndex,
               candidates: selectionResult.candidates.map((c) => ({
                 sw: c.sw,
+                swWidth: c.swWidth,
                 cx: c.cx,
                 vis: c.vis,
                 speed: c.speed,
@@ -363,6 +376,12 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
           setLockedWrists(currentLockedWrists);
 
           const nowPerf = performance.now();
+          const prevPerf =
+            recentInferencesRef.current.length > 0
+              ? recentInferencesRef.current[recentInferencesRef.current.length - 1]?.time
+              : null;
+          const dtInterFrame = prevPerf ? nowPerf - prevPerf : 0;
+
           recentInferencesRef.current.push({ time: nowPerf, latency: lat });
           const cutoff = nowPerf - 5000;
           recentInferencesRef.current = recentInferencesRef.current.filter(
@@ -370,13 +389,21 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
           );
 
           const count5s = recentInferencesRef.current.length;
+          const elapsed5s =
+            count5s > 1
+              ? Math.max(1, nowPerf - recentInferencesRef.current[0]!.time)
+              : 1000;
           const fps5s =
             count5s > 1
-              ? Math.round(
-                  (count5s * 1000) /
-                    Math.max(1, nowPerf - recentInferencesRef.current[0]!.time),
-                )
-              : Math.round(1000 / lat);
+              ? Math.round((count5s * 1000) / elapsed5s)
+              : Math.round(1000 / Math.max(1, lat));
+          const instantFps = dtInterFrame > 0 ? Math.round(1000 / dtInterFrame) : fps5s;
+
+          const sumLat = recentInferencesRef.current.reduce(
+            (acc, curr) => acc + curr.latency,
+            0,
+          );
+          const latencyAvg = count5s > 0 ? sumLat / count5s : lat;
 
           const sortedLats = recentInferencesRef.current
             .map((item) => item.latency)
@@ -401,15 +428,26 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             );
           }
 
+          setFps(instantFps);
+          setLatency(lat);
+
           if (isDebugMode()) {
-            debugTelemetry.mediapipe.fps = Math.round(1000 / lat);
+            const { poseN, outputMasks } = getDiagnosticPoseParams();
+            const currentNumPoses = isZonaEnabled ? (poseN ?? POSE_MAX_PERSONS) : 1;
+            debugTelemetry.mediapipe.fps = instantFps;
             debugTelemetry.mediapipe.latency = lat;
             debugTelemetry.mediapipe.fps5s = fps5s;
+            debugTelemetry.mediapipe.latencyAvg = latencyAvg;
             debugTelemetry.mediapipe.latencyP95 = latencyP95;
+            debugTelemetry.mediapipe.numPoses = currentNumPoses;
+            debugTelemetry.mediapipe.outputMasks = outputMasks;
             debugTelemetry.mediapipe.heapUsedMB = heapUsedMB;
             debugTelemetry.mediapipe.landmarksCount = pose ? pose.length : 0;
             debugTelemetry.mediapipe.modelVersion = POSE_MODEL_VERSION;
             debugTelemetry.mediapipe.error = null;
+            (
+              window as unknown as { __debugTelemetry?: typeof debugTelemetry }
+            ).__debugTelemetry = debugTelemetry;
           }
 
           if (pose) {

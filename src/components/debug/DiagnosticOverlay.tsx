@@ -220,9 +220,11 @@ function DiagnosticOverlayInner() {
                 <span className="text-zinc-200 font-medium">{mp.delegate ?? 'N/A'}</span>
               </div>
               <div>
-                <span className="text-zinc-400">Inference FPS: </span>
-                <span className="text-emerald-300 font-bold">{mp.fps}</span>{' '}
-                <span className="text-zinc-500">({mp.latency.toFixed(1)}ms)</span>
+                <span className="text-zinc-400">Config: </span>
+                <span className="text-cyan-300 font-mono">
+                  {mp.numPoses ?? 1} {mp.numPoses === 1 ? 'pose' : 'poses'} · masks:{' '}
+                  {mp.outputMasks !== false ? 'ON' : 'OFF'}
+                </span>
               </div>
               <div>
                 <span className="text-zinc-400">5s Window: </span>
@@ -230,9 +232,20 @@ function DiagnosticOverlayInner() {
                   {mp.fps5s ?? mp.fps} fps
                 </span>{' '}
                 <span className="text-zinc-500">
-                  (p95:{' '}
+                  (avg:{' '}
+                  {mp.latencyAvg !== undefined
+                    ? `${mp.latencyAvg.toFixed(1)}ms`
+                    : `${mp.latency.toFixed(1)}ms`}{' '}
+                  · p95:{' '}
                   {mp.latencyP95 !== undefined ? `${mp.latencyP95.toFixed(1)}ms` : 'N/A'})
                 </span>
+              </div>
+              <div>
+                <span className="text-zinc-400">Last Latency: </span>
+                <span className="text-zinc-200 font-mono">
+                  {mp.latency.toFixed(1)}ms
+                </span>{' '}
+                <span className="text-zinc-500">({mp.fps} fps inst)</span>
               </div>
               <div>
                 <span className="text-zinc-400">JS Heap: </span>

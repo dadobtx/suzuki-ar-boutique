@@ -30,7 +30,7 @@ import { HandCursor } from '@/components/hand';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
-import { isOperatorMode } from '@/lib/debug-mode';
+import { isOperatorMode, isDebugMode } from '@/lib/debug-mode';
 import {
   computeFramingMetrics,
   FramingHysteresis,
@@ -71,15 +71,18 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const detectedPresence = usePresence(pose.landmarks, pose.frameId);
   const [presenceOverride, setPresenceOverride] = useState<PresenceState | null>(
     (typeof window !== 'undefined' &&
+      isDebugMode() &&
       (window as unknown as { __presenceOverride?: PresenceState }).__presenceOverride) ||
       null,
   );
-  const presence = presenceOverride || detectedPresence;
+  const presence =
+    isDebugMode() && presenceOverride ? presenceOverride : detectedPresence;
 
   const [landmarksOverride, setLandmarksOverride] = useState<
     typeof pose.landmarks | null
   >(
     (typeof window !== 'undefined' &&
+      isDebugMode() &&
       (window as unknown as { __landmarksOverride?: typeof pose.landmarks })
         .__landmarksOverride) ||
       null,
@@ -89,12 +92,15 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     typeof pose.activeZone | null
   >(
     (typeof window !== 'undefined' &&
+      isDebugMode() &&
       (window as unknown as { __activeZoneOverride?: typeof pose.activeZone })
         .__activeZoneOverride) ||
       null,
   );
 
   useEffect(() => {
+    if (!isDebugMode()) return;
+
     const handleUpdate = () => {
       const override = (
         window as unknown as { __landmarksOverride?: UsePoseResult['landmarks'] }
@@ -128,9 +134,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     };
   }, []);
 
-  const effectiveActiveZone = activeZoneOverride || pose.activeZone;
+  const effectiveActiveZone =
+    isDebugMode() && activeZoneOverride ? activeZoneOverride : pose.activeZone;
 
-  const effectiveLandmarks = landmarksOverride || pose.landmarks;
+  const effectiveLandmarks =
+    isDebugMode() && landmarksOverride ? landmarksOverride : pose.landmarks;
 
   // Body framing metrics & 1000ms hysteresis
   const framingMetrics = useMemo(

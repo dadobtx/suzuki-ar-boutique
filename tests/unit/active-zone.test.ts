@@ -3,10 +3,13 @@ import { describe, it, expect } from 'vitest';
 import {
   selectUser,
   toVisibleCoordinates,
+  computeVisibleAspectRatio,
+  computeCandidateMetrics,
   DEFAULT_ACTIVE_ZONE_CONFIG,
   type CandidateInput,
   type ActiveZoneState,
 } from '@/lib/active-zone';
+import { HandCursorTracker } from '@/lib/hand-cursor';
 import type { NormalizedLandmark } from '@/types/pose';
 
 function createDummyLandmarks(options: {
@@ -16,7 +19,7 @@ function createDummyLandmarks(options: {
   vis?: number;
 }): NormalizedLandmark[] {
   const cx = options.cx ?? 0.5;
-  const sw = options.sw ?? 0.12;
+  const sw = options.sw ?? 0.28;
   const cy = options.cy ?? 0.5;
   const vis = options.vis ?? 0.9;
 
@@ -44,16 +47,16 @@ function createDummyLandmarks(options: {
 }
 
 describe('Active Zone - Algoritmo de selección y permanencia', () => {
-  it('Persona lejana (sw 0.05) centrada y quieta → no se fija; approaching true si sw >= 0.054', () => {
-    const farLms = createDummyLandmarks({ cx: 0.5, sw: 0.05 });
+  it('Persona lejana (sw 0.10) centrada y quieta → no se fija; approaching true si sw >= 0.132', () => {
+    const farLms = createDummyLandmarks({ cx: 0.5, sw: 0.1 });
     const res1 = selectUser([{ landmarks: farLms }], null, DEFAULT_ACTIVE_ZONE_CONFIG, 0);
 
     expect(res1.lockedIndex).toBeNull();
     expect(res1.reasons[0]).toBe('far');
     expect(res1.approaching).toBe(false);
 
-    // Con sw = 0.06 (>= 0.6 * SW_MIN = 0.054 y < SW_MIN = 0.09)
-    const approachingLms = createDummyLandmarks({ cx: 0.5, sw: 0.06 });
+    // Con sw = 0.15 (>= 0.6 * SW_MIN = 0.132 y < SW_MIN = 0.22)
+    const approachingLms = createDummyLandmarks({ cx: 0.5, sw: 0.15 });
     const res2 = selectUser(
       [{ landmarks: approachingLms }],
       null,
@@ -67,7 +70,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('Persona cerca pero descentrada (cx 0.85) → no se fija ("offCenter")', () => {
-    const offCenterLms = createDummyLandmarks({ cx: 0.85, sw: 0.15 });
+    const offCenterLms = createDummyLandmarks({ cx: 0.85, sw: 0.28 });
     const res = selectUser(
       [{ landmarks: offCenterLms }],
       null,
@@ -82,12 +85,12 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   it('Persona cerca y centrada que cruza (speed > SPEED_MAX) → no se fija ("moving")', () => {
     // Alguien cruzando a ~1 ancho de pantalla por segundo (Δx = 0.08 cada 80ms <= MATCH_DIST 0.15)
     // Frame 1 en cx = 0.38, t = 0
-    const f1Lms = createDummyLandmarks({ cx: 0.38, sw: 0.15 });
+    const f1Lms = createDummyLandmarks({ cx: 0.38, sw: 0.28 });
     const r1 = selectUser([{ landmarks: f1Lms }], null, DEFAULT_ACTIVE_ZONE_CONFIG, 0);
     expect(r1.lockedIndex).toBeNull();
 
     // Frame 2 en cx = 0.46, t = 80ms (rawSpeed = 1.0, EMA = 0.3)
-    const f2Lms = createDummyLandmarks({ cx: 0.46, sw: 0.15 });
+    const f2Lms = createDummyLandmarks({ cx: 0.46, sw: 0.28 });
     const r2 = selectUser(
       [{ landmarks: f2Lms }],
       r1.state,
@@ -96,7 +99,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
     );
 
     // Frame 3 en cx = 0.54 (centrada y cerca), t = 160ms (rawSpeed = 1.0, EMA = 0.3*1 + 0.7*0.3 = 0.51 > 0.35)
-    const f3Lms = createDummyLandmarks({ cx: 0.54, sw: 0.15 });
+    const f3Lms = createDummyLandmarks({ cx: 0.54, sw: 0.28 });
     const r3 = selectUser(
       [{ landmarks: f3Lms }],
       r2.state,
@@ -109,7 +112,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('Una persona elegible → se fija recién después de LOCK_MS', () => {
-    const lms = createDummyLandmarks({ cx: 0.5, sw: 0.14 });
+    const lms = createDummyLandmarks({ cx: 0.5, sw: 0.28 });
     const input: CandidateInput[] = [{ landmarks: lms }];
 
     // t = 0: elegible pero 0 ms < LOCK_MS (600 ms)
@@ -129,10 +132,10 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('Dos elegibles → se fija la de mayor puntaje', () => {
-    // Candidata 0: sw = 0.10, cx = 0.5 -> score = 0.10
-    // Candidata 1: sw = 0.16, cx = 0.5 -> score = 0.16
-    const cand0 = createDummyLandmarks({ cx: 0.45, sw: 0.1 });
-    const cand1 = createDummyLandmarks({ cx: 0.5, sw: 0.16 });
+    // Candidata 0: sw = 0.24, cx = 0.45 -> score = 0.24 - 0.5 * 0.05 = 0.215
+    // Candidata 1: sw = 0.32, cx = 0.5 -> score = 0.32
+    const cand0 = createDummyLandmarks({ cx: 0.45, sw: 0.24 });
+    const cand1 = createDummyLandmarks({ cx: 0.5, sw: 0.32 });
     const input: CandidateInput[] = [{ landmarks: cand0 }, { landmarks: cand1 }];
 
     const r0 = selectUser(input, null, DEFAULT_ACTIVE_ZONE_CONFIG, 0);
@@ -143,7 +146,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('Con una fijada, aparece otra con más puntaje → la fijada NO cambia (persona fija)', () => {
-    const cand0 = createDummyLandmarks({ cx: 0.48, sw: 0.12 });
+    const cand0 = createDummyLandmarks({ cx: 0.48, sw: 0.28 });
     let state: ActiveZoneState | null = null;
 
     // Fijamos cand0 a t = 600
@@ -163,7 +166,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
     state = lockedRes.state;
 
     // Aparece cand1 con mayor puntaje a t = 800
-    const cand1New = createDummyLandmarks({ cx: 0.5, sw: 0.2 });
+    const cand1New = createDummyLandmarks({ cx: 0.5, sw: 0.35 });
     const dualRes = selectUser(
       [{ landmarks: cand0 }, { landmarks: cand1New }],
       state,
@@ -178,8 +181,8 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('El orden de las poses se invierte entre frames → la identidad se mantiene por MATCH_DIST', () => {
-    const personA = createDummyLandmarks({ cx: 0.5, sw: 0.14 });
-    const personB = createDummyLandmarks({ cx: 0.35, sw: 0.1 });
+    const personA = createDummyLandmarks({ cx: 0.5, sw: 0.28 });
+    const personB = createDummyLandmarks({ cx: 0.35, sw: 0.24 });
 
     // Fijamos personA (en índice 0)
     let state = selectUser(
@@ -209,7 +212,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('La fijada desaparece 1 s y vuelve → sigue fijada; desaparece 1.6 s → se suelta', () => {
-    const person = createDummyLandmarks({ cx: 0.5, sw: 0.14 });
+    const person = createDummyLandmarks({ cx: 0.5, sw: 0.28 });
 
     // Fijamos a t = 600
     let state = selectUser(
@@ -257,10 +260,10 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
     expect(newArrival.reasons[0]).toBe('candidate');
   });
 
-  it('Histéresis: la fijada con sw 0.08 (entre 0.85·SW_MIN y SW_MIN) sigue fijada', () => {
-    const personNormal = createDummyLandmarks({ cx: 0.5, sw: 0.12 });
+  it('Histéresis: la fijada con sw 0.20 (entre 0.85·SW_MIN y SW_MIN) sigue fijada', () => {
+    const personNormal = createDummyLandmarks({ cx: 0.5, sw: 0.28 });
 
-    // Fijamos con sw = 0.12
+    // Fijamos con sw = 0.28
     let state = selectUser(
       [{ landmarks: personNormal }],
       null,
@@ -274,8 +277,8 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
       600,
     ).state;
 
-    // Se aleja un poco a sw = 0.08 (SW_MIN = 0.09, 0.85 * 0.09 = 0.0765). 0.08 > 0.0765.
-    const personSlightlyFar = createDummyLandmarks({ cx: 0.5, sw: 0.08 });
+    // Se aleja un poco a sw = 0.20 (SW_MIN = 0.22, 0.85 * 0.22 = 0.187). 0.20 > 0.187.
+    const personSlightlyFar = createDummyLandmarks({ cx: 0.5, sw: 0.2 });
     const hystRes = selectUser(
       [{ landmarks: personSlightlyFar }],
       state,
@@ -300,7 +303,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
   });
 
   it('Persona fijada con speed alta (> SPEED_MAX) durante 2 s sigue fijada si está dentro de la banda', () => {
-    const person = createDummyLandmarks({ cx: 0.5, sw: 0.14 });
+    const person = createDummyLandmarks({ cx: 0.5, sw: 0.28 });
 
     // Fijamos a t = 600
     let state = selectUser(
@@ -320,7 +323,7 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
     let curTime = 700;
     for (let frame = 0; frame < 20; frame++) {
       const cx = frame % 2 === 0 ? 0.55 : 0.45;
-      const movingLms = createDummyLandmarks({ cx, sw: 0.14 });
+      const movingLms = createDummyLandmarks({ cx, sw: 0.28 });
       const res = selectUser(
         [{ landmarks: movingLms }],
         state,
@@ -332,5 +335,104 @@ describe('Active Zone - Algoritmo de selección y permanencia', () => {
       state = res.state;
       curTime += 100;
     }
+  });
+
+  it('Misma persona da el mismo sw normalizado por altura en portrait (center-crop) y en landscape (contain)', () => {
+    // Video 1280x720, persona en el centro con hombros separados 200px
+    const rawLandmarks = createDummyLandmarks({
+      cx: 0.5,
+      sw: 200 / 1280,
+    });
+
+    // 1. Landscape (contain) en pantalla 1920x1080
+    const visLandscape = rawLandmarks.map((lm) =>
+      toVisibleCoordinates(lm, 'landscape', 1280, 720, 1920, 1080),
+    );
+    const arLandscape = computeVisibleAspectRatio('landscape', 1280, 720, 1920, 1080);
+    const metricsLandscape = computeCandidateMetrics(
+      visLandscape,
+      null,
+      DEFAULT_ACTIVE_ZONE_CONFIG,
+      0,
+      arLandscape,
+    );
+
+    // 2. Portrait (center-crop) en pantalla 1080x1920
+    const visPortrait = rawLandmarks.map((lm) =>
+      toVisibleCoordinates(lm, 'portrait', 1280, 720, 1080, 1920),
+    );
+    const arPortrait = computeVisibleAspectRatio('portrait', 1280, 720, 1080, 1920);
+    const metricsPortrait = computeCandidateMetrics(
+      visPortrait,
+      null,
+      DEFAULT_ACTIVE_ZONE_CONFIG,
+      0,
+      arPortrait,
+    );
+
+    // swWidth difiere porque el ancho del viewport visible es diferente
+    expect(metricsLandscape.swWidth).not.toBeCloseTo(metricsPortrait.swWidth, 2);
+
+    // Pero sw (normalizado por altura visible = 200 / 720 ≈ 0.2778) es idéntico
+    expect(metricsLandscape.sw).toBeCloseTo(200 / 720, 4);
+    expect(metricsPortrait.sw).toBeCloseTo(200 / 720, 4);
+    expect(metricsLandscape.sw).toBeCloseTo(metricsPortrait.sw, 4);
+  });
+
+  it('Con la misma persona, el índice del cursor para una misma posición de mano es idéntico usando swWidth', () => {
+    const tracker1 = new HandCursorTracker();
+    const tracker2 = new HandCursorTracker();
+
+    const swWidth = 0.25;
+
+    // Antes de calibración de altura: targetUser.sw recibía el ancho visible
+    const userBefore = {
+      lockedWrists: { left: { x: 0.4, y: 0.6 }, right: { x: 0.6, y: 0.6 } },
+      sw: swWidth,
+      cx: 0.5,
+    };
+
+    // Ahora: useHandCursor pasa sw: lockedCandidate.swWidth ?? lockedCandidate.sw
+    const userAfter = {
+      lockedWrists: { left: { x: 0.4, y: 0.6 }, right: { x: 0.6, y: 0.6 } },
+      sw: swWidth,
+      cx: 0.5,
+    };
+
+    const hand = {
+      wrist: { x: 0.56, y: 0.58 },
+      palmCenter: { x: 0.56, y: 0.5 },
+      gesture: 'Open_Palm',
+      score: 0.9,
+    };
+
+    tracker1.update({
+      nowMs: 100,
+      hands: [hand],
+      user: userBefore,
+      itemCount: 5,
+    });
+    const out1 = tracker1.update({
+      nowMs: 400,
+      hands: [hand],
+      user: userBefore,
+      itemCount: 5,
+    });
+
+    tracker2.update({
+      nowMs: 100,
+      hands: [hand],
+      user: userAfter,
+      itemCount: 5,
+    });
+    const out2 = tracker2.update({
+      nowMs: 400,
+      hands: [hand],
+      user: userAfter,
+      itemCount: 5,
+    });
+
+    expect(out1.cursor.index).toBe(out2.cursor.index);
+    expect(out1.cursor.x).toBeCloseTo(out2.cursor.x, 4);
   });
 });

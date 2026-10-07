@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import type { RefObject } from 'react';
 import { PoseLandmarker } from '@mediapipe/tasks-vision';
 import type { NormalizedLandmark } from '@/types/pose';
@@ -33,12 +33,28 @@ export function PoseDebug({
   activeZone,
 }: PoseDebugProps) {
   const { showDebug } = useDebugToggle();
-  const shouldDraw = isDebugMode() || showDebug;
+  const isDebug = isDebugMode();
+
+  // Cached OffscreenCanvas and ImageData for mask rendering (reused across frames)
+  const offscreenRef = useRef<OffscreenCanvas | null>(null);
+  const imgDataRef = useRef<ImageData | null>(null);
+  const lastMaskTimeRef = useRef<number>(0);
 
   useEffect(() => {
+    // Early return if debug is off and toggle is inactive
+    if (!isDebug && !showDebug) {
+      if (canvasRef.current) {
+        const ctx = canvasRef.current.getContext('2d');
+        ctx?.clearRect(0, 0, canvasRef.current.width, canvasRef.current.height);
+      }
+      return;
+    }
+
     const canvas = canvasRef.current;
     const video = videoRef.current;
-    if (!canvas) return;
+    if (!canvas || !video || video.videoWidth === 0 || video.videoHeight === 0) {
+      return;
+    }
 
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
@@ -46,23 +62,36 @@ export function PoseDebug({
     // Clear canvas every frame
     ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    if (!shouldDraw || !video || video.videoWidth === 0 || video.videoHeight === 0) {
-      return;
-    }
-
     const { videoWidth, videoHeight } = video;
     const cssWidth = canvas.clientWidth;
     const cssHeight = canvas.clientHeight;
 
     const crop = computeCropOffset(videoWidth, videoHeight, cssWidth, cssHeight);
 
-    // 1. Draw Segmentation Mask
-    if (mask) {
-      const offscreen = new OffscreenCanvas(videoWidth, videoHeight);
-      const offCtx = offscreen.getContext('2d');
-      if (offCtx) {
-        const imgData = offCtx.createImageData(videoWidth, videoHeight);
-        if (mask.length === videoWidth * videoHeight) {
+    // 1. Draw Segmentation Mask ONLY when showDebug is true (overlay toggle active)
+    if (showDebug && mask) {
+      const now = performance.now();
+      if (
+        !offscreenRef.current ||
+        offscreenRef.current.width !== videoWidth ||
+        offscreenRef.current.height !== videoHeight
+      ) {
+        offscreenRef.current = new OffscreenCanvas(videoWidth, videoHeight);
+        const offCtx = offscreenRef.current.getContext('2d');
+        if (offCtx) {
+          imgDataRef.current = offCtx.createImageData(videoWidth, videoHeight);
+        }
+        lastMaskTimeRef.current = 0;
+      }
+
+      const offscreen = offscreenRef.current;
+      const offCtx = offscreen?.getContext('2d');
+      const imgData = imgDataRef.current;
+
+      if (offscreen && offCtx && imgData && mask.length === videoWidth * videoHeight) {
+        // Throttle mask pixel processing to 10 fps (100 ms)
+        if (now - lastMaskTimeRef.current >= 100) {
+          lastMaskTimeRef.current = now;
           for (let i = 0; i < mask.length; i++) {
             const alpha = mask[i] ?? 0;
             const px = i * 4;
@@ -72,37 +101,32 @@ export function PoseDebug({
             imgData.data[px + 3] = 255 - alpha; // A
           }
           offCtx.putImageData(imgData, 0, 0);
-
-          ctx.save();
-          ctx.globalAlpha = 0.3; // Translucent mask
-
-          // Mirroring
-          ctx.translate(cssWidth, 0);
-          ctx.scale(-1, 1);
-
-          if (layout === 'portrait') {
-            ctx.drawImage(
-              offscreen,
-              crop.cropX,
-              crop.cropY,
-              crop.visibleWidth,
-              crop.visibleHeight,
-              0,
-              0,
-              cssWidth,
-              cssHeight,
-            );
-          } else {
-            const fit = computeContainOffset(
-              videoWidth,
-              videoHeight,
-              cssWidth,
-              cssHeight,
-            );
-            ctx.drawImage(offscreen, fit.drawX, fit.drawY, fit.drawW, fit.drawH);
-          }
-          ctx.restore();
         }
+
+        ctx.save();
+        ctx.globalAlpha = 0.3; // Translucent mask
+
+        // Mirroring
+        ctx.translate(cssWidth, 0);
+        ctx.scale(-1, 1);
+
+        if (layout === 'portrait') {
+          ctx.drawImage(
+            offscreen,
+            crop.cropX,
+            crop.cropY,
+            crop.visibleWidth,
+            crop.visibleHeight,
+            0,
+            0,
+            cssWidth,
+            cssHeight,
+          );
+        } else {
+          const fit = computeContainOffset(videoWidth, videoHeight, cssWidth, cssHeight);
+          ctx.drawImage(offscreen, fit.drawX, fit.drawY, fit.drawW, fit.drawH);
+        }
+        ctx.restore();
       }
     }
 
@@ -254,7 +278,7 @@ export function PoseDebug({
             : null;
         if (lockedCand) {
           const screenCx = (1 - lockedCand.cx) * cssWidth;
-          const rangeHalfW = REACH * lockedCand.sw * cssWidth;
+          const rangeHalfW = REACH * (lockedCand.swWidth ?? lockedCand.sw) * cssWidth;
           const xLeftHand = screenCx - rangeHalfW;
           const xRightHand = screenCx + rangeHalfW;
 
@@ -278,7 +302,7 @@ export function PoseDebug({
         }
       }
     }
-  }, [canvasRef, videoRef, landmarks, mask, layout, showDebug, activeZone, shouldDraw]);
+  }, [canvasRef, videoRef, landmarks, mask, layout, showDebug, activeZone, isDebug]);
 
   return null;
 }
