@@ -124,6 +124,8 @@ export class HandCursorTracker {
 
   private lastValidHandMs = 0;
   private activationHistory: Array<{ time: number; valid: boolean }> = [];
+  private sampleIntervals: number[] = [];
+  private lastUpdateMs: number | null = null;
 
   private xFilter = new OneEuroFilter({ fcmin: 1.0, beta: 0.007 });
   private yFilter = new OneEuroFilter({ fcmin: 1.0, beta: 0.007 });
@@ -144,6 +146,8 @@ export class HandCursorTracker {
     this.gesture = 'None';
     this.lastValidHandMs = 0;
     this.activationHistory = [];
+    this.sampleIntervals = [];
+    this.lastUpdateMs = null;
     this.xFilter.reset();
     this.yFilter.reset();
     this.isArmed = true;
@@ -164,28 +168,75 @@ export class HandCursorTracker {
     const detectedHandsCount = hands.length;
     const userHandsCount = userHands.length;
 
-    // b) Activación: ventana de 250 ms (requiere acumular al menos 250 ms de ventana)
+    // Medición de intervalos de muestreo observados
+    if (this.lastUpdateMs !== null) {
+      const dt = nowMs - this.lastUpdateMs;
+      if (dt > 0 && dt <= 1000) {
+        this.sampleIntervals.push(dt);
+        if (this.sampleIntervals.length > 10) {
+          this.sampleIntervals.shift();
+        }
+      }
+    }
+    this.lastUpdateMs = nowMs;
+
+    // Intervalo de muestreo promedio u observado (por defecto 100 ms si no hay historial)
+    const observedIntervalMs =
+      this.sampleIntervals.length > 0
+        ? this.sampleIntervals.reduce((a, b) => a + b, 0) / this.sampleIntervals.length
+        : 100;
+    const effectiveDeactivationTimeoutMs = Math.max(
+      DEACTIVATION_TIMEOUT_MS,
+      2 * observedIntervalMs,
+    );
+
+    // b) Activación: ventana de 250 ms
     const isValidGesture =
       activeHand !== null &&
       (activeHand.gesture === 'Open_Palm' || activeHand.gesture === 'Pointing_Up') &&
       activeHand.score >= GESTURE_SCORE_MIN;
 
     this.activationHistory.push({ time: nowMs, valid: isValidGesture });
-    // Filtrar ventana de 250 ms
-    this.activationHistory = this.activationHistory.filter(
-      (h) => h.time >= nowMs - ACTIVATION_WINDOW_MS,
-    );
+    // Conservar las muestras de los últimos 1000 ms
+    this.activationHistory = this.activationHistory.filter((h) => h.time >= nowMs - 1000);
+
+    // Ventana efectiva = las muestras con time >= nowMs - 250, MÁS la muestra inmediatamente anterior a ese corte (si existe)
+    const cutoff250 = nowMs - ACTIVATION_WINDOW_MS;
+    const insideIndices = [];
+    for (let i = 0; i < this.activationHistory.length; i++) {
+      if (this.activationHistory[i]!.time >= cutoff250) {
+        insideIndices.push(i);
+      }
+    }
+    let effectiveWindow: Array<{ time: number; valid: boolean }> = [];
+    if (insideIndices.length > 0) {
+      const firstInsideIdx = insideIndices[0]!;
+      const startIdx = firstInsideIdx > 0 ? firstInsideIdx - 1 : firstInsideIdx;
+      effectiveWindow = this.activationHistory.slice(startIdx);
+    } else if (this.activationHistory.length > 0) {
+      // Si ninguna está estrictamente dentro, tomar la última si existe
+      effectiveWindow = [this.activationHistory[this.activationHistory.length - 1]!];
+    }
 
     const windowSpan =
-      this.activationHistory.length > 1 && this.activationHistory[0]
-        ? nowMs - this.activationHistory[0].time
+      effectiveWindow.length > 1 && effectiveWindow[0]
+        ? nowMs - effectiveWindow[0].time
         : 0;
-    const validCount = this.activationHistory.filter((h) => h.valid).length;
+    const validCount = effectiveWindow.filter((h) => h.valid).length;
     const validRatio =
-      this.activationHistory.length > 0 ? validCount / this.activationHistory.length : 0;
+      effectiveWindow.length > 0 ? validCount / effectiveWindow.length : 0;
+
+    // Condición: (span >= 250 ms Y ratio de válidas >= 60 %) O (las últimas 3 muestras son válidas con span >= 200 ms para bajas frecuencias)
+    const last3 = this.activationHistory.slice(-3);
+    const last3Span = last3.length === 3 ? nowMs - last3[0]!.time : 0;
+    const last3AreValidLowFps =
+      last3.length === 3 && last3.every((h) => h.valid) && last3Span >= 200;
+    const shouldActivate =
+      (windowSpan >= ACTIVATION_WINDOW_MS && validRatio >= ACTIVATION_RATIO) ||
+      last3AreValidLowFps;
 
     if (!this.active) {
-      if (windowSpan >= ACTIVATION_WINDOW_MS && validRatio >= ACTIVATION_RATIO) {
+      if (shouldActivate) {
         this.active = true;
         this.lastValidHandMs = nowMs;
         this.dwellStartMs = nowMs;
@@ -198,7 +249,7 @@ export class HandCursorTracker {
     } else {
       if (isValidGesture) {
         this.lastValidHandMs = nowMs;
-      } else if (nowMs - this.lastValidHandMs >= DEACTIVATION_TIMEOUT_MS) {
+      } else if (nowMs - this.lastValidHandMs >= effectiveDeactivationTimeoutMs) {
         this.active = false;
         this.dwellProgress = 0;
         this.isArmed = true;
@@ -266,9 +317,7 @@ export class HandCursorTracker {
         gesture: activeHand.gesture,
         score: activeHand.score,
       });
-      this.gestureHistory = this.gestureHistory.filter(
-        (g) => g.time >= nowMs - SHORTCUT_WINDOW_MS,
-      );
+      this.gestureHistory = this.gestureHistory.filter((g) => g.time >= nowMs - 1000);
 
       if (activeHand.gesture === 'Open_Palm' && activeHand.score >= GESTURE_SCORE_MIN) {
         this.hadOpenPalmDuringStable = true;
@@ -301,11 +350,33 @@ export class HandCursorTracker {
         this.pointingStartMs !== null &&
         nowMs - this.pointingStartMs >= SHORTCUT_WINDOW_MS
       ) {
-        const pointingCount = this.gestureHistory.filter(
+        const cutoffShortcut = nowMs - SHORTCUT_WINDOW_MS;
+        const shortcutIndices = [];
+        for (let i = 0; i < this.gestureHistory.length; i++) {
+          if (this.gestureHistory[i]!.time >= cutoffShortcut) {
+            shortcutIndices.push(i);
+          }
+        }
+        let effectiveGestureWindow: Array<{
+          time: number;
+          gesture: string;
+          score: number;
+        }> = [];
+        if (shortcutIndices.length > 0) {
+          const firstIdx = shortcutIndices[0]!;
+          const startIdx = firstIdx > 0 ? firstIdx - 1 : firstIdx;
+          effectiveGestureWindow = this.gestureHistory.slice(startIdx);
+        } else if (this.gestureHistory.length > 0) {
+          effectiveGestureWindow = [this.gestureHistory[this.gestureHistory.length - 1]!];
+        }
+
+        const pointingCount = effectiveGestureWindow.filter(
           (g) => g.gesture === 'Pointing_Up' && g.score >= GESTURE_SCORE_MIN,
         ).length;
         const pointingRatio =
-          this.gestureHistory.length > 0 ? pointingCount / this.gestureHistory.length : 0;
+          effectiveGestureWindow.length > 0
+            ? pointingCount / effectiveGestureWindow.length
+            : 0;
 
         if (pointingRatio >= SHORTCUT_RATIO && this.gesture === 'Pointing_Up') {
           events.push({

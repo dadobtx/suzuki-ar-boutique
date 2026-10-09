@@ -123,3 +123,39 @@ export function isHandSimEnabled(): boolean {
 
   return false;
 }
+
+/**
+ * Parámetro de diagnóstico para QA: ?hand_fps=10 (o cualquier número), SOLO con ?debug=1.
+ */
+export function readHandFpsParam(): number | null {
+  if (!isDebugMode()) return null;
+  if (typeof window === 'undefined' || !window.location) return null;
+
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    const val = searchParams.get('hand_fps');
+    if (val !== null) {
+      const parsed = parseFloat(val);
+      if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+    }
+  } catch {
+    // ignore
+  }
+
+  try {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(qIndex));
+      const val = hashParams.get('hand_fps');
+      if (val !== null) {
+        const parsed = parseFloat(val);
+        if (!Number.isNaN(parsed) && parsed > 0) return parsed;
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}

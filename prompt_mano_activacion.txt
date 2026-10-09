@@ -1,0 +1,73 @@
+PROMPT PARA ANTIGRAVITY — El cursor de la mano no se activa con cámara real
+Guardar en la raíz del repo como: prompt_mano_activacion.txt
+Rama: fix/mano-activacion desde main actualizado (389bf99 o posterior). NO mergear.
+Si fix/zona-calibracion está en curso, este cambio es independiente: solo toca hand-cursor.ts,
+useHandCursor.ts, el overlay de la mano y tests nuevos.
+
+====================================================================
+1. LO QUE PASÓ EN LA PRUEBA REAL DE DARIO
+====================================================================
+?ui=perchero&hand=1&debug=1, ventana vertical, persona FIJADA, palma abierta levantada.
+Panel "GESTOS & MANO": Gesto: Open_Palm · Manos (Total / Usuario): 1 / 1 · Cursor: INACTIVO ·
+Progreso dwell 0 % · FPS Gesto: 0 · Frecuencia adaptativa: 10 fps · p95 combinado: 230 ms.
+O sea: la mano se detecta, es del usuario y el gesto es correcto, pero el cursor nunca se activa.
+
+====================================================================
+2. CAUSA (src/lib/hand-cursor.ts, activación)
+====================================================================
+activationHistory se filtra a los últimos 250 ms y luego se exige
+  windowSpan = nowMs − activationHistory[0].time  ≥ 250
+Como todo lo anterior a nowMs − 250 se descarta, windowSpan casi nunca llega a 250:
+  - 10 fps (100 ms): muestras en 0/100/200 → span 200 → NUNCA activa.
+  - 30 fps (33 ms): span máximo ≈ 233 → NUNCA activa.
+  - 24 fps: solo de casualidad.
+  - < 8 fps: hay 1 sola muestra en la ventana → span 0 → NUNCA activa.
+Los tests no lo detectaron porque avanzan el tiempo en pasos exactos de 50 ms (0…250 inclusive),
+el único caso en que el span da exactamente 250.
+
+Además, "FPS Gesto" se calcula como 1000 / latencia de inferencia: no es una frecuencia real.
+
+====================================================================
+3. CAMBIOS
+====================================================================
+3.1 Activación robusta a cualquier frecuencia
+  - Conservar las muestras de los últimos 1000 ms.
+  - Ventana efectiva = las muestras con time ≥ nowMs − 250, MÁS la muestra inmediatamente anterior
+    a ese corte (si existe). Así el span puede alcanzar o superar 250 ms a cualquier fps.
+  - Activar si: (span ≥ 250 ms Y ratio de válidas ≥ 60 %) O (las últimas 3 muestras son válidas).
+    La segunda condición cubre frecuencias bajas (≤ 8 fps), donde 3 muestras ya son > 250 ms.
+  - Desactivar si no hay mano válida durante max(400 ms, 2 intervalos de muestreo observados).
+  - Revisar con el mismo criterio cualquier otra ventana temporal del archivo (atajo Pointing_Up de
+    300 ms con ≥ 70 %): que funcione a 10, 15, 24 y 30 fps.
+
+3.2 Métrica real de FPS del gesto
+  - "FPS Gesto" = número de inferencias completadas en los últimos 2 s / 2. Mantener la latencia
+    aparte ("Latencia gesto p95").
+
+3.3 Frecuencia adaptativa
+  - El p95 combinado debe medir solo el tiempo de las inferencias (detectForVideo de pose +
+    recognizeForVideo), no el tiempo entre frames ni el dibujo del debug.
+  - Piso: nunca bajar de 10 fps de intento de inferencia del gesto mientras el cursor está activo o
+    hay una mano del usuario en los últimos 500 ms.
+
+====================================================================
+4. TESTS NUEVOS (tests/unit/hand-cursor-rates.test.ts; no editar los existentes)
+====================================================================
+Con un reloj simulado y JITTER aleatorio de ±20 % en el intervalo (semilla fija), mano del usuario
+con Open_Palm 0.8 de forma continua:
+  - a 5, 7, 10, 15, 24 y 30 fps el cursor se activa en ≤ 450 ms;
+  - a esas mismas frecuencias, quedarse en la misma prenda dispara 'take' entre 1200 y 1500 ms
+    después de activarse, una sola vez;
+  - con 40 % de frames sin mano mezclados al azar (sin rachas > 300 ms) el cursor no se desactiva;
+  - al bajar la mano (sin mano 600 ms) se desactiva a cualquier frecuencia;
+  - el atajo Open_Palm → Pointing_Up funciona a 10 y 30 fps.
+Y para la métrica: 20 inferencias en 2 s → "FPS Gesto" = 10.
+
+====================================================================
+5. EVIDENCIA
+====================================================================
+- Salida final de `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build.
+- Con ?debug=1&hand_sim=1 (mouse como mano), forzando la frecuencia a 10 fps con un parámetro de
+  diagnóstico ?hand_fps=10: captura con el cursor activo y el anillo avanzando.
+- git diff --stat main: solo src/lib/hand-cursor.ts, src/hooks/useHandCursor.ts, el overlay de debug,
+  tests nuevos y capturas.

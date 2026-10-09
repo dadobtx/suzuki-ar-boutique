@@ -304,6 +304,12 @@ function DiagnosticOverlayInner() {
                   </span>
                 </div>
                 <div>
+                  <span className="text-zinc-400">Latencia gesto p95: </span>
+                  <span className="text-emerald-300 font-mono">
+                    {useHandCursorStore.getState().gestureLatencyP95 ?? 0} ms
+                  </span>
+                </div>
+                <div>
                   <span className="text-zinc-400">Frecuencia adaptativa: </span>
                   <span className="text-zinc-200 font-medium">
                     {useHandCursorStore.getState().adaptiveTargetFps === 'auto'
