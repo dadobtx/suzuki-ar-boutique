@@ -342,6 +342,7 @@ export function useHandCursor(
             palmCenter: { x: 1 - mouse.x, y: mouse.y }, // espejado
             gesture: simKeyIRef.current ? 'Pointing_Up' : 'Open_Palm',
             score: 0.9,
+            handedness: 'Right',
           },
         ];
 
@@ -498,12 +499,18 @@ export function useHandCursor(
 
               const gestureName = result.gestures?.[i]?.[0]?.categoryName ?? 'None';
               const gestureScore = result.gestures?.[i]?.[0]?.score ?? 0;
+              const handednessCategory = result.handednesses?.[i]?.[0]?.categoryName;
+              const handedness: 'Left' | 'Right' | 'None' =
+                handednessCategory === 'Left' || handednessCategory === 'Right'
+                  ? handednessCategory
+                  : 'None';
 
               detectedHands.push({
                 wrist: wristVis,
                 palmCenter: palmCenterVis,
                 gesture: gestureName,
                 score: gestureScore,
+                handedness,
               });
             }
           }

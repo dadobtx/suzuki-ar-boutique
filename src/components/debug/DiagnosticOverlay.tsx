@@ -337,6 +337,17 @@ function DiagnosticOverlayInner() {
                   </span>
                 </div>
                 <div>
+                  <span className="text-zinc-400">Mano activa: </span>
+                  <span className="text-amber-300 font-mono">
+                    {useHandCursorStore.getState().cursor.activeHandSide === 'Left'
+                      ? 'Izq'
+                      : useHandCursorStore.getState().cursor.activeHandSide === 'Right'
+                        ? 'Der'
+                        : 'Ninguna'}{' '}
+                    (cambios: {useHandCursorStore.getState().cursor.handSwitchCount ?? 0})
+                  </span>
+                </div>
+                <div>
                   <span className="text-zinc-400">Gesto: </span>
                   <span className="text-zinc-200 font-mono">
                     {useHandCursorStore.getState().cursor.gesture}

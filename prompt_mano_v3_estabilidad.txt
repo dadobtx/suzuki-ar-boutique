@@ -1,0 +1,81 @@
+PROMPT PARA ANTIGRAVITY — Mano v3: estabilidad de la palanca y de la confirmación
+Guardar en la raíz del repo como: prompt_mano_v3_estabilidad.txt
+Rama: fix/mano-v3 desde main (9031ea5 o posterior). NO mergear.
+
+====================================================================
+1. LO QUE REPORTÓ DARIO CON LA v2 (cámara real, ?ui=perchero&hand=1&debug=1)
+====================================================================
+a) La confirmación con el índice funcionó al principio y después dejó de funcionar.
+b) Con la mano derecha el desplazamiento a la derecha se queda "enclavado" (3+ pasos seguidos) y a
+   veces la izquierda no responde.
+c) Encontró un truco que mejora: mano derecha para ir a la derecha, mano izquierda para ir a la
+   izquierda. Aun así falla a veces.
+d) A veces aparece la flecha de dirección en el cursor pero el perchero NO se mueve.
+
+====================================================================
+2. CAUSAS EN src/lib/hand-cursor.ts (verificadas leyendo el código)
+====================================================================
+C1 (explica d): cada vez que leverState cambia (incluido slow↔fast y el parpadeo neutral↔slow en el
+    borde |d| ≈ 0.30 o ≈ 0.75) se hace leverEnteredMs = now y lastStepMs = 0, así que vuelve a esperar
+    los 250 ms del primer paso. Con temblor en un borde, la flecha se muestra pero nunca pasa nada.
+C2 (explica b y c): el ANCLA es una x fija de la imagen guardada al activar. La mano activa es "la
+    más alta" de las del usuario: si la otra mano sube un poco más, el cursor cambia de mano SIN
+    re-anclar, y d queda grande con un signo fijo → desplazamiento enclavado hacia un lado y el
+    otro lado no responde. Además, si la persona se mueve un paso, el ancla queda desfasada.
+C3 (explica a): la confirmación exige leverState === 'neutral'. Al levantar el índice la mano se
+    desplaza/gira y el centro de la palma se mueve; si el ancla ya está desfasada (C2), la mano
+    queda fuera de la zona neutra y el anillo nunca avanza. El rearme también exige ver Open_Palm
+    con score ≥ 0.5 después de confirmar.
+
+====================================================================
+3. CAMBIOS
+====================================================================
+3.1 Palanca con histéresis y temporizador estable (C1)
+  - Umbrales con histéresis: entrar a "lento" con |d| ≥ 0.30 y volver a neutral solo con |d| < 0.22;
+    entrar a "rápido" con |d| ≥ 0.75 y volver a lento solo con |d| < 0.65.
+  - El temporizador de pasos se reinicia SOLO al salir de neutral o al cambiar de dirección.
+    Pasar de lento a rápido (o al revés) conserva lastStepMs y solo cambia el intervalo.
+  - Test: d oscilando 0.70↔0.80 cada 100 ms durante 3 s → pasos cada ~350–650 ms, nunca 0 pasos.
+    d oscilando 0.25↔0.35 → como máximo 1 paso en 3 s (o ninguno), sin flecha parpadeante.
+
+3.2 Una mano a la vez, con su propia ancla (C2)
+  - Usar la lateralidad que devuelve GestureRecognizer (handednesses[i][0].categoryName) y pasarla
+    en DetectedHandInput.
+  - Mano activa con "candado": una vez activa, se sigue usando ESA mano (por lateralidad y
+    continuidad de posición) hasta que se pierde > 500 ms. Solo entonces puede tomar el control la
+    otra mano. Nada de "la más alta" mientras la activa siga presente.
+  - Al cambiar de mano activa: re-anclar en la posición de la nueva mano, leverState = neutral.
+  - Ancla relativa al cuerpo: guardar anchorOffset = anchorX − user.cx al anclar, y en cada frame
+    anchorX = user.cx + anchorOffset. Si la persona da un paso, el ancla la acompaña.
+  - Re-centrado suave: mientras leverState === 'neutral', el ancla se acerca a la mano con una
+    constante de tiempo de 2 s (nunca fuera de neutral, para no frenar un desplazamiento sostenido).
+  - Overlay de debug: mostrar qué mano es la activa (Izq/Der) y si hubo cambio de mano.
+
+3.3 Confirmación independiente de la palanca (C3)
+  - Mientras el gesto es Pointing_Up la palanca se CONGELA (no da pasos) y la confirmación avanza
+    aunque d esté fuera de la zona neutra. Es decir: levantar el índice siempre significa "elegir
+    esta prenda", nunca "moverse".
+  - La confirmación se cancela si el foco cambia o si la mano vuelve a Open_Palm antes de 600 ms
+    (igual que hoy).
+  - Rearme después de confirmar: cuando el gesto deja de ser Pointing_Up durante ≥ 300 ms (cualquier
+    otro gesto, incluido "None"), o al cambiar el foco. No exigir Open_Palm con score ≥ 0.5.
+  - Al terminar la confirmación, re-anclar en la posición actual de la mano.
+
+3.4 Tests nuevos (tests/unit/hand-cursor-v3.test.ts), jitter ±20 % a 10 y 24 fps:
+  - Dos manos del usuario; la derecha activa; la izquierda sube más alto durante 1 s → la activa
+    sigue siendo la derecha y no hay pasos.
+  - La derecha baja 600 ms y la izquierda queda arriba → pasa a la izquierda, re-ancla, cero pasos
+    en el momento del cambio.
+  - El usuario (cx) se desplaza 0.1 con la mano quieta respecto al cuerpo → cero pasos.
+  - Pointing_Up con d = 0.5 (fuera de neutral) durante 600 ms → 1 'take' y cero pasos.
+  - Después de un 'take', gesto None 350 ms y otra vez Pointing_Up 600 ms → segundo 'take'.
+  - Secuencia real: activar, d = 0.5 hasta 3 pasos, volver al centro, índice 600 ms → 'take' en
+    la prenda 3; repetir 5 veces seguidas sin bajar la mano → 5 'take'.
+  - Los tests existentes deben seguir pasando; si alguno depende de "la mano más alta" o del rearme
+    con Open_Palm, explicarlo en el reporte en lugar de cambiar su aserción.
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo src/lib/hand-cursor.ts, src/hooks/useHandCursor.ts (lateralidad), el overlay de debug y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, y git diff --stat main.

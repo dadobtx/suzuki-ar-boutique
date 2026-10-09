@@ -43,6 +43,8 @@ const DEFAULT_CURSOR: HandCursorData = {
   directionArrow: null,
   confirmProgress: 0,
   ownerReason: 'none',
+  activeHandSide: 'None',
+  handSwitchCount: 0,
 };
 
 export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
