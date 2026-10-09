@@ -13,7 +13,9 @@ export interface HandCursorStoreState {
   userHandsCount: number;
   isBusy: boolean;
   pausedUntilMs: number;
+  rackFocusIndex: number | null;
 
+  setRackFocusIndex: (idx: number | null) => void;
   setBusy: (busy: boolean) => void;
   pause: (durationMs?: number) => void;
   updateFromOutput: (
@@ -34,7 +36,7 @@ const DEFAULT_CURSOR: HandCursorData = {
   active: false,
   x: 0.5,
   y: 0.5,
-  index: 0,
+  index: null,
   dwellProgress: 0,
   gesture: 'None',
   anchorX: null,
@@ -64,7 +66,9 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
   userHandsCount: 0,
   isBusy: false,
   pausedUntilMs: 0,
+  rackFocusIndex: null,
 
+  setRackFocusIndex: (idx: number | null) => set({ rackFocusIndex: idx }),
   setBusy: (busy: boolean) => set({ isBusy: busy }),
 
   pause: (durationMs = 2000) => set({ pausedUntilMs: Date.now() + durationMs }),
@@ -97,5 +101,6 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
       userHandsCount: 0,
       isBusy: false,
       pausedUntilMs: 0,
+      rackFocusIndex: null,
     }),
 }));

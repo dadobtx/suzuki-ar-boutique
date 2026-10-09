@@ -65,6 +65,9 @@ export interface LockedUserWrists {
 
 export interface HandFrameUser {
   lockedWrists: LockedUserWrists;
+  lockedElbows?: LockedUserWrists;
+  lockedHips?: LockedUserWrists;
+  shouldersY?: number | null;
   sw: number;
   cx: number;
   box?: CandidateBoundingBox;
@@ -97,7 +100,7 @@ export interface HandCursorData {
   active: boolean;
   x: number;
   y: number;
-  index: number;
+  index: number | null;
   dwellProgress: number;
   gesture: string;
   // Propiedades v2 & v3
@@ -115,6 +118,8 @@ export interface HandCursorData {
   indexSource?: 'clasificador' | 'geométrico' | 'ambos' | 'ninguno';
   isStepDisarmed?: boolean;
   pulseArrow?: 'left' | 'right' | null;
+  handRaisedState?: 'levantada' | 'abajo' | 'ninguna';
+  handsRaisedSummary?: string;
 }
 
 export interface HandCursorTakeEvent {
@@ -414,11 +419,64 @@ export interface HandCursorTrackerOptions {
 /**
  * Estado interno mutable mantenido por HandCursorTracker (Mano v2 & v3).
  */
+
+/**
+ * Determina si una mano está LEVANTADA (v4.1 §3.1).
+ * - Muñeca del pose del mismo lado por encima del codo: wrist.y < elbow.y - 0.02 (y crece hacia abajo).
+ * - Si el codo no es visible (visibility < 0.5), respaldo: palmCenter.y por encima de la cadera (23/24) - 0.10.
+ * - Sin caderas: palmCenter.y por encima del punto medio entre hombros y borde inferior (1.0).
+ */
+export function isHandRaised(
+  hand: DetectedHandInput,
+  user: HandFrameUser | null,
+): boolean {
+  if (!user) {
+    return hand.palmCenter.y < 0.65;
+  }
+
+  const poseSide = computeHandPoseSide(hand.wrist, user);
+  const sideKey: 'left' | 'right' =
+    poseSide === 'Left'
+      ? 'left'
+      : poseSide === 'Right'
+        ? 'right'
+        : 1 - hand.wrist.x < user.cx
+          ? 'left'
+          : 'right';
+
+  const poseWrist = user.lockedWrists ? user.lockedWrists[sideKey] : null;
+  const elbow = user.lockedElbows ? user.lockedElbows[sideKey] : null;
+
+  const isElbowVisible =
+    elbow !== null &&
+    elbow !== undefined &&
+    (elbow.visibility === undefined || elbow.visibility >= 0.5);
+
+  if (isElbowVisible && elbow) {
+    const wristY = poseWrist ? poseWrist.y : hand.wrist.y;
+    return wristY < elbow.y - 0.02;
+  }
+
+  const hip = user.lockedHips ? user.lockedHips[sideKey] : null;
+  const isHipVisible =
+    hip !== null &&
+    hip !== undefined &&
+    (hip.visibility === undefined || hip.visibility >= 0.5);
+
+  if (isHipVisible && hip) {
+    return hand.palmCenter.y < hip.y - 0.1;
+  }
+
+  const shouldersY = user.shouldersY ?? (user.box ? user.box.minY : 0.3);
+  const mid = (shouldersY + 1.0) / 2;
+  return hand.palmCenter.y < mid;
+}
+
 export class HandCursorTracker {
   private active = false;
   private x = 0.5;
   private y = 0.5;
-  private index = 0;
+  private index: number | null = null;
   private dwellProgress = 0;
   private gesture = 'None';
 
@@ -500,7 +558,7 @@ export class HandCursorTracker {
     this.active = false;
     this.x = 0.5;
     this.y = 0.5;
-    this.index = 0;
+    this.index = null;
     this.dwellProgress = 0;
     this.gesture = 'None';
     this.lastValidHandMs = 0;
@@ -866,8 +924,9 @@ export class HandCursorTracker {
           const t = clamp((this.x - inicio) / ancho, 0, 0.999);
           const bandW = 1 / itemCount;
           const rawIndex = clamp(Math.floor(t * itemCount), 0, itemCount - 1);
-          const currentBandLeft = this.index * bandW;
-          const currentBandRight = (this.index + 1) * bandW;
+          const curIdx = this.index ?? 0;
+          const currentBandLeft = curIdx * bandW;
+          const currentBandRight = (curIdx + 1) * bandW;
           const hystMargin = HYSTERESIS_RATIO * bandW;
 
           if (t < currentBandLeft - hystMargin) {
@@ -960,7 +1019,13 @@ export class HandCursorTracker {
         if (this.lastStepMs === 0) {
           // El primer paso ocurre 250 ms después de salir de la zona neutra
           if (timeInLever >= STEP_FIRST_DELAY_MS) {
-            const nextIdx = clamp(this.index + delta, 0, itemCount - 1);
+            const currentIdx =
+              typeof this.index === 'number'
+                ? this.index
+                : typeof currentIndex === 'number'
+                  ? currentIndex
+                  : 0;
+            const nextIdx = clamp(currentIdx + delta, 0, itemCount - 1);
             if (nextIdx !== this.index) {
               this.index = nextIdx;
               this.isArmed = true; // cambio de foco rearma confirmación
@@ -976,7 +1041,13 @@ export class HandCursorTracker {
         } else {
           // Pasos subsiguientes cada stepInterval
           if (nowMs - this.lastStepMs >= stepInterval) {
-            const nextIdx = clamp(this.index + delta, 0, itemCount - 1);
+            const currentIdx =
+              typeof this.index === 'number'
+                ? this.index
+                : typeof currentIndex === 'number'
+                  ? currentIndex
+                  : 0;
+            const nextIdx = clamp(currentIdx + delta, 0, itemCount - 1);
             if (nextIdx !== this.index) {
               this.index = nextIdx;
               this.isArmed = true;
@@ -1063,7 +1134,7 @@ export class HandCursorTracker {
             if (this.confirmAccumulatedMs >= CONFIRM_MS) {
               events.push({
                 type: 'take',
-                index: this.index,
+                index: this.index ?? 0,
                 method: 'hand_point',
               });
               this.isArmed = false;
@@ -1093,7 +1164,7 @@ export class HandCursorTracker {
             if (this.confirmAccumulatedMs >= CONFIRM_MS) {
               events.push({
                 type: 'take',
-                index: this.index,
+                index: this.index ?? 0,
                 method: 'hand_point',
               });
               this.isArmed = false;
@@ -1146,7 +1217,7 @@ export class HandCursorTracker {
           if (elapsed >= DWELL_MS) {
             events.push({
               type: 'take',
-              index: this.index,
+              index: this.index ?? 0,
               method: 'hand_dwell',
             });
             this.isArmed = false;
@@ -1189,7 +1260,7 @@ export class HandCursorTracker {
             if (pointingRatio >= SHORTCUT_RATIO && this.gesture === 'Pointing_Up') {
               events.push({
                 type: 'take',
-                index: this.index,
+                index: this.index ?? 0,
                 method: 'hand_point',
               });
               this.isArmed = false;
@@ -1203,12 +1274,18 @@ export class HandCursorTracker {
 
     const effectiveProgress = enableDwell ? this.dwellProgress : this.confirmProgress;
 
+    const publishedIndex = this.active
+      ? this.index
+      : typeof currentIndex === 'number' && currentIndex >= 0
+        ? currentIndex
+        : null;
+
     return {
       cursor: {
         active: this.active,
         x: this.x,
         y: this.y,
-        index: this.index,
+        index: publishedIndex,
         dwellProgress: effectiveProgress,
         gesture: this.gesture,
         anchorX: this.anchorX,
@@ -1320,6 +1397,10 @@ export class HandCursorTracker {
 
     this.lastOwnerReason = reason;
     const detectedHandsCount = hands.length;
+
+    // Mano v4.1 §3.1: Solo cuentan las manos LEVANTADAS
+    // Las manos NO levantadas se ignoran por completo (no activan, no compiten, no disparan pasos)
+    userHands = userHands.filter((h) => isHandRaised(h, user));
     const userHandsCount = userHands.length;
 
     // Helper: comprobar si un gesto es válido (palma abierta o índice)
@@ -1649,7 +1730,13 @@ export class HandCursorTracker {
 
           if (meetsNoiseFilter && meetsCooldown) {
             const delta = candidateDir === 'right' ? 1 : -1;
-            const nextIdx = clamp(this.index + delta, 0, itemCount - 1);
+            const currentIdx =
+              typeof this.index === 'number'
+                ? this.index
+                : typeof currentIndex === 'number'
+                  ? currentIndex
+                  : 0;
+            const nextIdx = clamp(currentIdx + delta, 0, itemCount - 1);
             if (nextIdx !== this.index) {
               this.index = nextIdx;
               events.push({
@@ -1725,12 +1812,33 @@ export class HandCursorTracker {
       ? clamp(this.v4LiveAccumulatedMs / CONFIRM_LIVE_MS, 0, 1)
       : 0;
 
+    const publishedIndex = this.active
+      ? this.index
+      : typeof currentIndex === 'number' && currentIndex >= 0
+        ? currentIndex
+        : null;
+
+    const handsStatus = hands.map((h) => {
+      const side = computeHandPoseSide(h.wrist, user);
+      const raised = isHandRaised(h, user);
+      const sideLabel =
+        side === 'Left' ? 'Izquierda' : side === 'Right' ? 'Derecha' : 'Mano';
+      return `${sideLabel}: ${raised ? 'levantada' : 'abajo'}`;
+    });
+    const handsRaisedSummary =
+      handsStatus.length > 0 ? handsStatus.join(' · ') : 'ninguna';
+    const handRaisedState: 'levantada' | 'abajo' | 'ninguna' = activeHand
+      ? isHandRaised(activeHand, user)
+        ? 'levantada'
+        : 'abajo'
+      : 'ninguna';
+
     return {
       cursor: {
         active: this.active,
         x: this.x,
         y: this.y,
-        index: this.index,
+        index: publishedIndex,
         dwellProgress: confirmProgress,
         gesture: this.gesture,
         anchorX: this.anchorX,
@@ -1746,6 +1854,8 @@ export class HandCursorTracker {
         indexSource: this.v4IndexSource,
         isStepDisarmed: this.v4StepDisarmed,
         pulseArrow,
+        handRaisedState,
+        handsRaisedSummary,
       },
       events,
       userHandsCount,
