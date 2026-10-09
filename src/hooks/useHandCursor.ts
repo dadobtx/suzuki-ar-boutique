@@ -10,6 +10,8 @@ import {
   isHandSimEnabled,
   isEffectiveActiveZoneEnabled,
   readHandFpsParam,
+  isHandDwellEnabled,
+  isHandAbsoluteModeEnabled,
 } from '@/lib/hand-input-flag';
 import {
   HandCursorTracker,
@@ -298,6 +300,7 @@ export function useHandCursor(
           lockedWrists: { left: leftWristVis, right: rightWristVis },
           sw: lockedCandidate.swWidth ?? lockedCandidate.sw,
           cx: 1 - lockedCandidate.cx, // en coordenadas espejadas de pantalla
+          box: lockedCandidate.box,
         };
       } else if (isHandSim) {
         // Usuario sintético centrado para QA
@@ -308,12 +311,16 @@ export function useHandCursor(
           },
           sw: 0.15,
           cx: 0.5,
+          box: { minX: 0.35, maxX: 0.65, minY: 0.2, maxY: 0.85 },
         };
       }
 
       // Procesar frame
       const isBusy = useHandCursorStore.getState().isBusy;
       const pausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
+      const currentRackIndex = useHandCursorStore.getState().cursor.index;
+      const isDwellEnabled = isHandDwellEnabled();
+      const isAbsoluteMode = isHandAbsoluteModeEnabled();
 
       if (isHandSim && simMouseOverRef.current) {
         // Modo simulado QA (?hand_sim=1)
@@ -345,7 +352,18 @@ export function useHandCursor(
           itemCount,
           busy: isBusy,
           pausedUntilMs,
+          currentIndex: currentRackIndex,
+          enableDwell: isDwellEnabled,
+          useAbsoluteMapping: isAbsoluteMode,
         };
+
+        if (
+          typeof window !== 'undefined' &&
+          (window as unknown as { __freezeHandSim?: boolean }).__freezeHandSim
+        ) {
+          callbackIdRef.current = video.requestVideoFrameCallback(onFrame);
+          return;
+        }
 
         const output = trackerRef.current.update(frameInput);
         if (output.userHandsCount > 0) {
@@ -497,6 +515,9 @@ export function useHandCursor(
             itemCount,
             busy: isBusy,
             pausedUntilMs,
+            currentIndex: currentRackIndex,
+            enableDwell: isDwellEnabled,
+            useAbsoluteMapping: isAbsoluteMode,
           };
 
           const output = trackerRef.current.update(frameInput);
@@ -524,6 +545,9 @@ export function useHandCursor(
           itemCount,
           busy: isBusy,
           pausedUntilMs,
+          currentIndex: currentRackIndex,
+          enableDwell: isDwellEnabled,
+          useAbsoluteMapping: isAbsoluteMode,
         };
         const output = trackerRef.current.update(frameInput);
         if (output.userHandsCount > 0) {

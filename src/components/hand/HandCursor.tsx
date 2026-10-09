@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { Hand } from 'lucide-react';
+import { Hand, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useHandCursorStore } from '@/store/handCursor';
 
 export function HandCursor() {
@@ -19,8 +19,11 @@ export function HandCursor() {
   const strokeWidth = 4;
   const radius = (size - strokeWidth * 2) / 2;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset =
-    circumference * (1 - Math.max(0, Math.min(1, cursor.dwellProgress)));
+  const progress = Math.max(
+    0,
+    Math.min(1, cursor.confirmProgress ?? cursor.dwellProgress ?? 0),
+  );
+  const strokeDashoffset = circumference * (1 - progress);
 
   return (
     <div
@@ -33,7 +36,7 @@ export function HandCursor() {
         top: `${(cursor.y * 100).toFixed(2)}%`,
         transform: prefersReducedMotion
           ? 'translate(-50%, -50%)'
-          : `translate(-50%, -50%) scale(${1 + cursor.dwellProgress * 0.08})`,
+          : `translate(-50%, -50%) scale(${1 + progress * 0.08})`,
       }}
     >
       <div
@@ -56,7 +59,7 @@ export function HandCursor() {
             strokeWidth={strokeWidth}
           />
           {/* Avance con rojo Suzuki de marca */}
-          {cursor.dwellProgress > 0 && (
+          {progress > 0 && (
             <circle
               cx={size / 2}
               cy={size / 2}
@@ -71,10 +74,28 @@ export function HandCursor() {
           )}
         </svg>
 
-        {/* Ícono de mano ~64 px con sombra profunda */}
-        <div className="text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)] filter">
-          <Hand size={48} strokeWidth={2.2} />
+        {/* Ícono de mano ~48 px con sombra profunda */}
+        <div className="text-white drop-shadow-[0_4px_16px_rgba(0,0,0,0.85)] filter flex items-center justify-center">
+          <Hand size={46} strokeWidth={2.2} />
         </div>
+
+        {/* Flecha discreta ◀ / ▶ cuando está fuera de la zona neutra */}
+        {cursor.directionArrow === 'left' && (
+          <div
+            data-testid="cursor-arrow-left"
+            className="absolute -left-6 flex items-center justify-center bg-black/60 rounded-full p-1 text-white border border-white/30 animate-pulse shadow-lg"
+          >
+            <ChevronLeft size={20} strokeWidth={3} />
+          </div>
+        )}
+        {cursor.directionArrow === 'right' && (
+          <div
+            data-testid="cursor-arrow-right"
+            className="absolute -right-6 flex items-center justify-center bg-black/60 rounded-full p-1 text-white border border-white/30 animate-pulse shadow-lg"
+          >
+            <ChevronRight size={20} strokeWidth={3} />
+          </div>
+        )}
       </div>
     </div>
   );

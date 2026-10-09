@@ -289,12 +289,51 @@ function DiagnosticOverlayInner() {
                   </span>
                 </div>
                 <div>
-                  <span className="text-zinc-400">Progreso dwell: </span>
+                  <span className="text-zinc-400">Progreso confirmación: </span>
                   <span className="text-emerald-300 font-mono font-bold">
-                    {(useHandCursorStore.getState().cursor.dwellProgress * 100).toFixed(
-                      0,
-                    )}
+                    {(
+                      (useHandCursorStore.getState().cursor.confirmProgress ??
+                        useHandCursorStore.getState().cursor.dwellProgress) * 100
+                    ).toFixed(0)}
                     %
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Palanca (d / estado): </span>
+                  <span className="text-cyan-300 font-mono">
+                    {useHandCursorStore.getState().cursor.displacement !== undefined
+                      ? useHandCursorStore.getState().cursor.displacement!.toFixed(2)
+                      : '0.00'}{' '}
+                    (
+                    {useHandCursorStore.getState().cursor.leverState === 'neutral'
+                      ? 'neutra'
+                      : useHandCursorStore
+                            .getState()
+                            .cursor.leverState?.startsWith('fast')
+                        ? 'rápido'
+                        : 'lento'}
+                    )
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Ancla x: </span>
+                  <span className="text-zinc-200 font-mono">
+                    {useHandCursorStore.getState().cursor.anchorX !== null &&
+                    useHandCursorStore.getState().cursor.anchorX !== undefined
+                      ? useHandCursorStore.getState().cursor.anchorX!.toFixed(3)
+                      : 'N/A'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Dueño match: </span>
+                  <span className="text-emerald-300 font-mono">
+                    {useHandCursorStore.getState().cursor.ownerReason === 'wrist'
+                      ? 'por muñeca'
+                      : useHandCursorStore.getState().cursor.ownerReason === 'continuity'
+                        ? 'por continuidad'
+                        : useHandCursorStore.getState().cursor.ownerReason === 'box'
+                          ? 'por recuadro'
+                          : 'ninguno'}
                   </span>
                 </div>
                 <div>

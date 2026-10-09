@@ -159,3 +159,51 @@ export function readHandFpsParam(): number | null {
 
   return null;
 }
+
+/**
+ * Indicador para habilitar confirmación por permanencia (dwell legacy): ?hand_dwell=1
+ */
+export function isHandDwellEnabled(): boolean {
+  if (typeof window === 'undefined' || !window.location) return false;
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('hand_dwell') === '1') return true;
+  } catch {
+    // ignore
+  }
+  try {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(qIndex));
+      if (hashParams.get('hand_dwell') === '1') return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
+
+/**
+ * Indicador para modo de mapeo absoluto legacy: ?hand_mode=absolute
+ */
+export function isHandAbsoluteModeEnabled(): boolean {
+  if (typeof window === 'undefined' || !window.location) return false;
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('hand_mode') === 'absolute') return true;
+  } catch {
+    // ignore
+  }
+  try {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(qIndex));
+      if (hashParams.get('hand_mode') === 'absolute') return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}

@@ -1,0 +1,99 @@
+PROMPT PARA ANTIGRAVITY — Mano v2: ancla, palanca y confirmación explícita
+Guardar en la raíz del repo como: prompt_mano_v2_palanca.txt
+Rama: feature/mano-v2 desde main (ff3e2d6 o posterior). NO mergear.
+
+====================================================================
+1. LO QUE MOSTRÓ LA PRUEBA REAL DE DARIO (ventana vertical, ?ui=perchero&hand=1&debug=1)
+====================================================================
+a) Muy sensible: al levantar la mano el perchero ya se desplaza rápido; para llegar a las prendas de
+   los extremos la mano tiene que salir del recuadro verde del cuerpo.
+b) La prenda se selecciona sola (permanencia de 1.2 s) sin ningún gesto adicional.
+c) Cerca de la pantalla el cursor sigue moviendo el perchero, pero nunca selecciona.
+
+Causas en el código actual (src/lib/hand-cursor.ts):
+a) Mapeo ABSOLUTO cx ± REACH·sw con REACH 1.6 → 3.2 anchos de hombros para 10 prendas: los extremos
+   quedan fuera del alcance cómodo y cada prenda es ~0.3 sw (unos centímetros de mano). Además el
+   primer índice depende de dónde aparece la mano, así que "salta" al levantarla.
+b) La permanencia toma la prenda con solo quedarse quieto: es el problema de "toque de Midas".
+c) OWNER_DIST = 0.08 es una distancia FIJA en coordenadas visibles. De cerca el cuerpo se ve más
+   grande y la muñeca de la mano (hand landmark 0) se separa más de la muñeca del pose: la mano
+   pasa a "no es del usuario" de forma intermitente, el cursor se apaga/enciende y el progreso
+   vuelve a 0 en cada corte, así que nunca llega a 1.2 s.
+
+====================================================================
+2. NUEVO MODELO DE INTERACCIÓN
+====================================================================
+2.1 ANCLA. Al activarse el cursor (palma abierta, como hoy), la posición x suavizada de la mano en
+    ese instante es el ANCLA y el foco queda en la prenda que ya estaba enfocada (o la del centro si
+    no había). Levantar la mano NO mueve nada.
+
+2.2 PALANCA (control por desplazamiento, no por posición absoluta).
+    d = (x − ancla) / swWidth   (espejado como hoy: derecha de la persona = derecha en pantalla)
+    - |d| < DEAD = 0.30 → zona neutra: el foco no se mueve.
+    - DEAD ≤ |d| < FAST = 0.75 → avanza 1 prenda cada STEP_SLOW_MS = 650 ms en esa dirección.
+    - |d| ≥ FAST → 1 prenda cada STEP_FAST_MS = 350 ms.
+    - El primer paso ocurre 250 ms después de salir de la zona neutra (no instantáneo).
+    - En los extremos del perchero se detiene (sin dar la vuelta).
+    - Al volver a la zona neutra, el foco se queda donde está.
+    Todo el recorrido cabe en un movimiento de ~0.8 anchos de hombro desde el ancla, dentro del
+    recuadro del cuerpo.
+    Mostrar en el cursor una flecha discreta ◀ / ▶ cuando está fuera de la zona neutra.
+
+2.3 CONFIRMACIÓN EXPLÍCITA. Quitar la toma por permanencia (dejar la constante y el método
+    'hand_dwell' solo detrás de ?hand_dwell=1 para comparar; por defecto apagado).
+    Tomar/devolver = levantar el ÍNDICE (Pointing_Up) en la zona neutra y sostenerlo CONFIRM_MS =
+    600 ms. Durante esos 600 ms el anillo rojo se llena; si el gesto se pierde > 150 ms, el anillo
+    vuelve a 0. Con Open_Palm el anillo no avanza nunca.
+    - Pointing_Up también cuenta como "mano activa" para mover (no se apaga el cursor).
+    - Tras confirmar, desarmado hasta que vuelva a Open_Palm o cambie el foco (igual que hoy).
+    - Datos de Dario: Pointing_Up 80–100 % a 1.5–2.5 m; es el segundo gesto más fiable.
+
+2.4 DUEÑO DE LA MANO robusto a la distancia.
+    - OWNER_DIST relativo: ownerDist = max(0.06, 0.6 · swWidth).
+    - Continuidad: una vez que una mano es del usuario, se sigue siendo la misma mano mientras su
+      palmCenter esté a ≤ 0.5 · swWidth de la posición anterior, aunque la muñeca del pose falte o
+      se desvíe (de cerca las muñecas pueden salir del cuadro o tener poca visibilidad).
+    - Si lockedWrists son null pero hay una sola mano dentro del recuadro (box) de la persona
+      fijada, es del usuario.
+2.5 HUECOS BREVES. Una pérdida de mano < 300 ms no apaga el cursor ni reinicia la confirmación en
+    curso (se congela el anillo); solo > 300 ms lo reinicia.
+
+2.6 Textos (i18n, mismas claves donde existan):
+    sin cursor:                 "LEVANTA LA MANO ABIERTA"
+    cursor en zona neutra:      "MUEVE LA MANO A UN LADO PARA RECORRER · LEVANTA EL ÍNDICE PARA PROBÁRTELA"
+    sobre la prenda puesta:     "LEVANTA EL ÍNDICE PARA DEVOLVERLA"
+    (si el texto es largo, en 2 líneas). La guía de distancia/encuadre sigue teniendo prioridad.
+
+====================================================================
+3. REGLAS
+====================================================================
+- Solo src/lib/hand-cursor.ts, src/hooks/useHandCursor.ts, HandCursor.tsx, KioskGuide.tsx (textos),
+  es.json/en.json, el overlay de debug y tests. No tocar active-zone, usePose, perchero, catálogo,
+  vitrina, public/, AR/FASHN/Lucy.
+- Los tests existentes de dwell y mapeo absoluto: NO borrarlos; si dejan de aplicar al modo por
+  defecto, hacer que corran con la opción hand_dwell/modo absoluto activada (sin cambiar sus
+  aserciones). Explicar en el reporte qué tests se adaptaron así.
+- UTF-8. Reportar `npx tsc -b` y `npm run build`.
+
+====================================================================
+4. TESTS NUEVOS (tests/unit/hand-cursor-v2.test.ts), con jitter ±20 % a 10 y 24 fps
+====================================================================
+- Al activar, el foco no cambia aunque la mano esté a la derecha del cuerpo.
+- Temblor de ±0.15 sw alrededor del ancla durante 5 s → cero pasos.
+- d = 0.5 sostenido 2 s → 3 pasos (±1); d = 0.9 → 5 pasos (±1); en el extremo se detiene.
+- Open_Palm quieta 5 s → ningún 'take'.
+- Pointing_Up 600 ms en zona neutra → 1 'take'; Pointing_Up 400 ms y vuelta a palma → 0.
+- Corte de 200 ms a mitad de la confirmación → igual dispara al completar; corte de 400 ms → reinicia.
+- Dueño: muñeca de la mano a 0.12 de la muñeca del pose con swWidth 0.3 (persona cerca) → es del
+  usuario; mano de otra persona a 0.4 → no.
+- Continuidad: lockedWrists null durante 1 s con la mano siguiendo un movimiento suave → sigue activa.
+
+====================================================================
+5. EVIDENCIA
+====================================================================
+- Salida de `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build.
+- Captura con ?debug=1&hand_sim=1 mostrando la flecha ▶ fuera de la zona neutra y otra con el anillo
+  de confirmación a ~50 % con el índice (tecla "I" del simulador).
+- En el overlay de debug: ancla, d actual, estado (neutra / lento / rápido), progreso de confirmación,
+  dueño (por muñeca / por continuidad / por recuadro).
+- git diff --stat main.
