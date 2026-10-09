@@ -440,7 +440,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     }
   }, [activeGarment, activeVariantId, camera, sessionId, handleStopLiveTryon, t]);
 
-  // Mano v4: el �ndice sostenido activa EXACTAMENTE el mismo handler del bot�n VERME EN VIVO
+  // Mano v4: el índice sostenido activa EXACTAMENTE el mismo handler del botón VERME EN VIVO
   const isLiveAvailable =
     showLiveButton &&
     !isLiveLoading &&
@@ -451,7 +451,11 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const { handleMirrorPointerMove, handleMirrorPointerLeave } = useHandCursor(
     camera.videoRef,
     pose,
-    { active: isCatalogVisible, isLiveAvailable },
+    {
+      active: isCatalogVisible,
+      isLiveAvailable,
+      isLiveActive: isLiveActive || isLiveLoading,
+    },
   );
 
   const handLastEvent = useHandCursorStore((s) => s.lastEvent);
@@ -811,7 +815,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         data-stage="panel"
         className="relative bg-bg min-h-0 min-w-0 overflow-hidden z-40 border-t md:border-t-0 md:border-l border-white/10"
       >
-        <StagePanel kioskState={kioskState} hasProfile={hasProfile} presence={presence} />
+        <StagePanel
+          kioskState={kioskState}
+          hasProfile={hasProfile}
+          presence={presence}
+          isLiveActive={isLiveActive || isLiveLoading}
+        />
       </div>
     </div>
   );

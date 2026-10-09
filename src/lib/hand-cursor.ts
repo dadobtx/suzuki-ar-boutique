@@ -82,6 +82,7 @@ export interface HandFrameInput {
   useAbsoluteMapping?: boolean;
   mode?: 'step' | 'lever';
   isLiveAvailable?: boolean;
+  isLiveActive?: boolean;
 }
 
 export type LeverState =
@@ -406,6 +407,8 @@ export interface HandCursorTrackerOptions {
   enableDwell?: boolean;
   useAbsoluteMapping?: boolean;
   mode?: 'step' | 'lever';
+  isLiveAvailable?: boolean;
+  isLiveActive?: boolean;
 }
 
 /**
@@ -484,6 +487,8 @@ export class HandCursorTracker {
       enableDwell: options?.enableDwell ?? false,
       useAbsoluteMapping: options?.useAbsoluteMapping ?? false,
       mode: options?.mode,
+      isLiveAvailable: options?.isLiveAvailable ?? false,
+      isLiveActive: options?.isLiveActive ?? false,
     };
   }
 
@@ -570,8 +575,9 @@ export class HandCursorTracker {
       currentIndex,
       enableDwell = this.options.enableDwell,
       useAbsoluteMapping = this.options.useAbsoluteMapping,
+      isLiveActive = this.options.isLiveActive ?? false,
     } = input;
-    const isPaused = busy || pausedUntilMs > nowMs;
+    const isPaused = busy || pausedUntilMs > nowMs || isLiveActive;
     const events: HandCursorEvent[] = [];
 
     // Medición de intervalos de muestreo observados
@@ -1232,9 +1238,10 @@ export class HandCursorTracker {
       busy = false,
       pausedUntilMs = 0,
       currentIndex,
-      isLiveAvailable = false,
+      isLiveAvailable = this.options.isLiveAvailable ?? false,
+      isLiveActive = this.options.isLiveActive ?? false,
     } = input;
-    const isPaused = busy || pausedUntilMs > nowMs;
+    const isPaused = busy || pausedUntilMs > nowMs || isLiveActive;
     const events: HandCursorEvent[] = [];
 
     // Muestreo de intervalos observados
@@ -1590,8 +1597,14 @@ export class HandCursorTracker {
       }
 
       // Disparo de Paso por Gesto:
-      // Congelado si isPaused, isIndexUp, o si disparador está desarmado
-      if (!isPaused && !isIndexUp && !this.v4StepDisarmed && itemCount > 0) {
+      // Congelado si isPaused, isIndexUp, isLiveActive, o si disparador está desarmado
+      if (
+        !isPaused &&
+        !isIndexUp &&
+        !isLiveActive &&
+        !this.v4StepDisarmed &&
+        itemCount > 0
+      ) {
         let isEligible = false;
         let candidateDir: 'left' | 'right' | null = null;
 

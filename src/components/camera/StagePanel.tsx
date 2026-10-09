@@ -15,9 +15,15 @@ interface StagePanelProps {
   kioskState: KioskState;
   hasProfile: boolean;
   presence: PresenceState;
+  isLiveActive?: boolean;
 }
 
-export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps) {
+export function StagePanel({
+  kioskState,
+  hasProfile,
+  presence,
+  isLiveActive = false,
+}: StagePanelProps) {
   const { t } = useTranslation();
   const { effectiveSelectionUi } = useSelectionUi();
   const isPerchero = effectiveSelectionUi === 'perchero';
@@ -150,7 +156,11 @@ export function StagePanel({ kioskState, hasProfile, presence }: StagePanelProps
         aria-hidden={!isCatalogVisible}
       >
         {isPerchero ? (
-          <RackPanel mode="interactive" active={isCatalogVisible} />
+          <RackPanel
+            mode="interactive"
+            active={isCatalogVisible}
+            isLiveActive={isLiveActive}
+          />
         ) : (
           <CatalogPanel />
         )}

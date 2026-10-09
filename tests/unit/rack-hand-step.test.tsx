@@ -88,6 +88,13 @@ describe('RackPanel - hand_step (tests/unit/rack-hand-step.test.tsx)', () => {
     expect(useGarmentStore.getState().activeGarmentId).toBeNull();
   });
 
+  it('con una sesión en vivo activa (isLiveActive=true), gestos de paso → 0 cambios de prenda', async () => {
+    render(<RackPanel mode="interactive" active={true} isLiveActive={true} />);
+    fireStep(3);
+    await wait(700);
+    expect(useGarmentStore.getState().activeGarmentId).toBeNull();
+  });
+
   it('activar el cursor sin step no selecciona nada', async () => {
     render(<RackPanel mode="interactive" active={true} />);
     act(() => {

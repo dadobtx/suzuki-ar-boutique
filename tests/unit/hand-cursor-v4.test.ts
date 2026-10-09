@@ -95,7 +95,11 @@ class Sim {
     this.prng = createPrng(seed);
   }
 
-  frame(hands: DetectedHandInput[], isLiveAvailable = false): HandFrameOutput {
+  frame(
+    hands: DetectedHandInput[],
+    isLiveAvailable = false,
+    isLiveActive = false,
+  ): HandFrameOutput {
     const out = this.tracker.update({
       nowMs: this.t,
       hands,
@@ -103,6 +107,7 @@ class Sim {
       itemCount: this.itemCount,
       currentIndex: this.currentIndex,
       isLiveAvailable,
+      isLiveActive,
     });
     this.last = out;
     if (out.cursor.anchorX !== null && out.cursor.anchorX !== undefined) {
@@ -114,10 +119,15 @@ class Sim {
   }
 
   /** Ejecuta durante ms; fn recibe el tiempo transcurrido en la fase. */
-  run(ms: number, fn: (elapsed: number) => DetectedHandInput[], isLiveAvailable = false) {
+  run(
+    ms: number,
+    fn: (elapsed: number) => DetectedHandInput[],
+    isLiveAvailable = false,
+    isLiveActive = false,
+  ) {
     const start = this.t;
     while (this.t - start < ms) {
-      this.frame(fn(this.t - start), isLiveAvailable);
+      this.frame(fn(this.t - start), isLiveAvailable, isLiveActive);
     }
   }
 
@@ -316,6 +326,33 @@ describe('Hand Cursor v4: un gesto = un paso (tests/unit/hand-cursor-v4.test.ts)
       expect(sim.last!.cursor.handSwitchCount).toBe(0);
       expect(sim.steps()).toHaveLength(0);
     });
+
+    it(`a ${fps} fps: con una sesión en vivo activa, gestos de paso → 0 eventos step`, () => {
+      const sim = new Sim(fps, fps * 71);
+      sim.activate('right');
+      const anchor = sim.anchor;
+      sim.run(2000, () => [makeHand('right', palmForD(anchor, 0.6))], false, true);
+      expect(sim.steps()).toHaveLength(0);
+
+      const leftSim = new Sim(fps, fps * 73);
+      leftSim.activate('left');
+      const leftAnchor = leftSim.anchor;
+      leftSim.run(
+        2000,
+        () => [makeHand('left', palmForD(leftAnchor, -0.6))],
+        false,
+        true,
+      );
+      expect(leftSim.steps()).toHaveLength(0);
+    });
+  });
+
+  it('con una sesión en vivo activa, gestos de paso → 0 eventos step', () => {
+    const sim = new Sim(24, 24 * 79);
+    sim.activate('right');
+    const anchor = sim.anchor;
+    sim.run(2000, () => [makeHand('right', palmForD(anchor, 0.6))], false, true);
+    expect(sim.steps()).toHaveLength(0);
   });
 
   describe('computeHandPoseSide / detectGeometricIndex', () => {

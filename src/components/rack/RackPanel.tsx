@@ -11,11 +11,12 @@ import './rack.css';
 interface RackPanelProps {
   mode: 'attract' | 'interactive';
   active?: boolean;
+  isLiveActive?: boolean;
 }
 
 type TakeMethod = 'hand_dwell' | 'hand_point' | 'hand_step' | 'touch' | 'keyboard';
 
-export function RackPanel({ mode, active = true }: RackPanelProps) {
+export function RackPanel({ mode, active = true, isLiveActive = false }: RackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -379,7 +380,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
   // Tomar o devolver una prenda
   const handleTakeOrReturn = useCallback(
     async (index: number, method: TakeMethod = 'touch') => {
-      if (mode !== 'interactive' || !active) return;
+      if (mode !== 'interactive' || !active || isLiveActive) return;
       if (isBusyRef.current) {
         if (method === 'hand_step') {
           pendingStepIndexRef.current = index;
@@ -495,6 +496,7 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     [
       mode,
       active,
+      isLiveActive,
       items,
       selectGarment,
       kick,
@@ -512,20 +514,29 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
 
   // Cambio de foco por cursor de mano
   useEffect(() => {
-    if (mode !== 'interactive' || !active || isBusyRef.current) return;
+    if (mode !== 'interactive' || !active || isLiveActive || isBusyRef.current) return;
     if (handCursor.active && handCursor.index >= 0 && handCursor.index < items.length) {
       setFocus(handCursor.index);
     }
-  }, [handCursor.active, handCursor.index, mode, active, items.length, setFocus]);
+  }, [
+    handCursor.active,
+    handCursor.index,
+    mode,
+    active,
+    isLiveActive,
+    items.length,
+    setFocus,
+  ]);
 
   // Evento step por mano (v4): prueba automática de la prenda de la nueva posición
   useEffect(() => {
     if (handLastEvent && handLastEvent.type === 'step') {
       const stepIndex = handLastEvent.index;
       useHandCursorStore.getState().clearLastEvent();
+      if (mode !== 'interactive' || !active || isLiveActive) return;
       void handleTakeOrReturn(stepIndex, 'hand_step');
     }
-  }, [handLastEvent, handleTakeOrReturn]);
+  }, [handLastEvent, handleTakeOrReturn, mode, active, isLiveActive]);
 
   // Evento take por mano
   useEffect(() => {

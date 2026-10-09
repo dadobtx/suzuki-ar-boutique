@@ -26,7 +26,8 @@ import { toVisibleCoordinates } from '@/lib/active-zone';
 export interface UseHandCursorOptions {
   active: boolean; // isCatalogVisible
   mirrorContainerRef?: RefObject<HTMLElement | null>;
-  isLiveAvailable?: boolean; // bot�n VERME EN VIVO visible y habilitado
+  isLiveAvailable?: boolean; // botón VERME EN VIVO visible y habilitado
+  isLiveActive?: boolean; // sesión en vivo activa o cargando
 }
 
 let recognizerSingleton: GestureRecognizer | null = null;
@@ -99,6 +100,8 @@ export function useHandCursor(
   const trackerRef = useRef<HandCursorTracker>(new HandCursorTracker());
   const isLiveAvailableRef = useRef<boolean>(false);
   isLiveAvailableRef.current = options.isLiveAvailable ?? false;
+  const isLiveActiveRef = useRef<boolean>(false);
+  isLiveActiveRef.current = options.isLiveActive ?? false;
   const callbackIdRef = useRef<number>(0);
   const activeLoopRef = useRef<boolean>(false);
   const isRunningInferenceRef = useRef<boolean>(false);
@@ -360,6 +363,7 @@ export function useHandCursor(
           enableDwell: isDwellEnabled,
           useAbsoluteMapping: isAbsoluteMode,
           isLiveAvailable: isLiveAvailableRef.current,
+          isLiveActive: isLiveActiveRef.current,
         };
 
         if (
@@ -540,6 +544,7 @@ export function useHandCursor(
             enableDwell: isDwellEnabled,
             useAbsoluteMapping: isAbsoluteMode,
             isLiveAvailable: isLiveAvailableRef.current,
+            isLiveActive: isLiveActiveRef.current,
           };
 
           const output = trackerRef.current.update(frameInput);
@@ -571,6 +576,7 @@ export function useHandCursor(
           enableDwell: isDwellEnabled,
           useAbsoluteMapping: isAbsoluteMode,
           isLiveAvailable: isLiveAvailableRef.current,
+          isLiveActive: isLiveActiveRef.current,
         };
         const output = trackerRef.current.update(frameInput);
         if (output.userHandsCount > 0) {
