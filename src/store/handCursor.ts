@@ -37,6 +37,12 @@ const DEFAULT_CURSOR: HandCursorData = {
   index: 0,
   dwellProgress: 0,
   gesture: 'None',
+  anchorX: null,
+  displacement: 0,
+  leverState: 'neutral',
+  directionArrow: null,
+  confirmProgress: 0,
+  ownerReason: 'none',
 };
 
 export const useHandCursorStore = create<HandCursorStoreState>((set) => ({

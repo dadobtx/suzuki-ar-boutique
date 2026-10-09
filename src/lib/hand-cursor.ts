@@ -1,4 +1,5 @@
 import { OneEuroFilter } from './one-euro-filter';
+import type { CandidateBoundingBox } from './active-zone';
 
 export const OWNER_DIST = 0.08;
 export const ACTIVATION_WINDOW_MS = 250;
@@ -11,6 +12,16 @@ export const DWELL_MS = 1200;
 export const SHORTCUT_STABLE_MS = 300;
 export const SHORTCUT_WINDOW_MS = 300;
 export const SHORTCUT_RATIO = 0.7;
+
+// Constantes Mano v2: Palanca y Confirmación explícita
+export const LEVER_DEAD = 0.3;
+export const LEVER_FAST = 0.75;
+export const STEP_SLOW_MS = 650;
+export const STEP_FAST_MS = 350;
+export const STEP_FIRST_DELAY_MS = 250;
+export const CONFIRM_MS = 600;
+export const CONFIRM_LOST_MAX_MS = 300;
+export const GAP_LOST_MAX_MS = 300;
 
 export interface HandLandmarkPoint {
   x: number;
@@ -35,6 +46,7 @@ export interface HandFrameUser {
   lockedWrists: LockedUserWrists;
   sw: number;
   cx: number;
+  box?: CandidateBoundingBox;
 }
 
 export interface HandFrameInput {
@@ -44,7 +56,18 @@ export interface HandFrameInput {
   itemCount: number;
   busy?: boolean;
   pausedUntilMs?: number;
+  currentIndex?: number;
+  enableDwell?: boolean;
+  useAbsoluteMapping?: boolean;
 }
+
+export type LeverState =
+  | 'neutral'
+  | 'slow_left'
+  | 'slow_right'
+  | 'fast_left'
+  | 'fast_right';
+export type OwnerMatchReason = 'wrist' | 'continuity' | 'box' | 'none';
 
 export interface HandCursorData {
   active: boolean;
@@ -53,6 +76,13 @@ export interface HandCursorData {
   index: number;
   dwellProgress: number;
   gesture: string;
+  // Propiedades v2
+  anchorX?: number | null;
+  displacement?: number;
+  leverState?: LeverState;
+  directionArrow?: 'left' | 'right' | null;
+  confirmProgress?: number;
+  ownerReason?: OwnerMatchReason;
 }
 
 export interface HandCursorEvent {
@@ -80,39 +110,92 @@ function clamp(v: number, min: number, max: number): number {
 
 /**
  * Filtra las manos detectadas para encontrar las pertenecientes al usuario fijado.
- * Una mano pertenece al usuario si su muñeca está a <= OWNER_DIST (0.08) de
- * lockedWrists.left o .right. Si hay dos del usuario, se usa la más alta (y menor).
+ * Reglas v2:
+ * 1. ownerDist = max(0.06, 0.6 * sw)
+ * 2. Continuidad: si ya había una mano del usuario y su palmCenter está a <= 0.5 * sw de la anterior
+ * 3. Si lockedWrists son null pero hay una sola mano dentro del box del usuario, es del usuario
  */
 export function selectUserHand(
   hands: DetectedHandInput[],
   user: HandFrameUser | null,
-): { userHands: DetectedHandInput[]; activeHand: DetectedHandInput | null } {
-  if (!user || (!user.lockedWrists.left && !user.lockedWrists.right)) {
-    return { userHands: [], activeHand: null };
+  lastUserPalmCenter?: HandLandmarkPoint | null,
+): {
+  userHands: DetectedHandInput[];
+  activeHand: DetectedHandInput | null;
+  reason: OwnerMatchReason;
+} {
+  if (!user || hands.length === 0) {
+    return { userHands: [], activeHand: null, reason: 'none' };
   }
 
-  const userHands = hands.filter((h) => {
-    let minDist = Infinity;
-    if (user.lockedWrists.left) {
-      minDist = Math.min(minDist, euclideanDist(h.wrist, user.lockedWrists.left));
-    }
-    if (user.lockedWrists.right) {
-      minDist = Math.min(minDist, euclideanDist(h.wrist, user.lockedWrists.right));
-    }
-    return minDist <= OWNER_DIST;
-  });
+  const sw = user.sw > 0 ? user.sw : 0.2;
+  const ownerDist = Math.max(0.06, 0.6 * sw);
 
-  if (userHands.length === 0) {
-    return { userHands: [], activeHand: null };
+  // 1. Por muñecas si alguna existe
+  const hasLockedWrists = Boolean(user.lockedWrists.left || user.lockedWrists.right);
+  if (hasLockedWrists) {
+    const wristMatches = hands.filter((h) => {
+      let minDist = Infinity;
+      if (user.lockedWrists.left) {
+        minDist = Math.min(minDist, euclideanDist(h.wrist, user.lockedWrists.left));
+      }
+      if (user.lockedWrists.right) {
+        minDist = Math.min(minDist, euclideanDist(h.wrist, user.lockedWrists.right));
+      }
+      return minDist <= ownerDist;
+    });
+
+    if (wristMatches.length > 0) {
+      const sorted = [...wristMatches].sort((a, b) => a.palmCenter.y - b.palmCenter.y);
+      return { userHands: wristMatches, activeHand: sorted[0] ?? null, reason: 'wrist' };
+    }
   }
 
-  // Si hay más de una, usar la más alta (menor y)
-  const sorted = [...userHands].sort((a, b) => a.palmCenter.y - b.palmCenter.y);
-  return { userHands, activeHand: sorted[0] ?? null };
+  // 2. Continuidad si teníamos una posición anterior conocida de la mano del usuario
+  if (lastUserPalmCenter) {
+    const continuityMaxDist = 0.5 * sw;
+    const continuityMatches = hands.filter(
+      (h) => euclideanDist(h.palmCenter, lastUserPalmCenter) <= continuityMaxDist,
+    );
+
+    if (continuityMatches.length > 0) {
+      const sorted = [...continuityMatches].sort(
+        (a, b) => a.palmCenter.y - b.palmCenter.y,
+      );
+      return {
+        userHands: continuityMatches,
+        activeHand: sorted[0] ?? null,
+        reason: 'continuity',
+      };
+    }
+  }
+
+  // 3. Fallback por bounding box si lockedWrists son null y hay una sola mano dentro del recuadro
+  if (!hasLockedWrists && user.box) {
+    const box = user.box;
+    const handsInBox = hands.filter(
+      (h) =>
+        h.palmCenter.x >= box.minX &&
+        h.palmCenter.x <= box.maxX &&
+        h.palmCenter.y >= box.minY &&
+        h.palmCenter.y <= box.maxY,
+    );
+
+    if (handsInBox.length === 1) {
+      return { userHands: handsInBox, activeHand: handsInBox[0] ?? null, reason: 'box' };
+    }
+  }
+
+  return { userHands: [], activeHand: null, reason: 'none' };
+}
+
+export interface HandCursorTrackerOptions {
+  enableDwell?: boolean;
+  useAbsoluteMapping?: boolean;
 }
 
 /**
- * Estado interno mutable mantenido por HandCursorTracker.
+ * Estado interno mutable mantenido por HandCursorTracker (Mano v2: Ancla, Palanca y Confirmación explícita).
  */
 export class HandCursorTracker {
   private active = false;
@@ -132,10 +215,35 @@ export class HandCursorTracker {
 
   private isArmed = true;
   private dwellStartMs = 0;
-  private indexStableSinceMs = 0;
   private hadOpenPalmDuringStable = false;
   private gestureHistory: Array<{ time: number; gesture: string; score: number }> = [];
   private pointingStartMs: number | null = null;
+
+  // Estado v2
+  private anchorX: number | null = null;
+  private lastUserPalmCenter: HandLandmarkPoint | null = null;
+  private leverState: LeverState = 'neutral';
+  private leverEnteredMs: number | null = null;
+  private lastStepMs: number = 0;
+  private confirmAccumulatedMs = 0;
+  private confirmLastSeenMs: number | null = null;
+  private lastPointingMs: number | null = null;
+  private confirmProgress = 0;
+  private lastOwnerReason: OwnerMatchReason = 'none';
+  private confirmedWithPointing = false;
+
+  private options: HandCursorTrackerOptions;
+
+  constructor(options?: HandCursorTrackerOptions) {
+    this.options = {
+      enableDwell: options?.enableDwell ?? false,
+      useAbsoluteMapping: options?.useAbsoluteMapping ?? false,
+    };
+  }
+
+  setOptions(opts: Partial<HandCursorTrackerOptions>): void {
+    this.options = { ...this.options, ...opts };
+  }
 
   reset(): void {
     this.active = false;
@@ -152,19 +260,49 @@ export class HandCursorTracker {
     this.yFilter.reset();
     this.isArmed = true;
     this.dwellStartMs = 0;
-    this.indexStableSinceMs = 0;
     this.hadOpenPalmDuringStable = false;
     this.gestureHistory = [];
     this.pointingStartMs = null;
+
+    // Reset v2
+    this.anchorX = null;
+    this.lastUserPalmCenter = null;
+    this.leverState = 'neutral';
+    this.leverEnteredMs = null;
+    this.lastStepMs = 0;
+    this.confirmAccumulatedMs = 0;
+    this.confirmLastSeenMs = null;
+    this.lastPointingMs = null;
+    this.confirmProgress = 0;
+    this.lastOwnerReason = 'none';
+    this.confirmedWithPointing = false;
   }
 
   update(input: HandFrameInput): HandFrameOutput {
-    const { nowMs, hands, user, itemCount, busy = false, pausedUntilMs = 0 } = input;
+    const {
+      nowMs,
+      hands,
+      user,
+      itemCount,
+      busy = false,
+      pausedUntilMs = 0,
+      currentIndex,
+      enableDwell = this.options.enableDwell,
+      useAbsoluteMapping = this.options.useAbsoluteMapping,
+    } = input;
     const isPaused = busy || pausedUntilMs > nowMs;
     const events: HandCursorEvent[] = [];
 
-    // a) Dueño de la mano
-    const { userHands, activeHand } = selectUserHand(hands, user);
+    // a) Dueño de la mano con continuidad y box fallback
+    const {
+      userHands,
+      activeHand,
+      reason: ownerReason,
+    } = selectUserHand(hands, user, this.lastUserPalmCenter);
+    this.lastOwnerReason = ownerReason;
+    if (activeHand) {
+      this.lastUserPalmCenter = activeHand.palmCenter;
+    }
     const detectedHandsCount = hands.length;
     const userHandsCount = userHands.length;
 
@@ -180,7 +318,6 @@ export class HandCursorTracker {
     }
     this.lastUpdateMs = nowMs;
 
-    // Intervalo de muestreo promedio u observado (por defecto 100 ms si no hay historial)
     const observedIntervalMs =
       this.sampleIntervals.length > 0
         ? this.sampleIntervals.reduce((a, b) => a + b, 0) / this.sampleIntervals.length
@@ -190,17 +327,15 @@ export class HandCursorTracker {
       2 * observedIntervalMs,
     );
 
-    // b) Activación: ventana de 250 ms
+    // b) Activación: ventana de 250 ms (Open_Palm o Pointing_Up con score >= 0.5)
     const isValidGesture =
       activeHand !== null &&
       (activeHand.gesture === 'Open_Palm' || activeHand.gesture === 'Pointing_Up') &&
       activeHand.score >= GESTURE_SCORE_MIN;
 
     this.activationHistory.push({ time: nowMs, valid: isValidGesture });
-    // Conservar las muestras de los últimos 1000 ms
     this.activationHistory = this.activationHistory.filter((h) => h.time >= nowMs - 1000);
 
-    // Ventana efectiva = las muestras con time >= nowMs - 250, MÁS la muestra inmediatamente anterior a ese corte (si existe)
     const cutoff250 = nowMs - ACTIVATION_WINDOW_MS;
     const insideIndices = [];
     for (let i = 0; i < this.activationHistory.length; i++) {
@@ -214,7 +349,6 @@ export class HandCursorTracker {
       const startIdx = firstInsideIdx > 0 ? firstInsideIdx - 1 : firstInsideIdx;
       effectiveWindow = this.activationHistory.slice(startIdx);
     } else if (this.activationHistory.length > 0) {
-      // Si ninguna está estrictamente dentro, tomar la última si existe
       effectiveWindow = [this.activationHistory[this.activationHistory.length - 1]!];
     }
 
@@ -226,7 +360,6 @@ export class HandCursorTracker {
     const validRatio =
       effectiveWindow.length > 0 ? validCount / effectiveWindow.length : 0;
 
-    // Condición: (span >= 250 ms Y ratio de válidas >= 60 %) O (las últimas 3 muestras son válidas con span >= 200 ms para bajas frecuencias)
     const last3 = this.activationHistory.slice(-3);
     const last3Span = last3.length === 3 ? nowMs - last3[0]!.time : 0;
     const last3AreValidLowFps =
@@ -235,16 +368,21 @@ export class HandCursorTracker {
       (windowSpan >= ACTIVATION_WINDOW_MS && validRatio >= ACTIVATION_RATIO) ||
       last3AreValidLowFps;
 
+    let justActivated = false;
     if (!this.active) {
       if (shouldActivate) {
         this.active = true;
+        justActivated = true;
         this.lastValidHandMs = nowMs;
         this.dwellStartMs = nowMs;
-        this.indexStableSinceMs = nowMs;
         this.isArmed = true;
         this.hadOpenPalmDuringStable = false;
         this.gestureHistory = [];
         this.pointingStartMs = null;
+        this.confirmAccumulatedMs = 0;
+        this.confirmLastSeenMs = null;
+        this.lastPointingMs = null;
+        this.confirmProgress = 0;
       }
     } else {
       if (isValidGesture) {
@@ -252,11 +390,19 @@ export class HandCursorTracker {
       } else if (nowMs - this.lastValidHandMs >= effectiveDeactivationTimeoutMs) {
         this.active = false;
         this.dwellProgress = 0;
+        this.confirmProgress = 0;
         this.isArmed = true;
         this.hadOpenPalmDuringStable = false;
         this.gestureHistory = [];
         this.activationHistory = [];
         this.pointingStartMs = null;
+        this.anchorX = null;
+        this.lastUserPalmCenter = null;
+        this.leverState = 'neutral';
+        this.leverEnteredMs = null;
+        this.confirmAccumulatedMs = 0;
+        this.confirmLastSeenMs = null;
+        this.lastPointingMs = null;
         this.xFilter.reset();
         this.yFilter.reset();
       }
@@ -265,52 +411,133 @@ export class HandCursorTracker {
     // c) Posición y Suavizado
     if (activeHand) {
       this.gesture = activeHand.gesture;
-      // Espejado: x de palmCenter invertido en el espejo
-      const rawX = 1 - activeHand.palmCenter.x;
+      const rawX = 1 - activeHand.palmCenter.x; // Espejado
       const rawY = activeHand.palmCenter.y;
-
       this.x = this.xFilter.filter(rawX, nowMs);
       this.y = this.yFilter.filter(rawY, nowMs);
     } else if (!this.active) {
       this.gesture = 'None';
     }
 
-    // d) Mapeo a prenda con histéresis
-    if (user && itemCount > 0) {
-      const inicio = user.cx - REACH * user.sw;
-      const ancho = 2 * REACH * user.sw;
+    // 2.1 Ancla: al activarse el cursor, la posición x suavizada en ese instante es el ancla
+    if (justActivated) {
+      this.anchorX = this.x;
+      // El foco queda en la prenda que ya estaba enfocada o la del centro
+      if (
+        typeof currentIndex === 'number' &&
+        currentIndex >= 0 &&
+        currentIndex < itemCount
+      ) {
+        this.index = currentIndex;
+      } else if (itemCount > 0) {
+        this.index = Math.floor(itemCount / 2);
+      }
+      this.leverState = 'neutral';
+      this.leverEnteredMs = null;
+    } else if (this.active && this.anchorX === null) {
+      this.anchorX = this.x;
+    }
 
-      if (ancho > 0) {
-        const t = clamp((this.x - inicio) / ancho, 0, 0.999);
-        const bandW = 1 / itemCount;
-        const rawIndex = clamp(Math.floor(t * itemCount), 0, itemCount - 1);
+    // d) Mapeo a prenda
+    const swWidth = user && user.sw > 0 ? user.sw : 0.2;
+    let d = 0;
+    let directionArrow: 'left' | 'right' | null = null;
 
-        const currentBandLeft = this.index * bandW;
-        const currentBandRight = (this.index + 1) * bandW;
+    if (useAbsoluteMapping) {
+      // Mapeo absoluto legacy para tests existentes si useAbsoluteMapping es true
+      if (user && itemCount > 0) {
+        const inicio = user.cx - REACH * user.sw;
+        const ancho = 2 * REACH * user.sw;
+        if (ancho > 0) {
+          const t = clamp((this.x - inicio) / ancho, 0, 0.999);
+          const bandW = 1 / itemCount;
+          const rawIndex = clamp(Math.floor(t * itemCount), 0, itemCount - 1);
+          const currentBandLeft = this.index * bandW;
+          const currentBandRight = (this.index + 1) * bandW;
+          const hystMargin = HYSTERESIS_RATIO * bandW;
 
-        const hystMargin = HYSTERESIS_RATIO * bandW;
+          if (t < currentBandLeft - hystMargin) {
+            this.index = rawIndex;
+            this.dwellStartMs = nowMs;
+            this.isArmed = true;
+            this.confirmedWithPointing = false;
+          } else if (t > currentBandRight + hystMargin) {
+            this.index = rawIndex;
+            this.dwellStartMs = nowMs;
+            this.isArmed = true;
+            this.confirmedWithPointing = false;
+          }
+        }
+      }
+    } else if (this.active && this.anchorX !== null && itemCount > 0) {
+      // 2.2 PALANCA (control por desplazamiento relativo)
+      d = (this.x - this.anchorX) / swWidth;
+      const absD = Math.abs(d);
 
-        if (t < currentBandLeft - hystMargin) {
-          this.index = rawIndex;
-          this.indexStableSinceMs = nowMs;
-          this.dwellStartMs = nowMs;
-          this.isArmed = true;
-          this.hadOpenPalmDuringStable = false;
-          this.gestureHistory = [];
-          this.pointingStartMs = null;
-        } else if (t > currentBandRight + hystMargin) {
-          this.index = rawIndex;
-          this.indexStableSinceMs = nowMs;
-          this.dwellStartMs = nowMs;
-          this.isArmed = true;
-          this.hadOpenPalmDuringStable = false;
-          this.gestureHistory = [];
-          this.pointingStartMs = null;
+      let newLeverState: LeverState = 'neutral';
+      if (absD < LEVER_DEAD) {
+        newLeverState = 'neutral';
+        directionArrow = null;
+      } else if (absD < LEVER_FAST) {
+        newLeverState = d > 0 ? 'slow_right' : 'slow_left';
+        directionArrow = d > 0 ? 'right' : 'left';
+      } else {
+        newLeverState = d > 0 ? 'fast_right' : 'fast_left';
+        directionArrow = d > 0 ? 'right' : 'left';
+      }
+
+      if (newLeverState !== this.leverState) {
+        this.leverState = newLeverState;
+        this.leverEnteredMs = nowMs;
+        this.lastStepMs = 0;
+      }
+
+      if (this.leverState !== 'neutral' && this.leverEnteredMs !== null) {
+        const timeInLever = nowMs - this.leverEnteredMs;
+        const isFast =
+          this.leverState === 'fast_left' || this.leverState === 'fast_right';
+        const stepInterval = isFast ? STEP_FAST_MS : STEP_SLOW_MS;
+        const isRight =
+          this.leverState === 'slow_right' || this.leverState === 'fast_right';
+        const delta = isRight ? 1 : -1;
+
+        if (this.lastStepMs === 0) {
+          // El primer paso ocurre 250 ms después de salir de la zona neutra
+          if (timeInLever >= STEP_FIRST_DELAY_MS) {
+            const nextIdx = clamp(this.index + delta, 0, itemCount - 1);
+            if (nextIdx !== this.index) {
+              this.index = nextIdx;
+              this.isArmed = true; // cambio de foco rearma confirmación
+              this.confirmedWithPointing = false;
+              this.dwellStartMs = nowMs;
+              this.confirmAccumulatedMs = 0;
+              this.confirmLastSeenMs = null;
+              this.lastPointingMs = null;
+              this.confirmProgress = 0;
+            }
+            this.lastStepMs = nowMs;
+          }
+        } else {
+          // Pasos subsiguientes cada stepInterval
+          if (nowMs - this.lastStepMs >= stepInterval) {
+            const nextIdx = clamp(this.index + delta, 0, itemCount - 1);
+            if (nextIdx !== this.index) {
+              this.index = nextIdx;
+              this.isArmed = true;
+              this.confirmedWithPointing = false;
+              this.dwellStartMs = nowMs;
+              this.confirmAccumulatedMs = 0;
+              this.confirmLastSeenMs = null;
+              this.lastPointingMs = null;
+              this.confirmProgress = 0;
+            }
+            this.lastStepMs = nowMs;
+          }
         }
       }
     }
 
-    // Registro del gesto actual para el atajo
+    // Registro del gesto actual para el atajo legacy
     if (activeHand) {
       this.gestureHistory.push({
         time: nowMs,
@@ -322,6 +549,11 @@ export class HandCursorTracker {
       if (activeHand.gesture === 'Open_Palm' && activeHand.score >= GESTURE_SCORE_MIN) {
         this.hadOpenPalmDuringStable = true;
         this.pointingStartMs = null;
+        // En v2: volver a Open_Palm tras confirmar con Pointing_Up rearma
+        if (this.confirmedWithPointing) {
+          this.isArmed = true;
+          this.confirmedWithPointing = false;
+        }
       } else if (
         activeHand.gesture === 'Pointing_Up' &&
         activeHand.score >= GESTURE_SCORE_MIN
@@ -334,66 +566,76 @@ export class HandCursorTracker {
       }
     }
 
-    // g) busy o pausa: no emite eventos y el progreso vuelve a 0
+    // g) Pausa o Inactivo
     if (isPaused || !this.active) {
       this.dwellProgress = 0;
+      this.confirmProgress = 0;
       this.dwellStartMs = nowMs;
+      this.confirmAccumulatedMs = 0;
+      this.confirmLastSeenMs = null;
+      this.lastPointingMs = null;
     } else {
-      // f) Atajo: índice estable >= 300 ms, paso de Open_Palm a Pointing_Up sostenido >= 300 ms (>= 70% de 300 ms)
-      const isIndexStable = nowMs - this.indexStableSinceMs >= SHORTCUT_STABLE_MS;
-      let shortcutFired = false;
+      let eventFired = false;
 
-      if (
-        isIndexStable &&
-        this.hadOpenPalmDuringStable &&
-        this.isArmed &&
-        this.pointingStartMs !== null &&
-        nowMs - this.pointingStartMs >= SHORTCUT_WINDOW_MS
-      ) {
-        const cutoffShortcut = nowMs - SHORTCUT_WINDOW_MS;
-        const shortcutIndices = [];
-        for (let i = 0; i < this.gestureHistory.length; i++) {
-          if (this.gestureHistory[i]!.time >= cutoffShortcut) {
-            shortcutIndices.push(i);
+      // 2.3 CONFIRMACIÓN EXPLÍCITA (por defecto activa; toma por Pointing_Up en zona neutra)
+      if (!enableDwell) {
+        const isNeutral = this.leverState === 'neutral';
+        const isPointing =
+          activeHand !== null &&
+          activeHand.gesture === 'Pointing_Up' &&
+          activeHand.score >= GESTURE_SCORE_MIN;
+
+        if (isPointing && isNeutral && this.isArmed) {
+          if (this.lastPointingMs === null) {
+            this.lastPointingMs = nowMs;
+            this.confirmLastSeenMs = nowMs;
+          } else {
+            const dt = nowMs - this.lastPointingMs;
+            this.confirmAccumulatedMs += dt;
+            this.lastPointingMs = nowMs;
+            this.confirmLastSeenMs = nowMs;
+            this.confirmProgress = clamp(this.confirmAccumulatedMs / CONFIRM_MS, 0, 1);
+
+            if (this.confirmAccumulatedMs >= CONFIRM_MS) {
+              events.push({
+                type: 'take',
+                index: this.index,
+                method: 'hand_point',
+              });
+              this.isArmed = false;
+              this.confirmedWithPointing = true;
+              this.confirmProgress = 0;
+              this.confirmAccumulatedMs = 0;
+              this.confirmLastSeenMs = null;
+              this.lastPointingMs = null;
+              eventFired = true;
+            }
           }
+        } else if (this.confirmLastSeenMs !== null) {
+          // Huecos breves / pérdida de gesto o no apuntando en zona neutra
+          this.lastPointingMs = null;
+          if (activeHand !== null && activeHand.gesture === 'Open_Palm') {
+            // Con Open_Palm se cancela la confirmación de inmediato
+            this.confirmAccumulatedMs = 0;
+            this.confirmProgress = 0;
+            this.confirmLastSeenMs = null;
+          } else {
+            const timeSinceSeen = nowMs - this.confirmLastSeenMs;
+            if (timeSinceSeen > GAP_LOST_MAX_MS || !isNeutral) {
+              // Se pierde > 300 ms o sale de zona neutra: el anillo vuelve a 0
+              this.confirmAccumulatedMs = 0;
+              this.confirmProgress = 0;
+              this.confirmLastSeenMs = null;
+            }
+            // Si timeSinceSeen <= GAP_LOST_MAX_MS, se congela el confirmProgress
+          }
+        } else {
+          this.confirmAccumulatedMs = 0;
+          this.confirmProgress = 0;
+          this.lastPointingMs = null;
         }
-        let effectiveGestureWindow: Array<{
-          time: number;
-          gesture: string;
-          score: number;
-        }> = [];
-        if (shortcutIndices.length > 0) {
-          const firstIdx = shortcutIndices[0]!;
-          const startIdx = firstIdx > 0 ? firstIdx - 1 : firstIdx;
-          effectiveGestureWindow = this.gestureHistory.slice(startIdx);
-        } else if (this.gestureHistory.length > 0) {
-          effectiveGestureWindow = [this.gestureHistory[this.gestureHistory.length - 1]!];
-        }
-
-        const pointingCount = effectiveGestureWindow.filter(
-          (g) => g.gesture === 'Pointing_Up' && g.score >= GESTURE_SCORE_MIN,
-        ).length;
-        const pointingRatio =
-          effectiveGestureWindow.length > 0
-            ? pointingCount / effectiveGestureWindow.length
-            : 0;
-
-        if (pointingRatio >= SHORTCUT_RATIO && this.gesture === 'Pointing_Up') {
-          events.push({
-            type: 'take',
-            index: this.index,
-            method: 'hand_point',
-          });
-          this.isArmed = false;
-          this.dwellProgress = 0;
-          this.dwellStartMs = nowMs;
-          this.pointingStartMs = null;
-          shortcutFired = true;
-        }
-      }
-
-      // e) Permanencia (Dwell): 1200 ms con cursor activo y armado
-      if (!shortcutFired) {
+      } else {
+        // e) DWELL LEGACY (detrás de ?hand_dwell=1)
         if (this.isArmed) {
           const elapsed = nowMs - this.dwellStartMs;
           this.dwellProgress = clamp(elapsed / DWELL_MS, 0, 1);
@@ -406,12 +648,57 @@ export class HandCursorTracker {
             });
             this.isArmed = false;
             this.dwellProgress = 0;
+            eventFired = true;
           }
         } else {
           this.dwellProgress = 0;
         }
+
+        // f) Atajo Pointing_Up legacy
+        if (
+          !eventFired &&
+          this.hadOpenPalmDuringStable &&
+          this.isArmed &&
+          this.pointingStartMs !== null
+        ) {
+          if (nowMs - this.pointingStartMs >= SHORTCUT_WINDOW_MS) {
+            const cutoffShortcut = nowMs - SHORTCUT_WINDOW_MS;
+            const shortcutIndices = [];
+            for (let i = 0; i < this.gestureHistory.length; i++) {
+              if (this.gestureHistory[i]!.time >= cutoffShortcut) {
+                shortcutIndices.push(i);
+              }
+            }
+            let effectiveGestureWindow = this.gestureHistory;
+            if (shortcutIndices.length > 0) {
+              const firstIdx = shortcutIndices[0]!;
+              const startIdx = firstIdx > 0 ? firstIdx - 1 : firstIdx;
+              effectiveGestureWindow = this.gestureHistory.slice(startIdx);
+            }
+            const pointingCount = effectiveGestureWindow.filter(
+              (g) => g.gesture === 'Pointing_Up' && g.score >= GESTURE_SCORE_MIN,
+            ).length;
+            const pointingRatio =
+              effectiveGestureWindow.length > 0
+                ? pointingCount / effectiveGestureWindow.length
+                : 0;
+
+            if (pointingRatio >= SHORTCUT_RATIO && this.gesture === 'Pointing_Up') {
+              events.push({
+                type: 'take',
+                index: this.index,
+                method: 'hand_point',
+              });
+              this.isArmed = false;
+              this.pointingStartMs = null;
+              eventFired = true;
+            }
+          }
+        }
       }
     }
+
+    const effectiveProgress = enableDwell ? this.dwellProgress : this.confirmProgress;
 
     return {
       cursor: {
@@ -419,8 +706,14 @@ export class HandCursorTracker {
         x: this.x,
         y: this.y,
         index: this.index,
-        dwellProgress: this.dwellProgress,
+        dwellProgress: effectiveProgress,
         gesture: this.gesture,
+        anchorX: this.anchorX,
+        displacement: d,
+        leverState: this.leverState,
+        directionArrow,
+        confirmProgress: this.confirmProgress,
+        ownerReason: this.lastOwnerReason,
       },
       events,
       userHandsCount,

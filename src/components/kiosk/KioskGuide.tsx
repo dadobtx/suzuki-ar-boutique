@@ -71,16 +71,14 @@ export function KioskGuide({
       : -1;
 
     if (!handCursor.active) {
-      handTitle = t(
-        'kiosk.hand.raiseHand',
-        'LEVANTA LA MANO Y MUÉVELA PARA RECORRER EL PERCHERO',
-      );
-    } else if (handCursor.index < 0 || handCursor.index >= catalog.length) {
-      handTitle = t('kiosk.hand.moveHand', 'MUEVE LA MANO SOBRE EL PERCHERO');
+      handTitle = t('kiosk.hand.raiseHand', 'LEVANTA LA MANO ABIERTA');
     } else if (handCursor.index === activeGarmentIndex) {
-      handTitle = t('kiosk.hand.holdToReturn', 'MANTÉN LA MANO QUIETA PARA DEVOLVERLA');
+      handTitle = t('kiosk.hand.holdToReturn', 'LEVANTA EL ÍNDICE PARA DEVOLVERLA');
     } else {
-      handTitle = t('kiosk.hand.holdToTry', 'MANTÉN LA MANO QUIETA PARA PROBÁRTELA');
+      handTitle = t(
+        'kiosk.hand.moveHand',
+        'MUEVE LA MANO A UN LADO PARA RECORRER · LEVANTA EL ÍNDICE PARA PROBÁRTELA',
+      );
     }
   }
 

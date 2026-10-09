@@ -83,7 +83,7 @@ describe('Robust Hand Cursor Rates & Jitter Tests (tests/unit/hand-cursor-rates.
   // 2. A esas mismas frecuencias, quedarse en la misma prenda dispara 'take' entre 1200 y 1500 ms después de activarse, una sola vez
   TEST_RATES.forEach((fps) => {
     it(`a ${fps} fps con jitter ±20%: dwell dispara 'take' entre 1200 y 1500 ms tras activación, una sola vez`, () => {
-      const tracker = new HandCursorTracker();
+      const tracker = new HandCursorTracker({ enableDwell: true });
       const user = makeUser();
       const hand = makeHand('Open_Palm', 0.8);
       const prng = createPrng(fps * 2000 + 13);
@@ -204,7 +204,7 @@ describe('Robust Hand Cursor Rates & Jitter Tests (tests/unit/hand-cursor-rates.
   // 5. El atajo Open_Palm → Pointing_Up funciona a 10 y 30 fps
   [10, 30].forEach((fps) => {
     it(`el atajo Open_Palm → Pointing_Up funciona a ${fps} fps`, () => {
-      const tracker = new HandCursorTracker();
+      const tracker = new HandCursorTracker({ enableDwell: true });
       const user = makeUser();
       const openPalmHand = makeHand('Open_Palm', 0.8);
       const pointingHand = makeHand('Pointing_Up', 0.8);

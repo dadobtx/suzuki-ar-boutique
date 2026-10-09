@@ -11,7 +11,7 @@ describe('Hand Cursor Engine (src/lib/hand-cursor.ts)', () => {
   let tracker: HandCursorTracker;
 
   beforeEach(() => {
-    tracker = new HandCursorTracker();
+    tracker = new HandCursorTracker({ enableDwell: true, useAbsoluteMapping: true });
   });
 
   const makeUser = (cx = 0.5, sw = 0.2): HandFrameUser => ({
