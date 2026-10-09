@@ -52,13 +52,13 @@ const TEST_RATES = [10, 24];
 describe('Hand Cursor v3: Estabilidad de la palanca y de la confirmación (tests/unit/hand-cursor-v3.test.ts)', () => {
   beforeEach(() => {
     if (typeof window !== 'undefined') {
-      window.location.search = '?hand_mode=palanca';
+      window.history.replaceState(null, '', '/?hand_mode=palanca');
     }
   });
 
   afterEach(() => {
     if (typeof window !== 'undefined') {
-      window.location.search = '';
+      window.history.replaceState(null, '', '/');
     }
   });
   // Test 1: Dos manos del usuario; la derecha activa; la izquierda sube más alto durante 1 s → la activa sigue siendo la derecha y 0 pasos

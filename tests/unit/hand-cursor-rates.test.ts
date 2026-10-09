@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   HandCursorTracker,
   type HandCursorEvent,
@@ -18,6 +18,8 @@ function createPrng(seed = 123456789) {
 }
 
 describe('Robust Hand Cursor Rates & Jitter Tests (tests/unit/hand-cursor-rates.test.ts)', () => {
+  beforeEach(() => { window.history.replaceState(null, '', '/?hand_mode=palanca'); });
+  afterEach(() => { window.history.replaceState(null, '', '/'); });
   const makeUser = (cx = 0.5, sw = 0.2): HandFrameUser => ({
     lockedWrists: {
       left: { x: 0.35, y: 0.6 },

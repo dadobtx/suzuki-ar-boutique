@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   HandCursorTracker,
   selectUserHand,
@@ -47,6 +47,8 @@ const makeHand = (
 const TEST_RATES = [10, 24];
 
 describe('Hand Cursor v2: Ancla, Palanca y Confirmación Explícita (tests/unit/hand-cursor-v2.test.ts)', () => {
+  beforeEach(() => { window.history.replaceState(null, '', '/?hand_mode=palanca'); });
+  afterEach(() => { window.history.replaceState(null, '', '/'); });
   // 1. Activación inicial no cambia el foco (prenda) aunque la mano aparezca a la derecha
   TEST_RATES.forEach((fps) => {
     it(`a ${fps} fps con jitter: activación inicial no cambia el foco aunque la mano aparezca a la derecha`, () => {
