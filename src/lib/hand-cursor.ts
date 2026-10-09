@@ -1,5 +1,6 @@
 import { OneEuroFilter } from './one-euro-filter';
 import type { CandidateBoundingBox } from './active-zone';
+import { isHandLeverModeEnabled } from './hand-input-flag';
 
 export const OWNER_DIST = 0.08;
 export const ACTIVATION_WINDOW_MS = 250;
@@ -27,6 +28,17 @@ export const GAP_LOST_MAX_MS = 300;
 export const HAND_LOCK_TIMEOUT_MS = 500;
 export const REARM_TIMEOUT_MS = 300;
 
+// Constantes Mano v4: Paso por Gesto y Live con Índice
+export const STEP_THRESHOLD = 0.35;
+export const STEP_RESET_DEAD = 0.2;
+export const STEP_RESET_MS = 150;
+export const STEP_NOISE_FRAMES = 2;
+export const STEP_NOISE_MS = 80;
+export const STEP_COOLDOWN_MS = 400;
+export const STEP_PULSE_MS = 250;
+export const CONFIRM_LIVE_MS = 1200;
+export const LIVE_REARM_MS = 300;
+
 export interface HandLandmarkPoint {
   x: number;
   y: number;
@@ -35,6 +47,7 @@ export interface HandLandmarkPoint {
 }
 
 export type HandednessSide = 'Left' | 'Right' | 'None';
+export type HandPoseSide = 'Left' | 'Right' | 'None';
 
 export interface DetectedHandInput {
   wrist: HandLandmarkPoint;
@@ -42,6 +55,7 @@ export interface DetectedHandInput {
   gesture: string;
   score: number;
   handedness?: HandednessSide;
+  landmarks?: HandLandmarkPoint[];
 }
 
 export interface LockedUserWrists {
@@ -66,6 +80,8 @@ export interface HandFrameInput {
   currentIndex?: number;
   enableDwell?: boolean;
   useAbsoluteMapping?: boolean;
+  mode?: 'step' | 'lever';
+  isLiveAvailable?: boolean;
 }
 
 export type LeverState =
@@ -92,13 +108,34 @@ export interface HandCursorData {
   ownerReason?: OwnerMatchReason;
   activeHandSide?: HandednessSide;
   handSwitchCount?: number;
+  // Propiedades v4
+  poseSide?: HandPoseSide;
+  classifierSide?: HandednessSide;
+  indexSource?: 'clasificador' | 'geométrico' | 'ambos' | 'ninguno';
+  isStepDisarmed?: boolean;
+  pulseArrow?: 'left' | 'right' | null;
 }
 
-export interface HandCursorEvent {
+export interface HandCursorTakeEvent {
   type: 'take';
   index: number;
   method?: 'hand_dwell' | 'hand_point';
 }
+
+export interface HandCursorStepEvent {
+  type: 'step';
+  index: number;
+  direction: 'left' | 'right';
+}
+
+export interface HandCursorLiveEvent {
+  type: 'live';
+}
+
+export type HandCursorEvent =
+  | HandCursorTakeEvent
+  | HandCursorStepEvent
+  | HandCursorLiveEvent;
 
 export interface HandFrameOutput {
   cursor: HandCursorData;
@@ -171,6 +208,81 @@ function euclideanDist(p1: HandLandmarkPoint, p2: HandLandmarkPoint): number {
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
+}
+
+/**
+ * Detección geométrica del índice levantado usando los 21 landmarks de la mano (Sección 3):
+ * - "índice extendido": tip 8 to wrist 0 >= 1.6 * knuckle 5 to wrist 0, y tip 8 por encima (y menor) de PIP 6.
+ * - "resto recogido": tips 12, 16, 20 to wrist 0 < 1.15 * knuckles 9, 13, 17 to wrist 0.
+ */
+export function detectGeometricIndex(landmarks?: HandLandmarkPoint[]): boolean {
+  if (!landmarks || landmarks.length < 21) {
+    return false;
+  }
+  const wrist = landmarks[0]!;
+  const indexKnuckle = landmarks[5]!;
+  const indexPip = landmarks[6]!;
+  const indexTip = landmarks[8]!;
+
+  const dWristKnuckle = euclideanDist(wrist, indexKnuckle);
+  const dWristTip = euclideanDist(wrist, indexTip);
+
+  // 1. Índice extendido: d(0,8) >= 1.6 * d(0,5) y tip.y < pip.y (en coords de pantalla/imagen y crece hacia abajo)
+  if (dWristKnuckle <= 0 || dWristTip < 1.6 * dWristKnuckle || indexTip.y >= indexPip.y) {
+    return false;
+  }
+
+  // 2. Resto recogido: puntas 12, 16, 20 to wrist 0 < 1.15 * nudillos 9, 13, 17 to wrist 0
+  const otherKnuckles = [landmarks[9]!, landmarks[13]!, landmarks[17]!];
+  const otherTips = [landmarks[12]!, landmarks[16]!, landmarks[20]!];
+
+  for (let i = 0; i < 3; i++) {
+    const dKnuckle = euclideanDist(wrist, otherKnuckles[i]!);
+    const dTip = euclideanDist(wrist, otherTips[i]!);
+    if (dTip >= 1.15 * dKnuckle) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Determina el lado de la persona (Left/Right) según el cuerpo/pose (Sección 2bis):
+ * Muñeca del pose más cercana al landmark 0 (wrist) de la mano.
+ * Si no hay muñecas disponibles, compara la posición x de la muñeca respecto a user.cx (en coordenadas de pantalla espejada).
+ */
+export function computeHandPoseSide(
+  handWrist: HandLandmarkPoint,
+  user: HandFrameUser | null,
+): HandPoseSide {
+  if (!user) return 'None';
+
+  let dLeft = Infinity;
+  let dRight = Infinity;
+
+  if (user.lockedWrists.left) {
+    dLeft = euclideanDist(handWrist, user.lockedWrists.left);
+  }
+  if (user.lockedWrists.right) {
+    dRight = euclideanDist(handWrist, user.lockedWrists.right);
+  }
+
+  if (Number.isFinite(dLeft) || Number.isFinite(dRight)) {
+    if (dLeft < dRight) return 'Left';
+    if (dRight < dLeft) return 'Right';
+    return 'None';
+  }
+
+  // Fallback por posición respecto a user.cx en pantalla espejada (x menor = izquierda de pantalla = persona izquierda)
+  if (typeof user.cx === 'number') {
+    // Si handWrist.x (en pantalla espejada) es menor que cx -> izquierda, si mayor -> derecha
+    // Nota: handWrist en DetectedHandInput ya viene en coordenadas visibles de pantalla si fue mapeado
+    // o en coords [0, 1]. Si handWrist.x < user.cx en pantalla -> Left, sino Right.
+    return handWrist.x < user.cx ? 'Left' : 'Right';
+  }
+
+  return 'None';
 }
 
 /**
@@ -294,6 +406,7 @@ export function selectUserHand(
 export interface HandCursorTrackerOptions {
   enableDwell?: boolean;
   useAbsoluteMapping?: boolean;
+  mode?: 'step' | 'lever';
 }
 
 /**
@@ -342,12 +455,40 @@ export class HandCursorTracker {
   private lockedHandPalmCenter: HandLandmarkPoint | null = null;
   private handSwitchCount = 0;
 
+  // Estado v4
+  private v4ActivePalmCenter: HandLandmarkPoint | null = null;
+  private v4ActiveWrist: HandLandmarkPoint | null = null;
+  private v4ActiveLastSeenMs: number | null = null;
+  private v4ActiveHasValidGesture = false;
+  private v4AlternativeValidSinceMs: number | null = null;
+  private v4AlternativePalmCenter: HandLandmarkPoint | null = null;
+  private v4PoseSide: HandPoseSide = 'None';
+  private v4ClassifierSide: HandednessSide = 'None';
+  private v4IndexSource: 'clasificador' | 'geométrico' | 'ambos' | 'ninguno' = 'ninguno';
+
+  // Disparador de pasos v4
+  private v4StepDisarmed = false;
+  private v4NeutralSinceMs: number | null = null;
+  private v4LastStepTriggeredMs = 0;
+  private v4BeyondThresholdSinceMs: number | null = null;
+  private v4BeyondThresholdFrames = 0;
+  private v4PendingDirection: 'left' | 'right' | null = null;
+  private v4PulseArrow: 'left' | 'right' | null = null;
+  private v4PulseUntilMs = 0;
+
+  // Confirmación Live con Índice v4
+  private v4LiveAccumulatedMs = 0;
+  private v4LiveLastSeenMs: number | null = null;
+  private v4LiveDisarmed = false;
+  private v4LiveNotPointingSinceMs: number | null = null;
+
   private options: HandCursorTrackerOptions;
 
   constructor(options?: HandCursorTrackerOptions) {
     this.options = {
       enableDwell: options?.enableDwell ?? false,
       useAbsoluteMapping: options?.useAbsoluteMapping ?? false,
+      mode: options?.mode,
     };
   }
 
@@ -392,9 +533,42 @@ export class HandCursorTracker {
     this.lockedHandLastSeenMs = null;
     this.lockedHandPalmCenter = null;
     this.handSwitchCount = 0;
+
+    // Reset v4
+    this.v4ActivePalmCenter = null;
+    this.v4ActiveWrist = null;
+    this.v4ActiveLastSeenMs = null;
+    this.v4ActiveHasValidGesture = false;
+    this.v4AlternativeValidSinceMs = null;
+    this.v4AlternativePalmCenter = null;
+    this.v4PoseSide = 'None';
+    this.v4ClassifierSide = 'None';
+    this.v4IndexSource = 'ninguno';
+    this.v4StepDisarmed = false;
+    this.v4NeutralSinceMs = null;
+    this.v4LastStepTriggeredMs = 0;
+    this.v4BeyondThresholdSinceMs = null;
+    this.v4BeyondThresholdFrames = 0;
+    this.v4PendingDirection = null;
+    this.v4PulseArrow = null;
+    this.v4PulseUntilMs = 0;
+    this.v4LiveAccumulatedMs = 0;
+    this.v4LiveLastSeenMs = null;
+    this.v4LiveDisarmed = false;
+    this.v4LiveNotPointingSinceMs = null;
   }
 
   update(input: HandFrameInput): HandFrameOutput {
+    const effectiveMode =
+      input.mode ?? this.options.mode ?? (isHandLeverModeEnabled() ? 'lever' : 'step');
+
+    if (effectiveMode === 'lever') {
+      return this.updateLever(input);
+    }
+    return this.updateStep(input);
+  }
+
+  private updateLever(input: HandFrameInput): HandFrameOutput {
     const {
       nowMs,
       hands,
@@ -1048,6 +1222,546 @@ export class HandCursorTracker {
         ownerReason: this.lastOwnerReason,
         activeHandSide: this.lockedHandSide,
         handSwitchCount: this.handSwitchCount,
+      },
+      events,
+      userHandsCount,
+      detectedHandsCount,
+    };
+  }
+
+  /**
+   * Implementación Mano v4: Paso por Gesto, Identidad por Pose y Live con Índice
+   */
+  private updateStep(input: HandFrameInput): HandFrameOutput {
+    const {
+      nowMs,
+      hands,
+      user,
+      itemCount,
+      busy = false,
+      pausedUntilMs = 0,
+      currentIndex,
+      isLiveAvailable = false,
+    } = input;
+    const isPaused = busy || pausedUntilMs > nowMs;
+    const events: HandCursorEvent[] = [];
+
+    // Muestreo de intervalos observados
+    const prevUpdateMs = this.lastUpdateMs;
+    if (this.lastUpdateMs !== null) {
+      const dt = nowMs - this.lastUpdateMs;
+      if (dt > 0 && dt <= 1000) {
+        this.sampleIntervals.push(dt);
+        if (this.sampleIntervals.length > 10) {
+          this.sampleIntervals.shift();
+        }
+      }
+    }
+    this.lastUpdateMs = nowMs;
+
+    const observedIntervalMs =
+      this.sampleIntervals.length > 0
+        ? this.sampleIntervals.reduce((a, b) => a + b, 0) / this.sampleIntervals.length
+        : 100;
+    const effectiveDeactivationTimeoutMs = Math.max(
+      DEACTIVATION_TIMEOUT_MS,
+      2 * observedIntervalMs,
+    );
+
+    const sw = user && user.sw > 0 ? user.sw : 0.2;
+    const ownerDist = Math.max(0.06, 0.6 * sw);
+
+    // 1. Filtrar manos pertenecientes al usuario (por muñecas de pose, continuidad o bounding box)
+    let userHands: DetectedHandInput[] = [];
+    let reason: OwnerMatchReason = 'none';
+
+    if (user && hands.length > 0) {
+      const hasLockedWrists = Boolean(user.lockedWrists.left || user.lockedWrists.right);
+      if (hasLockedWrists) {
+        const wristMatches = hands.filter((h) => {
+          let minDist = Infinity;
+          if (user.lockedWrists.left) {
+            minDist = Math.min(minDist, euclideanDist(h.wrist, user.lockedWrists.left));
+          }
+          if (user.lockedWrists.right) {
+            minDist = Math.min(minDist, euclideanDist(h.wrist, user.lockedWrists.right));
+          }
+          return minDist <= ownerDist;
+        });
+        if (wristMatches.length > 0) {
+          userHands = wristMatches;
+          reason = 'wrist';
+        }
+      }
+
+      if (userHands.length === 0 && this.v4ActivePalmCenter) {
+        const continuityMatches = hands.filter(
+          (h) => euclideanDist(h.palmCenter, this.v4ActivePalmCenter!) <= 0.5 * sw,
+        );
+        if (continuityMatches.length > 0) {
+          userHands = continuityMatches;
+          reason = 'continuity';
+        }
+      }
+
+      if (userHands.length === 0 && !hasLockedWrists && user.box) {
+        const box = user.box;
+        const boxMatches = hands.filter(
+          (h) =>
+            h.palmCenter.x >= box.minX &&
+            h.palmCenter.x <= box.maxX &&
+            h.palmCenter.y >= box.minY &&
+            h.palmCenter.y <= box.maxY,
+        );
+        if (boxMatches.length === 1) {
+          userHands = boxMatches;
+          reason = 'box';
+        }
+      }
+    }
+
+    this.lastOwnerReason = reason;
+    const detectedHandsCount = hands.length;
+    const userHandsCount = userHands.length;
+
+    // Helper: comprobar si un gesto es válido (palma abierta o índice)
+    const isGestureValid = (h: DetectedHandInput): boolean => {
+      const isClassifierPoint = h.gesture === 'Pointing_Up' && h.score >= 0.4;
+      const isGeomPoint = detectGeometricIndex(h.landmarks);
+      const isIndex = isClassifierPoint || isGeomPoint;
+      const isOpenPalm = h.gesture === 'Open_Palm' && h.score >= GESTURE_SCORE_MIN;
+      return isOpenPalm || isIndex;
+    };
+
+    // 2. Selección y seguimiento de la mano activa por continuidad espacial (palmCenter <= 0.5 * sw)
+    let activeHand: DetectedHandInput | null = null;
+
+    if (this.active) {
+      if (this.v4ActivePalmCenter !== null) {
+        // Buscar coincidencia espacial de la mano activa
+        const continuityMatches = userHands.filter(
+          (h) => euclideanDist(h.palmCenter, this.v4ActivePalmCenter!) <= 0.5 * sw,
+        );
+        if (continuityMatches.length > 0) {
+          // Ordenar por distancia más cercana a la posición anterior
+          continuityMatches.sort(
+            (a, b) =>
+              euclideanDist(a.palmCenter, this.v4ActivePalmCenter!) -
+              euclideanDist(b.palmCenter, this.v4ActivePalmCenter!),
+          );
+          activeHand = continuityMatches[0]!;
+        }
+      }
+
+      // Si no hubo match por continuidad pero hay manos del usuario y solo 1 mano presente
+      if (!activeHand && userHands.length === 1 && this.v4ActivePalmCenter) {
+        activeHand = userHands[0]!;
+      }
+
+      const activeHasValid = activeHand !== null && isGestureValid(activeHand);
+
+      if (activeHand && activeHasValid) {
+        this.v4ActiveHasValidGesture = true;
+        this.v4ActiveLastSeenMs = nowMs;
+        this.v4AlternativeValidSinceMs = null;
+        this.v4AlternativePalmCenter = null;
+      } else {
+        // La mano activa no tiene gesto válido o no está presente
+        this.v4ActiveHasValidGesture = false;
+
+        // Buscar otra mano del usuario con gesto válido
+        const otherValidHands = userHands.filter((h) => {
+          if (activeHand && h === activeHand) return false;
+          if (activeHand && euclideanDist(h.palmCenter, activeHand.palmCenter) < 0.05) {
+            return false;
+          }
+          return isGestureValid(h);
+        });
+
+        if (otherValidHands.length > 0) {
+          // Tomar la más alta de las otras válidas
+          otherValidHands.sort((a, b) => a.palmCenter.y - b.palmCenter.y);
+          const altHand = otherValidHands[0]!;
+
+          if (this.v4AlternativeValidSinceMs === null) {
+            this.v4AlternativeValidSinceMs = nowMs;
+            this.v4AlternativePalmCenter = altHand.palmCenter;
+          } else if (nowMs - this.v4AlternativeValidSinceMs >= 250) {
+            // Cambio de mano (re-anclar)
+            activeHand = altHand;
+            this.v4ActivePalmCenter = altHand.palmCenter;
+            this.v4ActiveWrist = altHand.wrist;
+            this.v4ActiveLastSeenMs = nowMs;
+            this.v4ActiveHasValidGesture = true;
+            this.v4AlternativeValidSinceMs = null;
+            this.v4AlternativePalmCenter = null;
+            this.handSwitchCount++;
+
+            // Re-anclar
+            const rawNewX = 1 - altHand.palmCenter.x;
+            this.x = rawNewX;
+            this.y = altHand.palmCenter.y;
+            this.xFilter.reset();
+            this.yFilter.reset();
+            this.anchorX = rawNewX;
+            if (user) {
+              this.anchorOffset = rawNewX - user.cx;
+            }
+            this.v4StepDisarmed = false;
+            this.v4NeutralSinceMs = null;
+            this.v4BeyondThresholdSinceMs = null;
+            this.v4BeyondThresholdFrames = 0;
+            this.v4PendingDirection = null;
+          }
+        } else {
+          this.v4AlternativeValidSinceMs = null;
+          this.v4AlternativePalmCenter = null;
+        }
+      }
+
+      if (activeHand) {
+        this.v4ActivePalmCenter = activeHand.palmCenter;
+        this.v4ActiveWrist = activeHand.wrist;
+        this.v4ActiveLastSeenMs = nowMs;
+        this.lastValidHandMs = nowMs;
+      }
+    } else {
+      // Inactivo: tomar la más alta de userHands con gesto válido (o simplemente la más alta)
+      const validHands = userHands.filter(isGestureValid);
+      if (validHands.length > 0) {
+        validHands.sort((a, b) => a.palmCenter.y - b.palmCenter.y);
+        activeHand = validHands[0]!;
+      } else if (userHands.length > 0) {
+        const sorted = [...userHands].sort((a, b) => a.palmCenter.y - b.palmCenter.y);
+        activeHand = sorted[0]!;
+      }
+      if (activeHand) {
+        this.v4ActivePalmCenter = activeHand.palmCenter;
+        this.v4ActiveWrist = activeHand.wrist;
+      }
+    }
+
+    // 3. Activación del cursor (ventana de 250 ms)
+    const isValidForActivation = activeHand !== null && isGestureValid(activeHand);
+    this.activationHistory.push({ time: nowMs, valid: isValidForActivation });
+    this.activationHistory = this.activationHistory.filter((h) => h.time >= nowMs - 1000);
+
+    const cutoff250 = nowMs - ACTIVATION_WINDOW_MS;
+    const insideIndices: number[] = [];
+    for (let i = 0; i < this.activationHistory.length; i++) {
+      if (this.activationHistory[i]!.time >= cutoff250) {
+        insideIndices.push(i);
+      }
+    }
+    let effectiveWindow: Array<{ time: number; valid: boolean }> = [];
+    if (insideIndices.length > 0) {
+      const firstInsideIdx = insideIndices[0]!;
+      const startIdx = firstInsideIdx > 0 ? firstInsideIdx - 1 : firstInsideIdx;
+      effectiveWindow = this.activationHistory.slice(startIdx);
+    } else if (this.activationHistory.length > 0) {
+      effectiveWindow = [this.activationHistory[this.activationHistory.length - 1]!];
+    }
+
+    const windowSpan =
+      effectiveWindow.length > 1 && effectiveWindow[0]
+        ? nowMs - effectiveWindow[0].time
+        : 0;
+    const validCount = effectiveWindow.filter((h) => h.valid).length;
+    const validRatio =
+      effectiveWindow.length > 0 ? validCount / effectiveWindow.length : 0;
+
+    const last3 = this.activationHistory.slice(-3);
+    const last3Span = last3.length === 3 ? nowMs - last3[0]!.time : 0;
+    const last3AreValidLowFps =
+      last3.length === 3 && last3.every((h) => h.valid) && last3Span >= 200;
+    const shouldActivate =
+      (windowSpan >= ACTIVATION_WINDOW_MS && validRatio >= ACTIVATION_RATIO) ||
+      last3AreValidLowFps;
+
+    let justActivated = false;
+    if (!this.active) {
+      if (shouldActivate && activeHand) {
+        this.active = true;
+        justActivated = true;
+        this.lastValidHandMs = nowMs;
+        this.v4ActiveLastSeenMs = nowMs;
+        this.v4ActivePalmCenter = activeHand.palmCenter;
+        this.v4ActiveWrist = activeHand.wrist;
+        this.v4ActiveHasValidGesture = true;
+        this.v4StepDisarmed = false;
+        this.v4NeutralSinceMs = null;
+        this.v4BeyondThresholdSinceMs = null;
+        this.v4BeyondThresholdFrames = 0;
+        this.v4PendingDirection = null;
+        this.v4LiveAccumulatedMs = 0;
+        this.v4LiveLastSeenMs = null;
+        this.v4LiveDisarmed = false;
+      }
+    } else {
+      if (userHandsCount > 0 || activeHand !== null) {
+        this.lastValidHandMs = nowMs;
+      } else if (nowMs - this.lastValidHandMs >= effectiveDeactivationTimeoutMs) {
+        this.active = false;
+        this.v4ActivePalmCenter = null;
+        this.v4ActiveWrist = null;
+        this.v4ActiveLastSeenMs = null;
+        this.v4ActiveHasValidGesture = false;
+        this.v4AlternativeValidSinceMs = null;
+        this.v4AlternativePalmCenter = null;
+        this.v4StepDisarmed = false;
+        this.v4NeutralSinceMs = null;
+        this.v4BeyondThresholdSinceMs = null;
+        this.v4BeyondThresholdFrames = 0;
+        this.v4PendingDirection = null;
+        this.v4PulseArrow = null;
+        this.v4LiveAccumulatedMs = 0;
+        this.v4LiveLastSeenMs = null;
+        this.v4LiveDisarmed = false;
+        this.anchorX = null;
+        this.anchorOffset = null;
+        this.xFilter.reset();
+        this.yFilter.reset();
+      }
+    }
+
+    // 4. Posición y Suavizado
+    if (activeHand) {
+      this.gesture = activeHand.gesture;
+      const rawX = 1 - activeHand.palmCenter.x;
+      const rawY = activeHand.palmCenter.y;
+      this.x = this.xFilter.filter(rawX, nowMs);
+      this.y = this.yFilter.filter(rawY, nowMs);
+
+      // Calcular poseSide y classifierSide
+      this.v4ClassifierSide = activeHand.handedness ?? 'None';
+      this.v4PoseSide = computeHandPoseSide(activeHand.wrist, user);
+    } else if (!this.active) {
+      this.gesture = 'None';
+      this.v4PoseSide = 'None';
+      this.v4ClassifierSide = 'None';
+    }
+
+    // 5. Ancla y zona neutra (relativa al cuerpo)
+    if (justActivated) {
+      this.anchorX = this.x;
+      if (user) {
+        this.anchorOffset = this.x - user.cx;
+      }
+      if (
+        typeof currentIndex === 'number' &&
+        currentIndex >= 0 &&
+        currentIndex < itemCount
+      ) {
+        this.index = currentIndex;
+      } else if (itemCount > 0) {
+        this.index = Math.floor(itemCount / 2);
+      }
+    } else if (this.active && this.anchorX === null) {
+      this.anchorX = this.x;
+      if (user) {
+        this.anchorOffset = this.x - user.cx;
+      }
+    } else if (
+      this.active &&
+      this.anchorX !== null &&
+      user &&
+      this.anchorOffset !== null
+    ) {
+      this.anchorX = user.cx + this.anchorOffset;
+    }
+
+    // 6. Detección de Índice (Geométrico + Clasificador)
+    let isClassifierIndex = false;
+    let isGeomIndex = false;
+    if (activeHand) {
+      isClassifierIndex = activeHand.gesture === 'Pointing_Up' && activeHand.score >= 0.4;
+      isGeomIndex = detectGeometricIndex(activeHand.landmarks);
+    }
+    const isIndexUp = isClassifierIndex || isGeomIndex;
+
+    if (isClassifierIndex && isGeomIndex) {
+      this.v4IndexSource = 'ambos';
+    } else if (isGeomIndex) {
+      this.v4IndexSource = 'geométrico';
+    } else if (isClassifierIndex) {
+      this.v4IndexSource = 'clasificador';
+    } else {
+      this.v4IndexSource = 'ninguno';
+    }
+
+    // 7. Desplazamiento y lógica de Pasos
+    const swWidth = user && user.sw > 0 ? user.sw : 0.2;
+    let d = 0;
+
+    if (this.active && this.anchorX !== null) {
+      d = (this.x - this.anchorX) / swWidth;
+
+      // Re-centrado suave en neutral (|d| < 0.20)
+      if (Math.abs(d) < STEP_RESET_DEAD && prevUpdateMs !== null) {
+        const frameDt = Math.max(0, Math.min(500, nowMs - prevUpdateMs));
+        const alpha = 1 - Math.exp(-frameDt / 2000);
+        this.anchorX = this.anchorX + alpha * (this.x - this.anchorX);
+        if (user) {
+          this.anchorOffset = this.anchorX - user.cx;
+        }
+        d = (this.x - this.anchorX) / swWidth;
+      }
+
+      // Re-armado del disparador si volvió al centro (|d| < 0.20 durante >= 150 ms)
+      if (Math.abs(d) < STEP_RESET_DEAD) {
+        if (this.v4NeutralSinceMs === null) {
+          this.v4NeutralSinceMs = nowMs;
+        } else if (nowMs - this.v4NeutralSinceMs >= STEP_RESET_MS) {
+          this.v4StepDisarmed = false;
+        }
+      } else {
+        this.v4NeutralSinceMs = null;
+      }
+
+      // Disparo de Paso por Gesto:
+      // Congelado si isPaused, isIndexUp, o si disparador está desarmado
+      if (!isPaused && !isIndexUp && !this.v4StepDisarmed && itemCount > 0) {
+        let isEligible = false;
+        let candidateDir: 'left' | 'right' | null = null;
+
+        if (this.v4PoseSide === 'Left') {
+          if (d <= -STEP_THRESHOLD) {
+            isEligible = true;
+            candidateDir = 'left';
+          }
+        } else if (this.v4PoseSide === 'Right') {
+          if (d >= STEP_THRESHOLD) {
+            isEligible = true;
+            candidateDir = 'right';
+          }
+        } else {
+          // Si el lado no se puede calcular, cualquier mano puede disparar en ambos sentidos
+          if (d <= -STEP_THRESHOLD) {
+            isEligible = true;
+            candidateDir = 'left';
+          } else if (d >= STEP_THRESHOLD) {
+            isEligible = true;
+            candidateDir = 'right';
+          }
+        }
+
+        if (isEligible && candidateDir !== null) {
+          if (this.v4PendingDirection === candidateDir) {
+            this.v4BeyondThresholdFrames++;
+          } else {
+            this.v4PendingDirection = candidateDir;
+            this.v4BeyondThresholdSinceMs = nowMs;
+            this.v4BeyondThresholdFrames = 1;
+          }
+
+          const holdTime =
+            this.v4BeyondThresholdSinceMs !== null
+              ? nowMs - this.v4BeyondThresholdSinceMs
+              : 0;
+          const meetsNoiseFilter =
+            this.v4BeyondThresholdFrames >= STEP_NOISE_FRAMES ||
+            holdTime >= STEP_NOISE_MS;
+          const meetsCooldown = nowMs - this.v4LastStepTriggeredMs >= STEP_COOLDOWN_MS;
+
+          if (meetsNoiseFilter && meetsCooldown) {
+            const delta = candidateDir === 'right' ? 1 : -1;
+            const nextIdx = clamp(this.index + delta, 0, itemCount - 1);
+            if (nextIdx !== this.index) {
+              this.index = nextIdx;
+              events.push({
+                type: 'step',
+                index: this.index,
+                direction: candidateDir,
+              });
+            }
+            this.v4LastStepTriggeredMs = nowMs;
+            this.v4StepDisarmed = true;
+            this.v4NeutralSinceMs = null;
+            this.v4BeyondThresholdSinceMs = null;
+            this.v4BeyondThresholdFrames = 0;
+            this.v4PendingDirection = null;
+            this.v4PulseArrow = candidateDir;
+            this.v4PulseUntilMs = nowMs + STEP_PULSE_MS;
+          }
+        } else {
+          this.v4PendingDirection = null;
+          this.v4BeyondThresholdSinceMs = null;
+          this.v4BeyondThresholdFrames = 0;
+        }
+      } else {
+        this.v4PendingDirection = null;
+        this.v4BeyondThresholdSinceMs = null;
+        this.v4BeyondThresholdFrames = 0;
+      }
+    }
+
+    // Pulso de flecha
+    let pulseArrow: 'left' | 'right' | null = null;
+    if (this.v4PulseArrow !== null && nowMs < this.v4PulseUntilMs) {
+      pulseArrow = this.v4PulseArrow;
+    } else {
+      this.v4PulseArrow = null;
+    }
+
+    // 8. Confirmación Live con Índice (Sección 3.1)
+    if (!isIndexUp) {
+      if (this.v4LiveNotPointingSinceMs === null) {
+        this.v4LiveNotPointingSinceMs = nowMs;
+      } else if (nowMs - this.v4LiveNotPointingSinceMs >= LIVE_REARM_MS) {
+        this.v4LiveDisarmed = false;
+      }
+      this.v4LiveAccumulatedMs = 0;
+      this.v4LiveLastSeenMs = null;
+    } else {
+      this.v4LiveNotPointingSinceMs = null;
+
+      if (!isPaused && this.active && !this.v4LiveDisarmed && isLiveAvailable) {
+        if (this.v4LiveLastSeenMs === null) {
+          const initialDt =
+            prevUpdateMs !== null ? Math.min(150, Math.max(0, nowMs - prevUpdateMs)) : 0;
+          this.v4LiveAccumulatedMs += initialDt;
+        } else {
+          this.v4LiveAccumulatedMs += Math.max(0, nowMs - this.v4LiveLastSeenMs);
+        }
+        this.v4LiveLastSeenMs = nowMs;
+
+        if (this.v4LiveAccumulatedMs >= CONFIRM_LIVE_MS) {
+          events.push({ type: 'live' });
+          this.v4LiveDisarmed = true;
+          this.v4LiveAccumulatedMs = 0;
+          this.v4LiveLastSeenMs = null;
+        }
+      } else if (!isLiveAvailable) {
+        this.v4LiveAccumulatedMs = 0;
+        this.v4LiveLastSeenMs = null;
+      }
+    }
+
+    const confirmProgress = isLiveAvailable
+      ? clamp(this.v4LiveAccumulatedMs / CONFIRM_LIVE_MS, 0, 1)
+      : 0;
+
+    return {
+      cursor: {
+        active: this.active,
+        x: this.x,
+        y: this.y,
+        index: this.index,
+        dwellProgress: confirmProgress,
+        gesture: this.gesture,
+        anchorX: this.anchorX,
+        displacement: d,
+        leverState: 'neutral',
+        directionArrow: pulseArrow,
+        confirmProgress,
+        ownerReason: this.lastOwnerReason,
+        activeHandSide: this.v4PoseSide,
+        handSwitchCount: this.handSwitchCount,
+        poseSide: this.v4PoseSide,
+        classifierSide: this.v4ClassifierSide,
+        indexSource: this.v4IndexSource,
+        isStepDisarmed: this.v4StepDisarmed,
+        pulseArrow,
       },
       events,
       userHandsCount,

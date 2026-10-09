@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   HandCursorTracker,
   type DetectedHandInput,
@@ -50,6 +50,17 @@ const makeHand = (
 const TEST_RATES = [10, 24];
 
 describe('Hand Cursor v3: Estabilidad de la palanca y de la confirmación (tests/unit/hand-cursor-v3.test.ts)', () => {
+  beforeEach(() => {
+    if (typeof window !== 'undefined') {
+      window.location.search = '?hand_mode=palanca';
+    }
+  });
+
+  afterEach(() => {
+    if (typeof window !== 'undefined') {
+      window.location.search = '';
+    }
+  });
   // Test 1: Dos manos del usuario; la derecha activa; la izquierda sube más alto durante 1 s → la activa sigue siendo la derecha y 0 pasos
   TEST_RATES.forEach((fps) => {
     it(`a ${fps} fps con jitter: dos manos del usuario, derecha activa, izquierda sube más alto → derecha sigue activa y 0 pasos`, () => {

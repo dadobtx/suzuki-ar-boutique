@@ -207,3 +207,27 @@ export function isHandAbsoluteModeEnabled(): boolean {
   }
   return false;
 }
+
+/**
+ * Indicador para modo de palanca continua v2/v3: ?hand_mode=palanca
+ */
+export function isHandLeverModeEnabled(): boolean {
+  if (typeof window === 'undefined' || !window.location) return false;
+  try {
+    const searchParams = new URLSearchParams(window.location.search);
+    if (searchParams.get('hand_mode') === 'palanca') return true;
+  } catch {
+    // ignore
+  }
+  try {
+    const hash = window.location.hash;
+    const qIndex = hash.indexOf('?');
+    if (qIndex !== -1) {
+      const hashParams = new URLSearchParams(hash.slice(qIndex));
+      if (hashParams.get('hand_mode') === 'palanca') return true;
+    }
+  } catch {
+    // ignore
+  }
+  return false;
+}
