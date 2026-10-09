@@ -354,6 +354,19 @@ function DiagnosticOverlayInner() {
                   </span>
                 </div>
                 <div>
+                  <span className="text-zinc-400">Lado (pose / clasificador): </span>
+                  <span className="text-amber-300 font-mono">
+                    {useHandCursorStore.getState().cursor.poseSide ?? 'None'} /{' '}
+                    {useHandCursorStore.getState().cursor.classifierSide ?? 'None'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-zinc-400">Índice: </span>
+                  <span className="text-cyan-300 font-mono">
+                    {useHandCursorStore.getState().cursor.indexSource ?? 'ninguno'}
+                  </span>
+                </div>
+                <div>
                   <span className="text-zinc-400">Manos (Total / Usuario): </span>
                   <span className="text-zinc-200 font-medium">
                     {useHandCursorStore.getState().detectedHandsCount} /{' '}

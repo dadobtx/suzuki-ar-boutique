@@ -1,0 +1,150 @@
+PROMPT PARA ANTIGRAVITY — Mano v4: un gesto = un paso con prueba automática, e índice = VERME EN VIVO
+Guardar en la raíz del repo como: prompt_mano_v4_un_paso.txt
+Rama: feature/mano-v4 desde main actualizado (con fix/mano-v3 mergeado). NO mergear.
+
+====================================================================
+1. DECISIÓN DE DARIO (después de probar v2 y v3 con cámara real)
+====================================================================
+La palanca continua (pasos cada 650/350 ms mientras la mano está desplazada) no funciona bien con
+gente real: se "enclava" y da más pasos de los que la persona quiere. Se reemplaza por un modelo
+DISCRETO, como un control remoto:
+  - Mano IZQUIERDA desplazada hacia la izquierda (hacia afuera del cuerpo) → UN paso a la izquierda.
+  - Mano DERECHA desplazada hacia la derecha (hacia afuera del cuerpo) → UN paso a la derecha.
+  - Un gesto = un paso, sin importar cuánto tiempo se quede la mano desplazada. Para dar otro paso
+    hay que volver al centro y repetir el gesto.
+Además, con cada paso la prenda nueva se PONE AUTOMÁTICAMENTE en el AR (no hace falta confirmar
+para probarse algo), y el gesto del ÍNDICE pasa a activar el botón "VERME EN VIVO" (Lucy).
+La detección del índice empeoró, sobre todo con la mano izquierda: se refuerza (sección 3).
+
+"Izquierda/derecha" siempre en coordenadas de PANTALLA (espejo): la mano izquierda de la persona
+aparece a la izquierda de la pantalla y la mueve hacia la izquierda de la pantalla.
+
+====================================================================
+2. MODELO NUEVO: "PASO POR GESTO"
+====================================================================
+2.1 Ancla y zona neutra: se conservan de la v3 (ancla relativa al cuerpo, re-centrado suave en
+    neutral, cambio de mano re-ancla). El candado de mano se reemplaza según la sección 2bis.
+2.2 Disparo: d = (x − ancla) / swWidth.
+    - La mano IZQUIERDA (lado calculado por el pose, sección 2bis) solo puede disparar pasos a la izquierda:
+      cuando d ≤ −STEP_THRESHOLD (0.35) → 1 paso a la izquierda.
+    - La mano DERECHA solo dispara pasos a la derecha: d ≥ +0.35 → 1 paso a la derecha.
+    - Movimientos hacia el lado contrario (cruzar la mano por delante del cuerpo) NO disparan nada.
+    - Si el lado no se puede calcular, cualquier mano puede disparar en ambos sentidos.
+2.3 Un solo paso por excursión: tras disparar, el disparador queda DESARMADO hasta que |d| < 0.20
+    (volvió al centro) durante ≥ 150 ms. Quedarse desplazado 1 s o 10 s da exactamente 1 paso.
+    Además, separación mínima de 400 ms entre dos pasos (anti-rebote).
+2.4 La velocidad del gesto no importa (un barrido rápido o un desplazamiento lento cuentan igual),
+    pero la mano debe sostener d más allá del umbral al menos 2 cuadros consecutivos o 80 ms para
+    evitar disparos por un solo cuadro de ruido.
+2.5 Quitar por completo la repetición automática (STEP_SLOW_MS / STEP_FAST_MS, estados lento/rápido)
+    del modo por defecto. Dejarla accesible SOLO con ?hand_mode=palanca para comparar (sin cambiar sus
+    tests).
+2.6 Feedback visual: al disparar un paso, la flecha ◀/▶ del cursor hace un "pulso" de 250 ms y
+    luego se oculta; mientras el disparador está desarmado (esperando volver al centro) el cursor
+    muestra un punto tenue en el centro como pista de "vuelve al centro".
+2.7 PRUEBA AUTOMÁTICA EN CADA PASO
+    - Cada paso emite un evento { type: 'step', index } y RackPanel llama a handleTakeOrReturn(index,
+      'hand_step') para la prenda de la nueva posición: la prenda anterior vuelve a su gancho y la nueva
+      vuela al espejo (el mismo vuelo solapado de hoy). El AR queda con la prenda nueva.
+    - Si llega un paso mientras hay un vuelo en curso (isBusy), NO se descarta: se guarda como "paso
+      pendiente" (solo el último) y se ejecuta al terminar el vuelo. Así dos gestos seguidos rápidos
+      terminan en la prenda correcta.
+    - Al activarse el cursor (levantar la mano) NO se cambia de prenda: si no hay prenda puesta, la
+      primera se pone recién con el primer paso.
+    - Analytics: method 'hand_step' (agregar al union, sin cambiar los existentes).
+    - La toma por índice deja de existir: ya no hay "take" por confirmación.
+2.8 Texto de guía:
+    cursor activo: "MANO IZQUIERDA ◀ · MANO DERECHA ▶ · ÍNDICE ☝ PARA VERTE EN VIVO"
+    (si el botón VERME EN VIVO no está disponible para esa prenda, omitir la parte del índice).
+
+
+====================================================================
+2bis. IDENTIDAD DE LA MANO: POR EL CUERPO, NO POR LA ETIQUETA DEL CLASIFICADOR (bug de la v3)
+====================================================================
+Síntoma en la prueba de Dario: con la mano derecha al frente y la palma abierta, el cursor seguía a
+la OTRA mano; para "refrescar" había que bajar la mano y volver a subirla (y lo mismo al revés).
+Causa: la v3 fija la mano activa por la etiqueta handedness del GestureRecognizer ('Left'/'Right').
+Esa etiqueta (a) asume imagen espejada tipo selfie, así que con nuestro video puede venir invertida,
+y (b) a 2 m cambia de un cuadro a otro. Cuando la etiqueta de la mano real cambia, el candado la
+trata como "otra mano" y la ignora hasta que desaparece 500 ms.
+Corrección:
+  - NO usar la etiqueta del clasificador para identidad ni para el lado. Eliminar el candado por
+    etiqueta.
+  - Lado de cada mano = la muñeca del POSE fijado más cercana a su landmark 0: muñeca izquierda del
+    pose (15) → mano izquierda de la persona; muñeca derecha (16) → mano derecha. Si no hay muñecas
+    del pose, el lado es el de su posición respecto de user.cx (en coordenadas de pantalla).
+  - En pantalla (espejo): mano izquierda de la persona = lado izquierdo de la pantalla. Verificarlo con
+    un test que construya landmarks de pose y de mano en coordenadas de video SIN espejar y compruebe
+    que "mano izquierda de la persona → paso a la izquierda de la pantalla".
+  - Mano activa = la que tenga gesto válido (palma o índice) y esté más arriba; candado por
+    CONTINUIDAD de posición (palmCenter a ≤ 0.5·swWidth del cuadro anterior), no por etiqueta.
+    Si la mano activa deja de tener gesto válido y la otra sí lo tiene durante ≥ 250 ms, cambiar de
+    mano (re-anclar). No exigir bajar la mano.
+  - Overlay de debug: mostrar el lado calculado por el pose y, aparte, la etiqueta del clasificador,
+    para ver si discrepan.
+  Test: dos manos visibles, la derecha con palma abierta y la izquierda relajada; la etiqueta del
+  clasificador alterna Left/Right cada 3 cuadros → la activa sigue siendo la derecha todo el tiempo.
+
+====================================================================
+3. CONFIRMACIÓN CON EL ÍNDICE MÁS ROBUSTA
+====================================================================
+El GestureRecognizer reconoce peor Pointing_Up con la mano izquierda y a distancia. Agregar una
+detección GEOMÉTRICA del índice levantado usando los 21 landmarks de la mano (independiente del
+clasificador y de la lateralidad):
+  - "índice extendido": la punta del índice (8) está más lejos de la muñeca (0) que su nudillo (5)
+    por un factor ≥ 1.6 × la distancia 0→5, y la punta está por encima (y menor) de la articulación 6.
+  - "resto recogido": las puntas de medio (12), anular (16) y meñique (20) están a menos de
+    1.15 × la distancia de su nudillo (9, 13, 17) a la muñeca.
+  - indexUp = (gesture === 'Pointing_Up' && score ≥ 0.4) || (índice extendido && resto recogido).
+Usar indexUp en lugar de Pointing_Up. Mientras indexUp, el disparador de pasos queda congelado (no
+puede moverse el perchero al apuntar).
+
+3.1 EL ÍNDICE ACTIVA "VERME EN VIVO"
+    - Sostener indexUp CONFIRM_LIVE_MS = 1200 ms (más que antes: la sesión en vivo cuesta dinero,
+      ~$0.30, y tiene límite por visitante) → evento { type: 'live' }.
+    - El anillo rojo del cursor se llena durante esos 1200 ms y además el botón "VERME EN VIVO" del
+      espejo muestra el mismo progreso (borde que se llena), para que la persona entienda qué va a pasar.
+    - CameraStage escucha el evento y llama EXACTAMENTE al mismo handler del botón:
+      handleStartLiveTryon. Solo si el botón está visible y habilitado en ese momento
+      (showLiveButton && !isLiveLoading && !isLiveActive && kioskState === 'TRYON' && hay prenda puesta).
+      Si no lo está, el anillo no avanza. No duplicar lógica de Lucy, límites ni costos: todo eso ya
+      vive en el handler y en el Worker.
+    - Después de disparar, desarmado hasta que indexUp sea falso ≥ 300 ms.
+    - Durante la sesión en vivo los gestos de paso quedan pausados (no cambiar de prenda en medio de una
+      sesión pagada). Al terminar la sesión, se reanudan.
+Overlay de debug: mostrar "índice: clasificador / geométrico / ninguno".
+Para eso useHandCursor.ts debe pasar los 21 landmarks de la mano (en coordenadas visibles) en
+DetectedHandInput.landmarks.
+
+====================================================================
+4. TESTS NUEVOS (tests/unit/hand-cursor-v4.test.ts), jitter ±20 % a 10 y 24 fps
+====================================================================
+- Mano derecha: d sube a 0.6 y se queda 3 s → exactamente 1 paso a la derecha.
+- Mano derecha: 3 excursiones a 0.6 separadas por vueltas al centro (|d| < 0.1 durante 300 ms)
+  → 3 pasos.
+- Mano derecha cruzando hacia la izquierda (d = −0.6) → 0 pasos.
+- Mano izquierda: d = −0.6 → 1 paso a la izquierda; d = +0.6 → 0 pasos.
+- Un solo cuadro con d = 0.6 entre cuadros con d = 0 → 0 pasos.
+- Dos excursiones a menos de 400 ms → 1 paso.
+- Cada paso emite 'step' con el índice nuevo; RackPanel llama handleTakeOrReturn(nuevoIndice,
+  'hand_step'); dos pasos durante un vuelo → al terminar queda puesta la prenda del último paso.
+- Activar el cursor sin moverse → ninguna prenda cambia.
+- Índice geométrico: landmarks sintéticos de índice extendido con gesture 'None' durante 1200 ms
+  → 1 evento 'live'; 900 ms → 0; mano abierta (todos extendidos) → 0; puño (todos recogidos) → 0.
+- Mano izquierda con gesture 'Pointing_Up' y score 0.45 durante 1200 ms → 1 'live'.
+- Con el botón en vivo no disponible (showLiveButton false o isLiveActive) → el anillo no avanza y no
+  se llama handleStartLiveTryon (test de integración con un mock del handler).
+- Con una sesión en vivo activa, gestos de paso → 0 cambios de prenda.
+- Los tests existentes (v2, v3, rates) siguen pasando: los que dependen de la palanca continua deben
+  correr con hand_mode=palanca, sin cambiar sus aserciones; explicarlo en el reporte.
+
+====================================================================
+5. REGLAS Y EVIDENCIA
+====================================================================
+- Solo hand-cursor.ts, useHandCursor.ts, hand-input-flag.ts, HandCursor.tsx, KioskGuide.tsx (texto),
+  RackPanel.tsx (evento 'step' y paso pendiente), CameraStage.tsx (evento 'live' → handleStartLiveTryon
+  y progreso en el botón), es.json/en.json, analytics (nuevo method), overlay de debug y tests.
+- NO tocar src/lib/liveTryon.ts, el Worker ni los límites de sesiones en vivo.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build y git diff --stat main.
+- Si un test nuevo no pasa en 3 intentos, detenerse, hacer commit WIP y reportar el error exacto
+  (no quedarse en bucle ni cambiar aserciones).

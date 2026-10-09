@@ -131,7 +131,7 @@ export interface StyleDownloadedEvent extends BaseEvent {
 
 export interface GarmentTakeInputEvent extends BaseEvent {
   type: 'garment_take_input';
-  method: 'hand_dwell' | 'hand_point' | 'touch' | 'keyboard';
+  method: 'hand_dwell' | 'hand_point' | 'touch' | 'keyboard' | 'hand_step';
   sku: string;
 }
 

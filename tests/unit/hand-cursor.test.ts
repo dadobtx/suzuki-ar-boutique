@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import {
   HandCursorTracker,
   selectUserHand,
@@ -10,7 +10,10 @@ import {
 describe('Hand Cursor Engine (src/lib/hand-cursor.ts)', () => {
   let tracker: HandCursorTracker;
 
+  afterEach(() => { window.history.replaceState(null, '', '/'); });
+
   beforeEach(() => {
+    window.history.replaceState(null, '', '/?hand_mode=palanca');
     tracker = new HandCursorTracker({ enableDwell: true, useAbsoluteMapping: true });
   });
 
