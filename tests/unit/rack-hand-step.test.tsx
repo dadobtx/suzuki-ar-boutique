@@ -112,4 +112,33 @@ describe('RackPanel - hand_step (tests/unit/rack-hand-step.test.tsx)', () => {
     await wait(700);
     expect(useGarmentStore.getState().activeGarmentId).toBeNull();
   });
+
+  it('con el cursor inactivo, el foco del perchero no cambia aunque el tracker se reinicie', async () => {
+    const { getAllByRole } = render(<RackPanel mode="interactive" active={true} />);
+    const slots = getAllByRole('option');
+
+    // Cambiar a foco en 4 con cursor activo
+    act(() => {
+      useHandCursorStore.setState({
+        cursor: {
+          active: true,
+          x: 0.5,
+          y: 0.5,
+          index: 4,
+          dwellProgress: 0,
+          gesture: 'Open_Palm',
+        },
+      } as never);
+    });
+    expect(slots[4].getAttribute('aria-selected')).toBe('true');
+
+    // Ahora el cursor pasa a inactivo / reset
+    act(() => {
+      useHandCursorStore.getState().reset();
+    });
+
+    // El foco del perchero NO debe haber vuelto a 0, se mantiene en 4
+    expect(slots[4].getAttribute('aria-selected')).toBe('true');
+    expect(slots[0].getAttribute('aria-selected')).toBe('false');
+  });
 });

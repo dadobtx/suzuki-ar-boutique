@@ -56,6 +56,15 @@ export interface UsePoseResult {
     left: NormalizedLandmark | null;
     right: NormalizedLandmark | null;
   };
+  lockedElbows?: {
+    left: NormalizedLandmark | null;
+    right: NormalizedLandmark | null;
+  };
+  lockedHips?: {
+    left: NormalizedLandmark | null;
+    right: NormalizedLandmark | null;
+  };
+  shouldersY?: number | null;
 }
 
 // Singleton landmarker (initialized once per page lifetime)
@@ -165,6 +174,21 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
     left: null,
     right: null,
   });
+  const [lockedElbows, setLockedElbows] = useState<{
+    left: NormalizedLandmark | null;
+    right: NormalizedLandmark | null;
+  }>({
+    left: null,
+    right: null,
+  });
+  const [lockedHips, setLockedHips] = useState<{
+    left: NormalizedLandmark | null;
+    right: NormalizedLandmark | null;
+  }>({
+    left: null,
+    right: null,
+  });
+  const [shouldersY, setShouldersY] = useState<number | null>(null);
 
   const filterRef = useRef<Point3DFilter[]>([]);
   const callbackId = useRef(0);
@@ -260,6 +284,15 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             left: null as NormalizedLandmark | null,
             right: null as NormalizedLandmark | null,
           };
+          let currentLockedElbows = {
+            left: null as NormalizedLandmark | null,
+            right: null as NormalizedLandmark | null,
+          };
+          let currentLockedHips = {
+            left: null as NormalizedLandmark | null,
+            right: null as NormalizedLandmark | null,
+          };
+          let currentShouldersY: number | null = null;
           let nextActiveZoneTelemetry: ActiveZonePoseTelemetry = {
             enabled: isZonaEnabled,
             lockedIndex: null,
@@ -336,6 +369,19 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
                 left: pose[15] ?? null,
                 right: pose[16] ?? null,
               };
+              currentLockedElbows = {
+                left: pose[13] ?? null,
+                right: pose[14] ?? null,
+              };
+              currentLockedHips = {
+                left: pose[23] ?? null,
+                right: pose[24] ?? null,
+              };
+              if (pose[11] && pose[12]) {
+                currentShouldersY = (pose[11].y + pose[12].y) / 2;
+              } else if (pose[11] || pose[12]) {
+                currentShouldersY = (pose[11] ?? pose[12])!.y;
+              }
 
               const currentPersonKey = selectionResult.state.lockedPerson
                 ? String(selectionResult.state.lockedPerson.lockedSinceMs)
@@ -349,6 +395,9 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
               worldPose = null;
               maskInfo = null;
               currentLockedWrists = { left: null, right: null };
+              currentLockedElbows = { left: null, right: null };
+              currentLockedHips = { left: null, right: null };
+              currentShouldersY = null;
               if (lastLockedPersonKeyRef.current !== null) {
                 filterRef.current.forEach((f) => f.reset());
                 lastLockedPersonKeyRef.current = null;
@@ -369,11 +418,27 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
                 left: pose[15] ?? null,
                 right: pose[16] ?? null,
               };
+              currentLockedElbows = {
+                left: pose[13] ?? null,
+                right: pose[14] ?? null,
+              };
+              currentLockedHips = {
+                left: pose[23] ?? null,
+                right: pose[24] ?? null,
+              };
+              if (pose[11] && pose[12]) {
+                currentShouldersY = (pose[11].y + pose[12].y) / 2;
+              } else if (pose[11] || pose[12]) {
+                currentShouldersY = (pose[11] ?? pose[12])!.y;
+              }
             }
           }
 
           setActiveZone(nextActiveZoneTelemetry);
           setLockedWrists(currentLockedWrists);
+          setLockedElbows(currentLockedElbows);
+          setLockedHips(currentLockedHips);
+          setShouldersY(currentShouldersY);
 
           const nowPerf = performance.now();
           const prevPerf =
@@ -532,5 +597,8 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
     frameId,
     activeZone,
     lockedWrists,
+    lockedElbows,
+    lockedHips,
+    shouldersY,
   };
 }

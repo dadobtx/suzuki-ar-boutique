@@ -21,6 +21,7 @@ import {
   type HandLandmarkPoint,
 } from '@/lib/hand-cursor';
 import { useHandCursorStore } from '@/store/handCursor';
+import { selectActiveGarmentIndex } from '@/store/garment';
 import { toVisibleCoordinates } from '@/lib/active-zone';
 
 export interface UseHandCursorOptions {
@@ -28,6 +29,18 @@ export interface UseHandCursorOptions {
   mirrorContainerRef?: RefObject<HTMLElement | null>;
   isLiveAvailable?: boolean; // botón VERME EN VIVO visible y habilitado
   isLiveActive?: boolean; // sesión en vivo activa o cargando
+}
+
+export function resolveCurrentRackIndex(catalogLength = 10): number {
+  const activeIdx = selectActiveGarmentIndex();
+  if (activeIdx !== null && activeIdx >= 0) {
+    return activeIdx;
+  }
+  const rackFocus = useHandCursorStore.getState().rackFocusIndex;
+  if (rackFocus !== null && rackFocus >= 0) {
+    return rackFocus;
+  }
+  return Math.floor(catalogLength / 2);
 }
 
 let recognizerSingleton: GestureRecognizer | null = null;
@@ -302,8 +315,64 @@ export function useHandCursor(
             )
           : null;
 
+        const leftElbowVis = pose.lockedElbows?.left
+          ? toVisibleCoordinates(
+              pose.lockedElbows.left,
+              layout,
+              video.videoWidth,
+              video.videoHeight,
+              containerWidth,
+              containerHeight,
+            )
+          : null;
+        const rightElbowVis = pose.lockedElbows?.right
+          ? toVisibleCoordinates(
+              pose.lockedElbows.right,
+              layout,
+              video.videoWidth,
+              video.videoHeight,
+              containerWidth,
+              containerHeight,
+            )
+          : null;
+        const leftHipVis = pose.lockedHips?.left
+          ? toVisibleCoordinates(
+              pose.lockedHips.left,
+              layout,
+              video.videoWidth,
+              video.videoHeight,
+              containerWidth,
+              containerHeight,
+            )
+          : null;
+        const rightHipVis = pose.lockedHips?.right
+          ? toVisibleCoordinates(
+              pose.lockedHips.right,
+              layout,
+              video.videoWidth,
+              video.videoHeight,
+              containerWidth,
+              containerHeight,
+            )
+          : null;
+        let shouldersY: number | null = null;
+        if (pose.shouldersY !== undefined && pose.shouldersY !== null) {
+          const pt = toVisibleCoordinates(
+            { x: 0.5, y: pose.shouldersY, z: 0, visibility: 1 },
+            layout,
+            video.videoWidth,
+            video.videoHeight,
+            containerWidth,
+            containerHeight,
+          );
+          shouldersY = pt.y;
+        }
+
         targetUser = {
           lockedWrists: { left: leftWristVis, right: rightWristVis },
+          lockedElbows: { left: leftElbowVis, right: rightElbowVis },
+          lockedHips: { left: leftHipVis, right: rightHipVis },
+          shouldersY,
           sw: lockedCandidate.swWidth ?? lockedCandidate.sw,
           cx: 1 - lockedCandidate.cx, // en coordenadas espejadas de pantalla
           box: lockedCandidate.box,
@@ -315,6 +384,10 @@ export function useHandCursor(
             left: { x: 0.45, y: 0.6 },
             right: { x: 0.55, y: 0.6 },
           },
+          lockedElbows: {
+            left: { x: 0.45, y: 0.7 },
+            right: { x: 0.55, y: 0.7 },
+          },
           sw: 0.15,
           cx: 0.5,
           box: { minX: 0.35, maxX: 0.65, minY: 0.2, maxY: 0.85 },
@@ -324,7 +397,7 @@ export function useHandCursor(
       // Procesar frame
       const isBusy = useHandCursorStore.getState().isBusy;
       const pausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
-      const currentRackIndex = useHandCursorStore.getState().cursor.index;
+      const currentRackIndex = resolveCurrentRackIndex(itemCount);
       const isDwellEnabled = isHandDwellEnabled();
       const isAbsoluteMode = isHandAbsoluteModeEnabled();
 
@@ -604,6 +677,9 @@ export function useHandCursor(
     videoRef,
     pose.activeZone,
     pose.lockedWrists,
+    pose.lockedElbows,
+    pose.lockedHips,
+    pose.shouldersY,
     pose.latency,
     layout,
     isPortrait,

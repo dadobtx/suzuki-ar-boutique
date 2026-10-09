@@ -374,6 +374,12 @@ function DiagnosticOverlayInner() {
                   </span>
                 </div>
                 <div>
+                  <span className="text-zinc-400">Estado manos: </span>
+                  <span className="text-amber-300 font-mono text-[11px]">
+                    {useHandCursorStore.getState().cursor.handsRaisedSummary ?? 'ninguna'}
+                  </span>
+                </div>
+                <div>
                   <span className="text-zinc-400">FPS Gesto: </span>
                   <span className="text-emerald-300 font-bold">
                     {useHandCursorStore.getState().inferenceFps}

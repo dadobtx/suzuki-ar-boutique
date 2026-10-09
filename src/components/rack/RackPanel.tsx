@@ -509,13 +509,26 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
 
   handleTakeRef.current = handleTakeOrReturn;
 
+  // Sincronizar foco del perchero con el store para useHandCursor
+  useEffect(() => {
+    useHandCursorStore.getState().setRackFocusIndex(focusIdx);
+    return () => {
+      useHandCursorStore.getState().setRackFocusIndex(null);
+    };
+  }, [focusIdx]);
+
   const handCursor = useHandCursorStore((s) => s.cursor);
   const handLastEvent = useHandCursorStore((s) => s.lastEvent);
 
   // Cambio de foco por cursor de mano
   useEffect(() => {
     if (mode !== 'interactive' || !active || isLiveActive || isBusyRef.current) return;
-    if (handCursor.active && handCursor.index >= 0 && handCursor.index < items.length) {
+    if (
+      handCursor.active &&
+      handCursor.index !== null &&
+      handCursor.index >= 0 &&
+      handCursor.index < items.length
+    ) {
       setFocus(handCursor.index);
     }
   }, [

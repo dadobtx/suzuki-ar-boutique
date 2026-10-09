@@ -1,0 +1,71 @@
+PROMPT PARA ANTIGRAVITY — Mano v4.1: mano levantada y posición inicial correcta
+Guardar en la raíz del repo como: prompt_mano_v4_1.txt
+Rama: fix/mano-v4-1 desde main (e19a9d9 o posterior). NO mergear.
+
+====================================================================
+1. LO QUE REPORTÓ DARIO (cámara real, v4)
+====================================================================
+a) Para que funcione tiene que esconder la mano que NO usa detrás de la espalda: la mano relajada a
+   un costado también se detecta y le quita el control a la mano activa.
+b) A veces, al volver a levantar la mano, el perchero "vuelve a empezar" desde la prenda del
+   extremo izquierdo (la camiseta negra, índice 0).
+
+====================================================================
+2. CAUSAS (leídas en el código de main)
+====================================================================
+a) Una mano cuenta como candidata solo por estar detectada y tener gesto válido. Una mano colgando
+   relajada a 2 m suele salir como Open_Palm o 'None' con la palma visible, y compite con la activa.
+   No se exige que la mano esté LEVANTADA.
+b) useHandCursor pasa como currentIndex `useHandCursorStore.getState().cursor.index`. Cuando el
+   tracker o el store se reinician (reset() deja index = 0, DEFAULT_CURSOR.index = 0), al volver a
+   activar el cursor arranca en 0 en lugar de en la prenda que la persona tiene puesta.
+
+====================================================================
+3. CAMBIOS
+====================================================================
+3.1 Solo cuentan las manos LEVANTADAS (usando el pose fijado, sin modelos nuevos)
+  - Una mano es "levantada" si su muñeca (la del pose del mismo lado, 15 o 16, según la asociación de
+    la v4 §2bis) está por ENCIMA de su codo (13 o 14): wrist.y < elbow.y − 0.02 (y crece hacia abajo).
+    Si el codo no es visible (visibility < 0.5), usar como respaldo: palmCenter.y por encima de la
+    cadera del mismo lado (23/24) menos 0.10, o, sin caderas, por encima del punto medio entre
+    hombros y borde inferior.
+  - Las manos NO levantadas se ignoran por completo: no activan el cursor, no compiten por ser la
+    activa, no disparan pasos ni la confirmación del índice.
+  - La mano activa que se baja (deja de estar levantada) se considera perdida como si desapareciera
+    (con el mismo margen de 300 ms para cortes breves).
+  - Exponer lockedElbows además de lockedWrists desde usePose (mismo patrón, landmarks 13 y 14) y las
+    caderas si hacen falta. No cambiar la lógica de la zona activa.
+  - Overlay de debug: junto a cada mano, "levantada" / "abajo".
+
+3.2 La posición inicial es la prenda puesta
+  - currentIndex que recibe el tracker = índice en el perchero de la prenda ACTIVA
+    (activeGarmentId) si hay una; si no, la prenda con foco en RackPanel; si no, el centro.
+    No usar cursor.index del store para esto.
+  - El tracker NUNCA publica index = 0 por un reset: mientras el cursor está inactivo, el índice
+    publicado es el de la prenda activa (o null) y RackPanel no cambia el foco con cursor inactivo.
+  - Exponer desde RackPanel (o un selector de store) el índice de la prenda activa para que
+    useHandCursor lo lea sin acoplarse al componente.
+
+====================================================================
+4. TESTS NUEVOS (tests/unit/hand-cursor-v4-1.test.ts y, si aplica, rack-hand-step)
+====================================================================
+- Mano derecha levantada (muñeca sobre el codo) activa y la izquierda colgando (muñeca bajo el
+  codo) con Open_Palm score 0.9 → la izquierda no cuenta: 0 cambios de mano, 0 pasos de ella.
+- La izquierda colgando hace un movimiento lateral grande → 0 pasos.
+- Bajar la mano activa (muñeca pasa bajo el codo) 400 ms → cursor inactivo.
+- Con la prenda del índice 6 puesta: bajar la mano, que el tracker se reinicie, y volver a
+  levantarla → al activarse el índice es 6; un paso a la derecha → 7 (no 1).
+- Sin prenda puesta y foco en 4 → al activarse el índice es 4.
+- Con el cursor inactivo, el foco del perchero no cambia aunque el tracker se reinicie.
+- Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+5. REGLAS Y EVIDENCIA
+====================================================================
+- Solo hand-cursor.ts, useHandCursor.ts, usePose.ts (exponer codos/caderas, sin tocar active-zone),
+  RackPanel.tsx (fuente del índice activo y no mover foco con cursor inactivo), store/handCursor.ts,
+  overlay de debug y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Si un test nuevo no pasa en 3 intentos: detenerse, commit WIP con --no-verify, push y reportar el
+  error exacto. No cambiar aserciones existentes.
+- Commit final con tipo válido (fix(hand): ...) y sin --no-verify. Push sin mergear.

@@ -253,3 +253,12 @@ export const useGarmentStore = create<GarmentState>()(
     },
   ),
 );
+
+export function selectActiveGarmentIndex(
+  state = useGarmentStore.getState(),
+): number | null {
+  const { catalog, activeGarmentId } = state;
+  if (!activeGarmentId || !catalog || catalog.length === 0) return null;
+  const idx = catalog.findIndex((g) => g.id === activeGarmentId);
+  return idx >= 0 ? idx : null;
+}
