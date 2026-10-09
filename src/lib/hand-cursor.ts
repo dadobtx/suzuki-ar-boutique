@@ -13,15 +13,19 @@ export const SHORTCUT_STABLE_MS = 300;
 export const SHORTCUT_WINDOW_MS = 300;
 export const SHORTCUT_RATIO = 0.7;
 
-// Constantes Mano v2: Palanca y Confirmación explícita
+// Constantes Mano v2 & v3: Palanca y Confirmación explícita
 export const LEVER_DEAD = 0.3;
+export const LEVER_DEAD_HYST = 0.22;
 export const LEVER_FAST = 0.75;
+export const LEVER_FAST_HYST = 0.65;
 export const STEP_SLOW_MS = 650;
 export const STEP_FAST_MS = 350;
 export const STEP_FIRST_DELAY_MS = 250;
 export const CONFIRM_MS = 600;
 export const CONFIRM_LOST_MAX_MS = 300;
 export const GAP_LOST_MAX_MS = 300;
+export const HAND_LOCK_TIMEOUT_MS = 500;
+export const REARM_TIMEOUT_MS = 300;
 
 export interface HandLandmarkPoint {
   x: number;
@@ -30,11 +34,14 @@ export interface HandLandmarkPoint {
   visibility?: number;
 }
 
+export type HandednessSide = 'Left' | 'Right' | 'None';
+
 export interface DetectedHandInput {
   wrist: HandLandmarkPoint;
   palmCenter: HandLandmarkPoint;
   gesture: string;
   score: number;
+  handedness?: HandednessSide;
 }
 
 export interface LockedUserWrists {
@@ -76,13 +83,15 @@ export interface HandCursorData {
   index: number;
   dwellProgress: number;
   gesture: string;
-  // Propiedades v2
+  // Propiedades v2 & v3
   anchorX?: number | null;
   displacement?: number;
   leverState?: LeverState;
   directionArrow?: 'left' | 'right' | null;
   confirmProgress?: number;
   ownerReason?: OwnerMatchReason;
+  activeHandSide?: HandednessSide;
+  handSwitchCount?: number;
 }
 
 export interface HandCursorEvent {
@@ -98,6 +107,62 @@ export interface HandFrameOutput {
   detectedHandsCount: number;
 }
 
+/**
+ * Calcula el siguiente estado de palanca aplicando histéresis:
+ * Neutral -> Lento: |d| >= 0.30, Lento -> Neutral: |d| < 0.22
+ * Lento -> Rápido: |d| >= 0.75, Rápido -> Lento: |d| < 0.65
+ */
+export function computeLeverState(current: LeverState, d: number): LeverState {
+  const absD = Math.abs(d);
+  const sign = d >= 0 ? 1 : -1;
+
+  if (current === 'neutral') {
+    if (absD >= LEVER_FAST) {
+      return sign > 0 ? 'fast_right' : 'fast_left';
+    }
+    if (absD >= LEVER_DEAD) {
+      return sign > 0 ? 'slow_right' : 'slow_left';
+    }
+    return 'neutral';
+  }
+
+  const isCurrentRight = current.endsWith('right');
+  const isCurrentFast = current.startsWith('fast');
+
+  // Si cambia de signo respecto a la dirección actual
+  const currentSign = isCurrentRight ? 1 : -1;
+  if (sign !== currentSign && absD >= LEVER_DEAD_HYST) {
+    // Cruza hacia el otro lado
+    if (absD >= LEVER_FAST) {
+      return sign > 0 ? 'fast_right' : 'fast_left';
+    }
+    if (absD >= LEVER_DEAD) {
+      return sign > 0 ? 'slow_right' : 'slow_left';
+    }
+    return 'neutral';
+  }
+
+  // Misma dirección (o absD muy bajo):
+  if (isCurrentFast) {
+    if (absD < LEVER_DEAD_HYST) {
+      return 'neutral';
+    }
+    if (absD < LEVER_FAST_HYST) {
+      return isCurrentRight ? 'slow_right' : 'slow_left';
+    }
+    return isCurrentRight ? 'fast_right' : 'fast_left';
+  }
+
+  // Está en slow
+  if (absD < LEVER_DEAD_HYST) {
+    return 'neutral';
+  }
+  if (absD >= LEVER_FAST) {
+    return isCurrentRight ? 'fast_right' : 'fast_left';
+  }
+  return isCurrentRight ? 'slow_right' : 'slow_left';
+}
+
 function euclideanDist(p1: HandLandmarkPoint, p2: HandLandmarkPoint): number {
   const dx = p1.x - p2.x;
   const dy = p1.y - p2.y;
@@ -110,15 +175,21 @@ function clamp(v: number, min: number, max: number): number {
 
 /**
  * Filtra las manos detectadas para encontrar las pertenecientes al usuario fijado.
- * Reglas v2:
- * 1. ownerDist = max(0.06, 0.6 * sw)
- * 2. Continuidad: si ya había una mano del usuario y su palmCenter está a <= 0.5 * sw de la anterior
- * 3. Si lockedWrists son null pero hay una sola mano dentro del box del usuario, es del usuario
+ * Reglas v2 & v3:
+ * 1. ownerDist = max(0.06, 0.6 * sw) por muñecas si existen
+ * 2. Continuidad si no hay match por muñeca
+ * 3. Box fallback si no hay lockedWrists
+ * Para seleccionar activeHand:
+ * - Si lockedHandSide está definido ('Left' | 'Right'), se busca coincidencia de lateralidad en userHands
+ * - Si además hay lockedHandPalmCenter, se busca por cercanía a esa mano anterior (<= 0.5 * sw)
+ * - Si no hay coincidencia con la mano fijada o no había candado, se usa la más alta (menor y)
  */
 export function selectUserHand(
   hands: DetectedHandInput[],
   user: HandFrameUser | null,
   lastUserPalmCenter?: HandLandmarkPoint | null,
+  lockedHandSide?: HandednessSide | null,
+  lockedHandPalmCenter?: HandLandmarkPoint | null,
 ): {
   userHands: DetectedHandInput[];
   activeHand: DetectedHandInput | null;
@@ -130,6 +201,9 @@ export function selectUserHand(
 
   const sw = user.sw > 0 ? user.sw : 0.2;
   const ownerDist = Math.max(0.06, 0.6 * sw);
+
+  let userHands: DetectedHandInput[] = [];
+  let reason: OwnerMatchReason = 'none';
 
   // 1. Por muñecas si alguna existe
   const hasLockedWrists = Boolean(user.lockedWrists.left || user.lockedWrists.right);
@@ -146,32 +220,26 @@ export function selectUserHand(
     });
 
     if (wristMatches.length > 0) {
-      const sorted = [...wristMatches].sort((a, b) => a.palmCenter.y - b.palmCenter.y);
-      return { userHands: wristMatches, activeHand: sorted[0] ?? null, reason: 'wrist' };
+      userHands = wristMatches;
+      reason = 'wrist';
     }
   }
 
   // 2. Continuidad si teníamos una posición anterior conocida de la mano del usuario
-  if (lastUserPalmCenter) {
+  if (userHands.length === 0 && lastUserPalmCenter) {
     const continuityMaxDist = 0.5 * sw;
     const continuityMatches = hands.filter(
       (h) => euclideanDist(h.palmCenter, lastUserPalmCenter) <= continuityMaxDist,
     );
 
     if (continuityMatches.length > 0) {
-      const sorted = [...continuityMatches].sort(
-        (a, b) => a.palmCenter.y - b.palmCenter.y,
-      );
-      return {
-        userHands: continuityMatches,
-        activeHand: sorted[0] ?? null,
-        reason: 'continuity',
-      };
+      userHands = continuityMatches;
+      reason = 'continuity';
     }
   }
 
   // 3. Fallback por bounding box si lockedWrists son null y hay una sola mano dentro del recuadro
-  if (!hasLockedWrists && user.box) {
+  if (userHands.length === 0 && !hasLockedWrists && user.box) {
     const box = user.box;
     const handsInBox = hands.filter(
       (h) =>
@@ -182,11 +250,45 @@ export function selectUserHand(
     );
 
     if (handsInBox.length === 1) {
-      return { userHands: handsInBox, activeHand: handsInBox[0] ?? null, reason: 'box' };
+      userHands = handsInBox;
+      reason = 'box';
     }
   }
 
-  return { userHands: [], activeHand: null, reason: 'none' };
+  if (userHands.length === 0) {
+    return { userHands: [], activeHand: null, reason: 'none' };
+  }
+
+  // Selección de activeHand con respeto al candado de mano activa (v3)
+  if (lockedHandSide && lockedHandSide !== 'None') {
+    const sideMatches = userHands.filter((h) => h.handedness === lockedHandSide);
+    if (sideMatches.length > 0) {
+      if (lockedHandPalmCenter) {
+        const sortedByDist = [...sideMatches].sort(
+          (a, b) =>
+            euclideanDist(a.palmCenter, lockedHandPalmCenter) -
+            euclideanDist(b.palmCenter, lockedHandPalmCenter),
+        );
+        return { userHands, activeHand: sortedByDist[0] ?? null, reason };
+      }
+      const sortedByY = [...sideMatches].sort((a, b) => a.palmCenter.y - b.palmCenter.y);
+      return { userHands, activeHand: sortedByY[0] ?? null, reason };
+    }
+  }
+
+  // Si no hay match por side pero hay lockedHandPalmCenter por cercanía (continuidad espacial directa <= 0.5 * sw)
+  if (lockedHandPalmCenter) {
+    const continuityCandidate = userHands.find(
+      (h) => euclideanDist(h.palmCenter, lockedHandPalmCenter) <= 0.5 * sw,
+    );
+    if (continuityCandidate) {
+      return { userHands, activeHand: continuityCandidate, reason };
+    }
+  }
+
+  // Fallback estándar: la mano más alta de las del usuario
+  const sorted = [...userHands].sort((a, b) => a.palmCenter.y - b.palmCenter.y);
+  return { userHands, activeHand: sorted[0] ?? null, reason };
 }
 
 export interface HandCursorTrackerOptions {
@@ -195,7 +297,7 @@ export interface HandCursorTrackerOptions {
 }
 
 /**
- * Estado interno mutable mantenido por HandCursorTracker (Mano v2: Ancla, Palanca y Confirmación explícita).
+ * Estado interno mutable mantenido por HandCursorTracker (Mano v2 & v3).
  */
 export class HandCursorTracker {
   private active = false;
@@ -219,8 +321,9 @@ export class HandCursorTracker {
   private gestureHistory: Array<{ time: number; gesture: string; score: number }> = [];
   private pointingStartMs: number | null = null;
 
-  // Estado v2
+  // Estado v2 & v3
   private anchorX: number | null = null;
+  private anchorOffset: number | null = null;
   private lastUserPalmCenter: HandLandmarkPoint | null = null;
   private leverState: LeverState = 'neutral';
   private leverEnteredMs: number | null = null;
@@ -228,9 +331,16 @@ export class HandCursorTracker {
   private confirmAccumulatedMs = 0;
   private confirmLastSeenMs: number | null = null;
   private lastPointingMs: number | null = null;
+  private notPointingSinceMs: number | null = null;
   private confirmProgress = 0;
   private lastOwnerReason: OwnerMatchReason = 'none';
   private confirmedWithPointing = false;
+
+  // Candado de mano activa (v3)
+  private lockedHandSide: HandednessSide = 'None';
+  private lockedHandLastSeenMs: number | null = null;
+  private lockedHandPalmCenter: HandLandmarkPoint | null = null;
+  private handSwitchCount = 0;
 
   private options: HandCursorTrackerOptions;
 
@@ -264,8 +374,9 @@ export class HandCursorTracker {
     this.gestureHistory = [];
     this.pointingStartMs = null;
 
-    // Reset v2
+    // Reset v2 & v3
     this.anchorX = null;
+    this.anchorOffset = null;
     this.lastUserPalmCenter = null;
     this.leverState = 'neutral';
     this.leverEnteredMs = null;
@@ -273,9 +384,14 @@ export class HandCursorTracker {
     this.confirmAccumulatedMs = 0;
     this.confirmLastSeenMs = null;
     this.lastPointingMs = null;
+    this.notPointingSinceMs = null;
     this.confirmProgress = 0;
     this.lastOwnerReason = 'none';
     this.confirmedWithPointing = false;
+    this.lockedHandSide = 'None';
+    this.lockedHandLastSeenMs = null;
+    this.lockedHandPalmCenter = null;
+    this.handSwitchCount = 0;
   }
 
   update(input: HandFrameInput): HandFrameOutput {
@@ -293,20 +409,8 @@ export class HandCursorTracker {
     const isPaused = busy || pausedUntilMs > nowMs;
     const events: HandCursorEvent[] = [];
 
-    // a) Dueño de la mano con continuidad y box fallback
-    const {
-      userHands,
-      activeHand,
-      reason: ownerReason,
-    } = selectUserHand(hands, user, this.lastUserPalmCenter);
-    this.lastOwnerReason = ownerReason;
-    if (activeHand) {
-      this.lastUserPalmCenter = activeHand.palmCenter;
-    }
-    const detectedHandsCount = hands.length;
-    const userHandsCount = userHands.length;
-
     // Medición de intervalos de muestreo observados
+    const prevUpdateMs = this.lastUpdateMs;
     if (this.lastUpdateMs !== null) {
       const dt = nowMs - this.lastUpdateMs;
       if (dt > 0 && dt <= 1000) {
@@ -326,6 +430,117 @@ export class HandCursorTracker {
       DEACTIVATION_TIMEOUT_MS,
       2 * observedIntervalMs,
     );
+
+    // a) Dueño de la mano con continuidad y candado
+    const isLockActive =
+      this.lockedHandLastSeenMs !== null &&
+      nowMs - this.lockedHandLastSeenMs <= HAND_LOCK_TIMEOUT_MS;
+
+    const queryLockedSide = isLockActive ? this.lockedHandSide : null;
+    const queryLockedCenter = isLockActive ? this.lockedHandPalmCenter : null;
+
+    const {
+      userHands,
+      activeHand: candidateHand,
+      reason: ownerReason,
+    } = selectUserHand(
+      hands,
+      user,
+      this.lastUserPalmCenter,
+      queryLockedSide,
+      queryLockedCenter,
+    );
+    this.lastOwnerReason = ownerReason;
+    const detectedHandsCount = hands.length;
+    const userHandsCount = userHands.length;
+
+    let activeHand: DetectedHandInput | null = null;
+    let freezeInteraction = false;
+
+    // Gestión del candado de mano activa y cambio de mano (v3)
+    if (this.active) {
+      const sw = user && user.sw > 0 ? user.sw : 0.2;
+      const lockedMatch = userHands.find((h) => {
+        if (this.lockedHandSide !== 'None' && h.handedness && h.handedness !== 'None') {
+          return h.handedness === this.lockedHandSide;
+        }
+        if (this.lockedHandSide === 'None' || !h.handedness || h.handedness === 'None') {
+          if (userHands.length === 1) {
+            return true;
+          }
+        }
+        if (
+          this.lockedHandPalmCenter !== null &&
+          euclideanDist(h.palmCenter, this.lockedHandPalmCenter) <= 0.5 * sw
+        ) {
+          return true;
+        }
+        return false;
+      });
+
+      if (lockedMatch) {
+        // La mano bloqueada sigue presente: operación normal
+        activeHand = lockedMatch;
+        if (activeHand.handedness && activeHand.handedness !== 'None') {
+          this.lockedHandSide = activeHand.handedness;
+        }
+        this.lockedHandLastSeenMs = nowMs;
+        this.lockedHandPalmCenter = activeHand.palmCenter;
+        this.lastUserPalmCenter = activeHand.palmCenter;
+        this.lastValidHandMs = nowMs;
+      } else if (userHands.length > 0) {
+        // La mano bloqueada no está en este cuadro, pero hay otra mano del usuario presente
+        const timeSinceLockedSeen =
+          this.lockedHandLastSeenMs !== null
+            ? nowMs - this.lockedHandLastSeenMs
+            : Infinity;
+
+        if (timeSinceLockedSeen <= HAND_LOCK_TIMEOUT_MS) {
+          // Candado de 500 ms de la mano original corriendo: refrescar lastValidHandMs
+          // (cursor sigue activo), pero SIN mover la palanca ni la confirmación.
+          this.lastValidHandMs = nowMs;
+          freezeInteraction = true;
+          activeHand = null;
+        } else {
+          // Superó los 500 ms: CAMBIO DE MANO
+          const newHand = candidateHand ?? userHands[0]!;
+          activeHand = newHand;
+          this.handSwitchCount++;
+          this.lockedHandSide = newHand.handedness ?? 'None';
+          this.lockedHandLastSeenMs = nowMs;
+          this.lockedHandPalmCenter = newHand.palmCenter;
+          this.lastUserPalmCenter = newHand.palmCenter;
+          this.lastValidHandMs = nowMs;
+
+          // Re-anclar en la nueva mano, leverState = neutral, índice sin cambios
+          const rawNewX = 1 - newHand.palmCenter.x;
+          this.x = rawNewX;
+          this.y = newHand.palmCenter.y;
+          this.xFilter.reset();
+          this.yFilter.reset();
+          this.anchorX = rawNewX;
+          if (user) {
+            this.anchorOffset = rawNewX - user.cx;
+          }
+          this.leverState = 'neutral';
+          this.leverEnteredMs = null;
+          this.lastStepMs = 0;
+          this.confirmAccumulatedMs = 0;
+          this.confirmLastSeenMs = null;
+          this.lastPointingMs = null;
+          this.confirmProgress = 0;
+        }
+      } else {
+        // No hay manos del usuario en este cuadro
+        activeHand = null;
+      }
+    } else {
+      // Inactivo: candidateHand se usa para posible activación
+      activeHand = candidateHand;
+      if (activeHand) {
+        this.lastUserPalmCenter = activeHand.palmCenter;
+      }
+    }
 
     // b) Activación: ventana de 250 ms (Open_Palm o Pointing_Up con score >= 0.5)
     const isValidGesture =
@@ -382,10 +597,18 @@ export class HandCursorTracker {
         this.confirmAccumulatedMs = 0;
         this.confirmLastSeenMs = null;
         this.lastPointingMs = null;
+        this.notPointingSinceMs = null;
         this.confirmProgress = 0;
+
+        // Fijar candado inicial de mano
+        if (activeHand) {
+          this.lockedHandSide = activeHand.handedness ?? 'None';
+          this.lockedHandLastSeenMs = nowMs;
+          this.lockedHandPalmCenter = activeHand.palmCenter;
+        }
       }
     } else {
-      if (isValidGesture) {
+      if (userHandsCount > 0 || activeHand !== null) {
         this.lastValidHandMs = nowMs;
       } else if (nowMs - this.lastValidHandMs >= effectiveDeactivationTimeoutMs) {
         this.active = false;
@@ -397,19 +620,25 @@ export class HandCursorTracker {
         this.activationHistory = [];
         this.pointingStartMs = null;
         this.anchorX = null;
+        this.anchorOffset = null;
         this.lastUserPalmCenter = null;
         this.leverState = 'neutral';
         this.leverEnteredMs = null;
+        this.lastStepMs = 0;
         this.confirmAccumulatedMs = 0;
         this.confirmLastSeenMs = null;
         this.lastPointingMs = null;
+        this.notPointingSinceMs = null;
+        this.lockedHandSide = 'None';
+        this.lockedHandLastSeenMs = null;
+        this.lockedHandPalmCenter = null;
         this.xFilter.reset();
         this.yFilter.reset();
       }
     }
 
     // c) Posición y Suavizado
-    if (activeHand) {
+    if (activeHand && !freezeInteraction) {
       this.gesture = activeHand.gesture;
       const rawX = 1 - activeHand.palmCenter.x; // Espejado
       const rawY = activeHand.palmCenter.y;
@@ -422,6 +651,9 @@ export class HandCursorTracker {
     // 2.1 Ancla: al activarse el cursor, la posición x suavizada en ese instante es el ancla
     if (justActivated) {
       this.anchorX = this.x;
+      if (user) {
+        this.anchorOffset = this.x - user.cx;
+      }
       // El foco queda en la prenda que ya estaba enfocada o la del centro
       if (
         typeof currentIndex === 'number' &&
@@ -436,9 +668,20 @@ export class HandCursorTracker {
       this.leverEnteredMs = null;
     } else if (this.active && this.anchorX === null) {
       this.anchorX = this.x;
+      if (user) {
+        this.anchorOffset = this.x - user.cx;
+      }
+    } else if (
+      this.active &&
+      this.anchorX !== null &&
+      user &&
+      this.anchorOffset !== null
+    ) {
+      // Ancla relativa al cuerpo (v3): sigue a user.cx
+      this.anchorX = user.cx + this.anchorOffset;
     }
 
-    // d) Mapeo a prenda
+    // d) Mapeo a prenda y Palanca con histéresis (v3)
     const swWidth = user && user.sw > 0 ? user.sw : 0.2;
     let d = 0;
     let directionArrow: 'left' | 'right' | null = null;
@@ -470,29 +713,71 @@ export class HandCursorTracker {
         }
       }
     } else if (this.active && this.anchorX !== null && itemCount > 0) {
-      // 2.2 PALANCA (control por desplazamiento relativo)
       d = (this.x - this.anchorX) / swWidth;
-      const absD = Math.abs(d);
 
-      let newLeverState: LeverState = 'neutral';
-      if (absD < LEVER_DEAD) {
-        newLeverState = 'neutral';
-        directionArrow = null;
-      } else if (absD < LEVER_FAST) {
-        newLeverState = d > 0 ? 'slow_right' : 'slow_left';
-        directionArrow = d > 0 ? 'right' : 'left';
+      if (!freezeInteraction) {
+        // Re-centrado suave (v3): mientras leverState === 'neutral', el ancla se acerca a la mano con tau = 2000 ms
+        // Nunca si |d| >= 0.30 para no frenar desplazamientos sostenidos
+        if (
+          this.leverState === 'neutral' &&
+          Math.abs(d) < LEVER_DEAD &&
+          prevUpdateMs !== null
+        ) {
+          const frameDt = Math.max(0, Math.min(500, nowMs - prevUpdateMs));
+          const alpha = 1 - Math.exp(-frameDt / 2000);
+          this.anchorX = this.anchorX + alpha * (this.x - this.anchorX);
+          if (user) {
+            this.anchorOffset = this.anchorX - user.cx;
+          }
+          // Recalcular d tras recentrado suave
+          d = (this.x - this.anchorX) / swWidth;
+        }
+
+        // Cálculo del nuevo leverState con histéresis
+        const newLeverState = computeLeverState(this.leverState, d);
+
+        if (newLeverState !== this.leverState) {
+          const oldState = this.leverState;
+          this.leverState = newLeverState;
+
+          const isExitingNeutral = oldState === 'neutral';
+          const oldIsRight = oldState.endsWith('right');
+          const newIsRight = newLeverState.endsWith('right');
+          const isDirectionChanged =
+            oldState !== 'neutral' &&
+            newLeverState !== 'neutral' &&
+            oldIsRight !== newIsRight;
+
+          if (isExitingNeutral || isDirectionChanged) {
+            this.leverEnteredMs = nowMs;
+            this.lastStepMs = 0;
+          } else if (newLeverState === 'neutral') {
+            this.leverEnteredMs = null;
+          }
+          // Si es transición slow <-> fast en la misma dirección, se conserva lastStepMs
+        }
+      }
+
+      if (this.leverState === 'slow_right' || this.leverState === 'fast_right') {
+        directionArrow = 'right';
+      } else if (this.leverState === 'slow_left' || this.leverState === 'fast_left') {
+        directionArrow = 'left';
       } else {
-        newLeverState = d > 0 ? 'fast_right' : 'fast_left';
-        directionArrow = d > 0 ? 'right' : 'left';
+        directionArrow = null;
       }
 
-      if (newLeverState !== this.leverState) {
-        this.leverState = newLeverState;
-        this.leverEnteredMs = nowMs;
-        this.lastStepMs = 0;
-      }
+      // Palanca de pasos: congelada si Pointing_Up está activo o interacción congelada (v3)
+      const isPointingActive =
+        activeHand !== null &&
+        activeHand.gesture === 'Pointing_Up' &&
+        activeHand.score >= GESTURE_SCORE_MIN;
 
-      if (this.leverState !== 'neutral' && this.leverEnteredMs !== null) {
+      if (
+        !freezeInteraction &&
+        !isPointingActive &&
+        this.leverState !== 'neutral' &&
+        this.leverEnteredMs !== null
+      ) {
         const timeInLever = nowMs - this.leverEnteredMs;
         const isFast =
           this.leverState === 'fast_left' || this.leverState === 'fast_right';
@@ -549,11 +834,6 @@ export class HandCursorTracker {
       if (activeHand.gesture === 'Open_Palm' && activeHand.score >= GESTURE_SCORE_MIN) {
         this.hadOpenPalmDuringStable = true;
         this.pointingStartMs = null;
-        // En v2: volver a Open_Palm tras confirmar con Pointing_Up rearma
-        if (this.confirmedWithPointing) {
-          this.isArmed = true;
-          this.confirmedWithPointing = false;
-        }
       } else if (
         activeHand.gesture === 'Pointing_Up' &&
         activeHand.score >= GESTURE_SCORE_MIN
@@ -564,6 +844,25 @@ export class HandCursorTracker {
       } else {
         this.pointingStartMs = null;
       }
+    }
+
+    // Rearme tras confirmar (v3): cuando el gesto deja de ser Pointing_Up durante >= 300 ms (cualquier gesto o None)
+    const isCurrentlyPointing =
+      activeHand !== null &&
+      activeHand.gesture === 'Pointing_Up' &&
+      activeHand.score >= GESTURE_SCORE_MIN;
+
+    if (!isCurrentlyPointing) {
+      if (this.notPointingSinceMs === null) {
+        this.notPointingSinceMs = nowMs;
+      } else if (nowMs - this.notPointingSinceMs >= REARM_TIMEOUT_MS) {
+        if (this.confirmedWithPointing) {
+          this.isArmed = true;
+          this.confirmedWithPointing = false;
+        }
+      }
+    } else {
+      this.notPointingSinceMs = null;
     }
 
     // g) Pausa o Inactivo
@@ -577,18 +876,42 @@ export class HandCursorTracker {
     } else {
       let eventFired = false;
 
-      // 2.3 CONFIRMACIÓN EXPLÍCITA (por defecto activa; toma por Pointing_Up en zona neutra)
+      // 2.3 CONFIRMACIÓN EXPLÍCITA (v3: independiente de la palanca / neutral)
       if (!enableDwell) {
-        const isNeutral = this.leverState === 'neutral';
-        const isPointing =
-          activeHand !== null &&
-          activeHand.gesture === 'Pointing_Up' &&
-          activeHand.score >= GESTURE_SCORE_MIN;
-
-        if (isPointing && isNeutral && this.isArmed) {
+        if (!freezeInteraction && isCurrentlyPointing && this.isArmed) {
           if (this.lastPointingMs === null) {
+            const initialDt =
+              prevUpdateMs !== null
+                ? Math.min(150, Math.max(0, nowMs - prevUpdateMs))
+                : 0;
+            this.confirmAccumulatedMs += initialDt;
             this.lastPointingMs = nowMs;
             this.confirmLastSeenMs = nowMs;
+            this.confirmProgress = clamp(this.confirmAccumulatedMs / CONFIRM_MS, 0, 1);
+
+            if (this.confirmAccumulatedMs >= CONFIRM_MS) {
+              events.push({
+                type: 'take',
+                index: this.index,
+                method: 'hand_point',
+              });
+              this.isArmed = false;
+              this.confirmedWithPointing = true;
+              this.confirmProgress = 0;
+              this.confirmAccumulatedMs = 0;
+              this.confirmLastSeenMs = null;
+              this.lastPointingMs = null;
+              eventFired = true;
+
+              // Re-anclar en la posición actual de la mano tras completar la confirmación (v3)
+              this.anchorX = this.x;
+              if (user) {
+                this.anchorOffset = this.x - user.cx;
+              }
+              this.leverState = 'neutral';
+              this.leverEnteredMs = null;
+              this.lastStepMs = 0;
+            }
           } else {
             const dt = nowMs - this.lastPointingMs;
             this.confirmAccumulatedMs += dt;
@@ -609,10 +932,19 @@ export class HandCursorTracker {
               this.confirmLastSeenMs = null;
               this.lastPointingMs = null;
               eventFired = true;
+
+              // Re-anclar en la posición actual de la mano tras completar la confirmación (v3)
+              this.anchorX = this.x;
+              if (user) {
+                this.anchorOffset = this.x - user.cx;
+              }
+              this.leverState = 'neutral';
+              this.leverEnteredMs = null;
+              this.lastStepMs = 0;
             }
           }
-        } else if (this.confirmLastSeenMs !== null) {
-          // Huecos breves / pérdida de gesto o no apuntando en zona neutra
+        } else if (!freezeInteraction && this.confirmLastSeenMs !== null) {
+          // Huecos breves / pérdida de gesto
           this.lastPointingMs = null;
           if (activeHand !== null && activeHand.gesture === 'Open_Palm') {
             // Con Open_Palm se cancela la confirmación de inmediato
@@ -621,15 +953,15 @@ export class HandCursorTracker {
             this.confirmLastSeenMs = null;
           } else {
             const timeSinceSeen = nowMs - this.confirmLastSeenMs;
-            if (timeSinceSeen > GAP_LOST_MAX_MS || !isNeutral) {
-              // Se pierde > 300 ms o sale de zona neutra: el anillo vuelve a 0
+            if (timeSinceSeen > GAP_LOST_MAX_MS) {
+              // Se pierde > 300 ms: el anillo vuelve a 0
               this.confirmAccumulatedMs = 0;
               this.confirmProgress = 0;
               this.confirmLastSeenMs = null;
             }
             // Si timeSinceSeen <= GAP_LOST_MAX_MS, se congela el confirmProgress
           }
-        } else {
+        } else if (!freezeInteraction) {
           this.confirmAccumulatedMs = 0;
           this.confirmProgress = 0;
           this.lastPointingMs = null;
@@ -714,6 +1046,8 @@ export class HandCursorTracker {
         directionArrow,
         confirmProgress: this.confirmProgress,
         ownerReason: this.lastOwnerReason,
+        activeHandSide: this.lockedHandSide,
+        handSwitchCount: this.handSwitchCount,
       },
       events,
       userHandsCount,
