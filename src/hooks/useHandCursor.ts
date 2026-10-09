@@ -9,6 +9,7 @@ import {
   isHandInputEnabled,
   isHandSimEnabled,
   isEffectiveActiveZoneEnabled,
+  readHandFpsParam,
 } from '@/lib/hand-input-flag';
 import {
   HandCursorTracker,
@@ -99,6 +100,9 @@ export function useHandCursor(
 
   // Métricas y frecuencia adaptativa
   const combinedLatencyHistoryRef = useRef<Array<{ time: number; latency: number }>>([]);
+  const gestureLatencyHistoryRef = useRef<Array<{ time: number; latency: number }>>([]);
+  const completedInferencesRef = useRef<number[]>([]);
+  const lastUserHandSeenMsRef = useRef<number>(0);
   const lastInferenceTimeRef = useRef<number>(0);
   const [adaptiveTargetFps, setAdaptiveTargetFps] = useState<number | 'auto'>('auto');
   const belowThresholdSinceRef = useRef<number | null>(null);
@@ -107,6 +111,7 @@ export function useHandCursor(
   const simMouseOverRef = useRef<boolean>(false);
   const simMousePosRef = useRef<{ x: number; y: number }>({ x: 0.5, y: 0.5 });
   const simKeyIRef = useRef<boolean>(false);
+  const handFpsOverride = readHandFpsParam();
 
   // Cantidad de prendas en el perchero
   const catalog = useGarmentStore((s) => s.catalog);
@@ -236,9 +241,26 @@ export function useHandCursor(
       const nowMs = performance.now();
 
       // Frecuencia adaptativa: verificar espaciado según fps objetivo
+      // Piso: nunca bajar de 10 fps de intento mientras el cursor está activo o hay mano del usuario en los últimos 500 ms
+      const isCursorActive = useHandCursorStore.getState().cursor.active;
+      const isRecentUserHand = nowMs - lastUserHandSeenMsRef.current <= 500;
+      const mustEnforceFloor = isCursorActive || isRecentUserHand;
+
+      let effectiveTargetFps: number | 'auto' = adaptiveTargetFps;
+      if (handFpsOverride !== null) {
+        effectiveTargetFps = handFpsOverride;
+      } else if (
+        mustEnforceFloor &&
+        effectiveTargetFps !== 'auto' &&
+        effectiveTargetFps < 10
+      ) {
+        effectiveTargetFps = 10;
+      }
+
       let minSpacingMs = 0;
-      if (adaptiveTargetFps === 10) minSpacingMs = 100;
-      else if (adaptiveTargetFps === 15) minSpacingMs = 66.7;
+      if (typeof effectiveTargetFps === 'number' && effectiveTargetFps > 0) {
+        minSpacingMs = 1000 / effectiveTargetFps;
+      }
 
       if (minSpacingMs > 0 && nowMs - lastInferenceTimeRef.current < minSpacingMs) {
         callbackIdRef.current = video.requestVideoFrameCallback(onFrame);
@@ -295,6 +317,14 @@ export function useHandCursor(
 
       if (isHandSim && simMouseOverRef.current) {
         // Modo simulado QA (?hand_sim=1)
+        lastInferenceTimeRef.current = nowMs;
+        completedInferencesRef.current.push(nowMs);
+        const cutoff2s = nowMs - 2000;
+        completedInferencesRef.current = completedInferencesRef.current.filter(
+          (t) => t >= cutoff2s,
+        );
+        const simRealFps = Math.round(completedInferencesRef.current.length / 2);
+
         const mouse = simMousePosRef.current;
         const wristCoord: HandLandmarkPoint = targetUser?.lockedWrists.right ??
           targetUser?.lockedWrists.left ?? { x: 0.55, y: 0.6 };
@@ -318,9 +348,14 @@ export function useHandCursor(
         };
 
         const output = trackerRef.current.update(frameInput);
+        if (output.userHandsCount > 0) {
+          lastUserHandSeenMsRef.current = nowMs;
+        }
+
         useHandCursorStore.getState().updateFromOutput(output, {
-          fps: 60,
+          fps: simRealFps,
           p95: 5,
+          gestureLatencyP95: 2,
           adaptiveFps: 'auto',
         });
       } else if (
@@ -341,15 +376,40 @@ export function useHandCursor(
           const gestureLatency = performance.now() - startInfer;
           lastInferenceTimeRef.current = nowMs;
 
-          // Latencia combinada (pose + gesto)
+          // Registrar inferencia completada para FPS real (inferencias en los últimos 2 s / 2)
+          completedInferencesRef.current.push(nowMs);
+          const cutoff2s = nowMs - 2000;
+          completedInferencesRef.current = completedInferencesRef.current.filter(
+            (t) => t >= cutoff2s,
+          );
+          const gestureRealFps = Math.round(completedInferencesRef.current.length / 2);
+
+          // Latencia gesto p95
+          gestureLatencyHistoryRef.current.push({
+            time: nowMs,
+            latency: gestureLatency,
+          });
+          const cutoffLat = nowMs - 3000;
+          gestureLatencyHistoryRef.current = gestureLatencyHistoryRef.current.filter(
+            (c) => c.time >= cutoffLat,
+          );
+          const sortedGestureLat = gestureLatencyHistoryRef.current
+            .map((c) => c.latency)
+            .sort((a, b) => a - b);
+          const gestureP95Idx = Math.min(
+            sortedGestureLat.length - 1,
+            Math.floor(sortedGestureLat.length * 0.95),
+          );
+          const gestureP95 = sortedGestureLat[gestureP95Idx] ?? gestureLatency;
+
+          // Latencia combinada pura de inferencia: solo pose (detectForVideo) + gesto (recognizeForVideo)
           const combinedLatency = (pose.latency || 25) + gestureLatency;
           combinedLatencyHistoryRef.current.push({
             time: nowMs,
             latency: combinedLatency,
           });
-          const cutoff = nowMs - 3000;
           combinedLatencyHistoryRef.current = combinedLatencyHistoryRef.current.filter(
-            (c) => c.time >= cutoff,
+            (c) => c.time >= cutoffLat,
           );
 
           // Calcular p95 de latencia combinada
@@ -440,11 +500,14 @@ export function useHandCursor(
           };
 
           const output = trackerRef.current.update(frameInput);
-          const gestureFps = gestureLatency > 0 ? Math.round(1000 / gestureLatency) : 0;
+          if (output.userHandsCount > 0) {
+            lastUserHandSeenMsRef.current = nowMs;
+          }
 
           useHandCursorStore.getState().updateFromOutput(output, {
-            fps: gestureFps,
+            fps: gestureRealFps,
             p95: Math.round(combinedP95),
+            gestureLatencyP95: Math.round(gestureP95),
             adaptiveFps: adaptiveTargetFps,
           });
         } catch (err) {
@@ -463,6 +526,9 @@ export function useHandCursor(
           pausedUntilMs,
         };
         const output = trackerRef.current.update(frameInput);
+        if (output.userHandsCount > 0) {
+          lastUserHandSeenMsRef.current = nowMs;
+        }
         useHandCursorStore.getState().updateFromOutput(output);
       }
 
@@ -492,6 +558,7 @@ export function useHandCursor(
     isHandSim,
     adaptiveTargetFps,
     lockedCandidate,
+    handFpsOverride,
   ]);
 
   return {

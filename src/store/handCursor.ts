@@ -7,6 +7,7 @@ export interface HandCursorStoreState {
   lastEvent: HandCursorEvent | null;
   inferenceFps: number;
   p95: number;
+  gestureLatencyP95?: number;
   adaptiveTargetFps: number | 'auto';
   detectedHandsCount: number;
   userHandsCount: number;
@@ -17,7 +18,12 @@ export interface HandCursorStoreState {
   pause: (durationMs?: number) => void;
   updateFromOutput: (
     output: HandFrameOutput,
-    metrics?: { fps?: number; p95?: number; adaptiveFps?: number | 'auto' },
+    metrics?: {
+      fps?: number;
+      p95?: number;
+      gestureLatencyP95?: number;
+      adaptiveFps?: number | 'auto';
+    },
   ) => void;
   clearLastEvent: () => void;
   setEnabled: (enabled: boolean) => void;
@@ -39,6 +45,7 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
   lastEvent: null,
   inferenceFps: 0,
   p95: 0,
+  gestureLatencyP95: 0,
   adaptiveTargetFps: 'auto',
   detectedHandsCount: 0,
   userHandsCount: 0,
@@ -57,6 +64,7 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
       lastEvent: output.events.length > 0 ? output.events[0] : state.lastEvent,
       inferenceFps: metrics?.fps ?? state.inferenceFps,
       p95: metrics?.p95 ?? state.p95,
+      gestureLatencyP95: metrics?.gestureLatencyP95 ?? state.gestureLatencyP95,
       adaptiveTargetFps: metrics?.adaptiveFps ?? state.adaptiveTargetFps,
     })),
 
@@ -70,6 +78,7 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
       lastEvent: null,
       inferenceFps: 0,
       p95: 0,
+      gestureLatencyP95: 0,
       adaptiveTargetFps: 'auto',
       detectedHandsCount: 0,
       userHandsCount: 0,
