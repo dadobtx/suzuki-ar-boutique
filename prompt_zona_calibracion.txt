@@ -1,0 +1,94 @@
+PROMPT PARA ANTIGRAVITY — Zona activa: normalización, costo del debug y calibración
+Guardar en la raíz del repo como: prompt_zona_calibracion.txt
+Rama: fix/zona-calibracion desde main actualizado, DESPUÉS de mergear feature/perchero-mano
+(con su commit de ajustes). Si la Fase 2 no está en main, DETENERSE y avisar.
+
+====================================================================
+1. LO QUE MOSTRÓ LA PRUEBA REAL DE DARIO
+====================================================================
+Laptop, cámara 1280×720, ventana horizontal, ?ui=perchero&zona=1&debug=1:
+- Cerca de la marca: sw 0.16 · a ~3 m: ~0.105 · a ~4 m: ~0.074 (normalizado al ANCHO visible).
+- A ~4 m seguía "FIJADA" (verde): con SW_MIN 0.09 y histéresis 0.85 (0.0765) la zona llega
+  demasiado lejos.
+- Pose: Inference FPS 7–12 (82–140 ms) y "5s Window" 3–5 fps. En /#/diag-mano, con pose a la vez,
+  el pose iba a ~23 ms p95. Algo de lo nuestro está costando mucho.
+- El espejo se ve teñido de cian y con franjas verdes: es la máscara de segmentación dibujada por
+  el debug.
+
+====================================================================
+2. CAMBIOS
+====================================================================
+2.1 [P1] sw debe normalizarse por la ALTURA visible, no por el ancho
+  En portrait el video se recorta al centro: el ancho visible es ~0.32 del ancho del video, así que
+  el mismo cuerpo da un sw ~3 veces mayor que en landscape y los umbrales no sirven en el kiosko
+  vertical. La altura visible es la altura del video en ambos modos.
+  - active-zone.ts: sw = |x11 − x12| · (anchoVisiblePx / altoVisiblePx), es decir, ancho de hombros
+    expresado en fracción de la ALTURA visible. cx sigue normalizado al ancho visible (correcto para
+    el centrado).
+  - Nuevos defaults (equivalentes a los datos de Dario ×1.78):
+      SW_MIN = 0.22   (≈ 2.5–2.7 m; en la marca se mide ~0.28, a 3 m ~0.19, a 4 m ~0.13)
+      histéresis de la fijada = 0.85 · SW_MIN (≈ 0.19 → suelta cerca de 3 m)
+      approaching: sw entre 0.6·SW_MIN y SW_MIN
+  - El overlay de debug muestra el sw ya normalizado por altura.
+  - OJO, DEPENDENCIA DE LA MANO: src/hooks/useHandCursor.ts usa `lockedCandidate.sw` para el rango
+    del cursor (cx ± REACH·sw), que está en unidades de ANCHO visible. Si sw pasa a unidades de
+    altura, el rango del cursor cambia y el perchero dejaría de mapearse bien. Por eso:
+      · exponer en la telemetría de cada candidata DOS valores: `sw` (altura, para la zona) y
+        `swWidth` (ancho visible, el valor actual);
+      · cambiar useHandCursor.ts para usar `swWidth`. No cambiar REACH ni la lógica de hand-cursor.ts.
+      · Test nuevo: con la misma persona, el índice del cursor para una misma posición de mano es
+        idéntico antes y después del cambio de unidad.
+  - Tests: aquí SÍ se permite actualizar los valores de sw en tests/unit/active-zone*.test.ts, porque
+    cambia la unidad. Agregar un test que verifique que la misma persona (mismos landmarks de video)
+    da el mismo sw en portrait (center-crop) y en landscape (contain).
+
+2.2 [P1] El debug no debe costar rendimiento
+  PoseDebug.tsx ahora dibuja con `isDebugMode() || showDebug`, así que con ?debug=1 corre CADA
+  FRAME: un OffscreenCanvas nuevo de 1280×720, un bucle de 921.600 píxeles para pintar la máscara y
+  un drawImage. Eso solo puede explicar varias decenas de ms por frame en el hilo principal.
+  - Con ?debug=1 dibujar SOLO landmarks, recuadros, etiquetas y líneas de la franja (barato).
+  - La máscara se dibuja únicamente si el toggle visual de pose/máscara del overlay está activo
+    (el `showDebug` de useDebugToggle), y aun así: reutilizar un único OffscreenCanvas e ImageData
+    (crear solo si cambia el tamaño) y limitar el dibujo de la máscara a 10 fps.
+  - Verificar que sin ?debug=1 PoseDebug no hace nada en cada frame (retorno temprano antes de
+    cualquier cálculo).
+
+2.3 [P2] Métricas coherentes
+  "Inference FPS" (7–12) y "5s Window" (3–5) no coinciden. Usar la MISMA fuente (timestamps de
+  cada detectForVideo completado) para ambas, o mostrar solo la ventana de 5 s con fps, promedio y
+  p95.
+
+2.4 [P2] Ganchos de QA solo en modo debug
+  CameraStage.tsx escucha los eventos 'kiosk-landmarks', 'kiosk-active-zone' y 'kiosk-presence' y lee
+  window.__landmarksOverride / __activeZoneOverride / __presenceOverride, que reemplazan los datos
+  reales de la cámara. Son útiles para las capturas, pero hoy funcionan también en producción.
+  Registrar esos listeners y leer esos overrides SOLO si isDebugMode() es true.
+  Test nuevo: sin ?debug=1, despachar 'kiosk-presence' con un override no cambia la presencia.
+
+2.5 [P2] Medir el costo de 3 personas y de las máscaras
+  Agregar parámetros SOLO de diagnóstico (no cambian defaults):
+    ?pose_n=1|2|3  (sobrescribe numPoses cuando la zona está ON)
+    ?pose_masks=0  (outputSegmentationMasks: false; el AR queda sin oclusión, es solo para medir)
+  y mostrarlos en el panel MEDIAPIPE del overlay. Con esto Dario medirá:
+    zona=0 · zona=1 · zona=1&pose_n=2 · zona=1&pose_masks=0
+  y decidimos la configuración final con números.
+
+====================================================================
+3. REGLAS
+====================================================================
+- No tocar kiosk.ts, usePresence*, el perchero, la vitrina, el catálogo, public/, catalog.json,
+  FASHN/Lucy. De la mano, solo el cambio de `sw` a `swWidth` en useHandCursor.ts (sección 2.1).
+- Fuera de lo indicado en 2.1, no editar tests existentes.
+- UTF-8. VITE_AI_BACKEND_URL intacto.
+
+====================================================================
+4. EVIDENCIA
+====================================================================
+- Salida final de `npx tsc -b` (NO `npx tsc --noEmit` en la raíz: con "files": [] no revisa nada),
+  npm run lint, npm test (raíz y backend/), npm run build.
+- Captura real con ?layout=portrait&ui=perchero&zona=1&debug=1 (cámara falsa): sin tinte cian,
+  con recuadros y líneas.
+- Tabla con el costo medido en tu entorno (aunque sea cámara falsa) de pose en ms para las 4
+  combinaciones de 2.5, indicando que la medición válida será la de Dario.
+- git diff --stat main: solo active-zone.ts, usePose.ts, useHandCursor.ts (una línea), CameraStage.tsx
+  (ganchos de QA), PoseDebug.tsx, el overlay de debug, tests y capturas.

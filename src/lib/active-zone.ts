@@ -13,7 +13,7 @@ export type CandidateReason =
   | 'lowVis';
 
 export interface ActiveZoneConfig {
-  SW_MIN: number; // default 0.09
+  SW_MIN: number; // default 0.22 (height units)
   CENTER_BAND: number; // default 0.22 (|cx - 0.5| max)
   VIS_MIN: number; // default 0.6
   SPEED_MAX: number; // default 0.35 (screen widths / s)
@@ -25,7 +25,7 @@ export interface ActiveZoneConfig {
 }
 
 export const DEFAULT_ACTIVE_ZONE_CONFIG: ActiveZoneConfig = {
-  SW_MIN: 0.09,
+  SW_MIN: 0.22,
   CENTER_BAND: 0.22,
   VIS_MIN: 0.6,
   SPEED_MAX: 0.35,
@@ -147,6 +147,51 @@ export function parseActiveZoneConfig(search?: string): ActiveZoneConfig {
   return config;
 }
 
+export function computeVisibleAspectRatio(
+  layout: 'portrait' | 'landscape',
+  videoWidth: number,
+  videoHeight: number,
+  containerWidth?: number,
+  containerHeight?: number,
+): number {
+  if (layout === 'landscape' || !containerWidth || !containerHeight) {
+    return videoHeight > 0 ? videoWidth / videoHeight : 16 / 9;
+  }
+  const crop = computeCropOffset(
+    videoWidth,
+    videoHeight,
+    containerWidth,
+    containerHeight,
+  );
+  return crop.visibleHeight > 0 ? crop.visibleWidth / crop.visibleHeight : 9 / 16;
+}
+
+export function getDiagnosticPoseParams(): {
+  poseN: number | null;
+  outputMasks: boolean;
+} {
+  if (typeof window === 'undefined' || !window.location) {
+    return { poseN: null, outputMasks: true };
+  }
+  let query = window.location.search;
+  if (!query && window.location.hash.includes('?')) {
+    query = window.location.hash.slice(window.location.hash.indexOf('?'));
+  }
+  try {
+    const params = new URLSearchParams(query);
+    const poseNRaw = params.get('pose_n');
+    let poseN: number | null = null;
+    if (poseNRaw === '1' || poseNRaw === '2' || poseNRaw === '3') {
+      poseN = parseInt(poseNRaw, 10);
+    }
+    const poseMasksRaw = params.get('pose_masks');
+    const outputMasks = poseMasksRaw !== '0';
+    return { poseN, outputMasks };
+  } catch {
+    return { poseN: null, outputMasks: true };
+  }
+}
+
 export interface CandidateBoundingBox {
   minX: number;
   minY: number;
@@ -156,6 +201,7 @@ export interface CandidateBoundingBox {
 
 export interface CandidateMetrics {
   sw: number;
+  swWidth: number;
   cx: number;
   vis: number;
   speed: number;
@@ -201,6 +247,7 @@ export interface SelectUserResult {
   approaching: boolean;
   candidates: Array<{
     sw: number;
+    swWidth: number;
     cx: number;
     vis: number;
     speed: number;
@@ -263,6 +310,7 @@ export function computeCandidateMetrics(
   prevTracked: TrackedCandidate | null,
   config: ActiveZoneConfig,
   nowMs: number,
+  aspectRatio: number = 1,
 ): CandidateMetrics {
   const lm0 = landmarks[0];
   const lm11 = landmarks[11];
@@ -270,10 +318,11 @@ export function computeCandidateMetrics(
   const lm23 = landmarks[23];
   const lm24 = landmarks[24];
 
-  // sw = |x11 - x12|
+  // sw = |x11 - x12| * (anchoVisiblePx / altoVisiblePx)
   const x11 = lm11?.x ?? 0.5;
   const x12 = lm12?.x ?? 0.5;
-  const sw = Math.abs(x11 - x12);
+  const swWidth = Math.abs(x11 - x12);
+  const sw = swWidth * aspectRatio;
 
   // midX, midY: punto medio de hombros
   const y11 = lm11?.y ?? 0.5;
@@ -347,7 +396,7 @@ export function computeCandidateMetrics(
     reason = 'moving';
   }
 
-  return { sw, cx, vis, speed, score, midX, midY, reason, box };
+  return { sw, swWidth, cx, vis, speed, score, midX, midY, reason, box };
 }
 
 /**
@@ -358,6 +407,7 @@ export function selectUser(
   prevState: ActiveZoneState | null,
   config: ActiveZoneConfig = DEFAULT_ACTIVE_ZONE_CONFIG,
   nowMs: number = Date.now(),
+  aspectRatio: number = 1,
 ): SelectUserResult {
   const prevTracked = prevState?.trackedCandidates ?? [];
   const lockedPerson = prevState?.lockedPerson ?? null;
@@ -401,7 +451,7 @@ export function selectUser(
       usedPrevIndices.add(bestIdx);
     }
 
-    const metrics = computeCandidateMetrics(lms, bestPrev, config, nowMs);
+    const metrics = computeCandidateMetrics(lms, bestPrev, config, nowMs, aspectRatio);
     candidateMetricsList.push(metrics);
   }
 

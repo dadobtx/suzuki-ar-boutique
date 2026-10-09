@@ -7,7 +7,10 @@ export interface MediaPipeDebugState {
   fps5s?: number;
   landmarksCount: number;
   latency: number;
+  latencyAvg?: number;
   latencyP95?: number;
+  numPoses?: number;
+  outputMasks?: boolean;
   heapUsedMB?: number | null;
   modelVersion: string | null;
 }

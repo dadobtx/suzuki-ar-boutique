@@ -296,7 +296,7 @@ export function useHandCursor(
 
         targetUser = {
           lockedWrists: { left: leftWristVis, right: rightWristVis },
-          sw: lockedCandidate.sw,
+          sw: lockedCandidate.swWidth ?? lockedCandidate.sw,
           cx: 1 - lockedCandidate.cx, // en coordenadas espejadas de pantalla
         };
       } else if (isHandSim) {
