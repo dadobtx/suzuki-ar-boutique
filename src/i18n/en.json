@@ -128,6 +128,8 @@
       "confirm": "TAP AGAIN TO RESTART"
     },
     "hand": {
+      "stepWithLive": "LEFT HAND ◀ · RIGHT HAND ▶ · INDEX FINGER ☝ TO SEE YOURSELF LIVE",
+      "step": "LEFT HAND ◀ · RIGHT HAND ▶",
       "raiseHand": "RAISE OPEN HAND",
       "moveHand": "MOVE HAND TO SIDE TO BROWSE · RAISE INDEX FINGER TO TRY ON",
       "holdToTry": "MOVE HAND TO SIDE TO BROWSE · RAISE INDEX FINGER TO TRY ON",

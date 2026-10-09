@@ -26,6 +26,7 @@ import { toVisibleCoordinates } from '@/lib/active-zone';
 export interface UseHandCursorOptions {
   active: boolean; // isCatalogVisible
   mirrorContainerRef?: RefObject<HTMLElement | null>;
+  isLiveAvailable?: boolean; // bot�n VERME EN VIVO visible y habilitado
 }
 
 let recognizerSingleton: GestureRecognizer | null = null;
@@ -96,6 +97,8 @@ export function useHandCursor(
     (isLocked || isHandSim);
 
   const trackerRef = useRef<HandCursorTracker>(new HandCursorTracker());
+  const isLiveAvailableRef = useRef<boolean>(false);
+  isLiveAvailableRef.current = options.isLiveAvailable ?? false;
   const callbackIdRef = useRef<number>(0);
   const activeLoopRef = useRef<boolean>(false);
   const isRunningInferenceRef = useRef<boolean>(false);
@@ -356,6 +359,7 @@ export function useHandCursor(
           currentIndex: currentRackIndex,
           enableDwell: isDwellEnabled,
           useAbsoluteMapping: isAbsoluteMode,
+          isLiveAvailable: isLiveAvailableRef.current,
         };
 
         if (
@@ -511,6 +515,16 @@ export function useHandCursor(
                 gesture: gestureName,
                 score: gestureScore,
                 handedness,
+                landmarks: lms.map((lm) =>
+                  toVisibleCoordinates(
+                    lm,
+                    layout,
+                    video.videoWidth,
+                    video.videoHeight,
+                    containerWidth,
+                    containerHeight,
+                  ),
+                ),
               });
             }
           }
@@ -525,6 +539,7 @@ export function useHandCursor(
             currentIndex: currentRackIndex,
             enableDwell: isDwellEnabled,
             useAbsoluteMapping: isAbsoluteMode,
+            isLiveAvailable: isLiveAvailableRef.current,
           };
 
           const output = trackerRef.current.update(frameInput);
@@ -555,6 +570,7 @@ export function useHandCursor(
           currentIndex: currentRackIndex,
           enableDwell: isDwellEnabled,
           useAbsoluteMapping: isAbsoluteMode,
+          isLiveAvailable: isLiveAvailableRef.current,
         };
         const output = trackerRef.current.update(frameInput);
         if (output.userHandsCount > 0) {

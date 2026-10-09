@@ -79,6 +79,14 @@ export function HandCursor() {
           <Hand size={46} strokeWidth={2.2} />
         </div>
 
+        {/* Punto tenue: esperando volver al centro (disparador desarmado) */}
+        {cursor.isStepDisarmed && (
+          <div
+            data-testid="cursor-rearm-dot"
+            className="absolute -bottom-3 w-2 h-2 rounded-full bg-white/40"
+          />
+        )}
+
         {/* Flecha discreta ◀ / ▶ cuando está fuera de la zona neutra */}
         {cursor.directionArrow === 'left' && (
           <div

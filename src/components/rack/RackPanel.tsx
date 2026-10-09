@@ -13,6 +13,8 @@ interface RackPanelProps {
   active?: boolean;
 }
 
+type TakeMethod = 'hand_dwell' | 'hand_point' | 'hand_step' | 'touch' | 'keyboard';
+
 export function RackPanel({ mode, active = true }: RackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -37,6 +39,11 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
   const [kickClasses, setKickClasses] = useState<string[]>([]);
   const [returningId, setReturningId] = useState<string | null>(null);
   const isBusyRef = useRef<boolean>(false);
+  // Mano v4: último paso recibido durante un vuelo (solo se conserva el último)
+  const pendingStepIndexRef = useRef<number | null>(null);
+  const handleTakeRef = useRef<
+    ((index: number, method?: TakeMethod) => Promise<void>) | null
+  >(null);
 
   // Construir items del perchero con catálogo real y variante activa
   const items: RackItem[] = useMemo(() => {
@@ -369,17 +376,23 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     [],
   );
 
-  type TakeMethod = 'hand_dwell' | 'hand_point' | 'touch' | 'keyboard';
-
   // Tomar o devolver una prenda
   const handleTakeOrReturn = useCallback(
     async (index: number, method: TakeMethod = 'touch') => {
-      if (mode !== 'interactive' || !active || isBusyRef.current) return;
+      if (mode !== 'interactive' || !active) return;
+      if (isBusyRef.current) {
+        if (method === 'hand_step') {
+          pendingStepIndexRef.current = index;
+        }
+        return;
+      }
       const item = items[index];
       if (!item) return;
 
       const currentActiveId = useGarmentStore.getState().activeGarmentId;
       const isAlreadySelected = currentActiveId === item.id;
+      // Un paso de mano nunca devuelve la prenda ya puesta (solo prueba la nueva)
+      if (method === 'hand_step' && isAlreadySelected) return;
       const slotEl = slotRefs.current[index];
       const slotImg = slotEl?.querySelector<HTMLElement>('.rack-garment') || slotEl;
       const flySrc = item.illustrationUrl || item.fallbackPhotoUrl;
@@ -470,6 +483,13 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
         setReturningId(null);
         isBusyRef.current = false;
         useHandCursorStore.getState().setBusy(false);
+        const pending = pendingStepIndexRef.current;
+        if (pending !== null) {
+          pendingStepIndexRef.current = null;
+          setTimeout(() => {
+            void handleTakeRef.current?.(pending, 'hand_step');
+          }, 0);
+        }
       }
     },
     [
@@ -485,6 +505,8 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
     ],
   );
 
+  handleTakeRef.current = handleTakeOrReturn;
+
   const handCursor = useHandCursorStore((s) => s.cursor);
   const handLastEvent = useHandCursorStore((s) => s.lastEvent);
 
@@ -495,6 +517,15 @@ export function RackPanel({ mode, active = true }: RackPanelProps) {
       setFocus(handCursor.index);
     }
   }, [handCursor.active, handCursor.index, mode, active, items.length, setFocus]);
+
+  // Evento step por mano (v4): prueba automática de la prenda de la nueva posición
+  useEffect(() => {
+    if (handLastEvent && handLastEvent.type === 'step') {
+      const stepIndex = handLastEvent.index;
+      useHandCursorStore.getState().clearLastEvent();
+      void handleTakeOrReturn(stepIndex, 'hand_step');
+    }
+  }, [handLastEvent, handleTakeOrReturn]);
 
   // Evento take por mano
   useEffect(() => {

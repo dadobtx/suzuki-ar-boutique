@@ -32,7 +32,6 @@ export function KioskGuide({
   const kioskState = useKioskStore((s) => s.state);
   const hasProfile = useSizingStore((s) => s.hasProfile);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
-  const catalog = useGarmentStore((s) => s.catalog);
   const trackingLostSustained = useGarmentStore((s) => s.runtime.trackingLostSustained);
   const reducedMotion = useReducedMotion();
 
@@ -66,19 +65,15 @@ export function KioskGuide({
 
   let handTitle: string | null = null;
   if (isHandActiveMode && !isBodyNotice) {
-    const activeGarmentIndex = activeGarmentId
-      ? catalog.findIndex((g) => g.id === activeGarmentId)
-      : -1;
-
     if (!handCursor.active) {
       handTitle = t('kiosk.hand.raiseHand', 'LEVANTA LA MANO ABIERTA');
-    } else if (handCursor.index === activeGarmentIndex) {
-      handTitle = t('kiosk.hand.holdToReturn', 'LEVANTA EL ÍNDICE PARA DEVOLVERLA');
-    } else {
+    } else if (showLiveButton) {
       handTitle = t(
-        'kiosk.hand.moveHand',
-        'MUEVE LA MANO A UN LADO PARA RECORRER · LEVANTA EL ÍNDICE PARA PROBÁRTELA',
+        'kiosk.hand.stepWithLive',
+        'MANO IZQUIERDA ◀ · MANO DERECHA ▶ · ÍNDICE ☝ PARA VERTE EN VIVO',
       );
+    } else {
+      handTitle = t('kiosk.hand.step', 'MANO IZQUIERDA ◀ · MANO DERECHA ▶');
     }
   }
 

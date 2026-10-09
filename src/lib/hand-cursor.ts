@@ -276,10 +276,9 @@ export function computeHandPoseSide(
 
   // Fallback por posición respecto a user.cx en pantalla espejada (x menor = izquierda de pantalla = persona izquierda)
   if (typeof user.cx === 'number') {
-    // Si handWrist.x (en pantalla espejada) es menor que cx -> izquierda, si mayor -> derecha
-    // Nota: handWrist en DetectedHandInput ya viene en coordenadas visibles de pantalla si fue mapeado
-    // o en coords [0, 1]. Si handWrist.x < user.cx en pantalla -> Left, sino Right.
-    return handWrist.x < user.cx ? 'Left' : 'Right';
+    // handWrist viene en coordenadas visibles SIN espejar; user.cx viene ESPEJADO (1 - cx).
+    const screenX = 1 - handWrist.x;
+    return screenX < user.cx ? 'Left' : 'Right';
   }
 
   return 'None';
@@ -457,11 +456,7 @@ export class HandCursorTracker {
 
   // Estado v4
   private v4ActivePalmCenter: HandLandmarkPoint | null = null;
-  private v4ActiveWrist: HandLandmarkPoint | null = null;
-  private v4ActiveLastSeenMs: number | null = null;
-  private v4ActiveHasValidGesture = false;
   private v4AlternativeValidSinceMs: number | null = null;
-  private v4AlternativePalmCenter: HandLandmarkPoint | null = null;
   private v4PoseSide: HandPoseSide = 'None';
   private v4ClassifierSide: HandednessSide = 'None';
   private v4IndexSource: 'clasificador' | 'geométrico' | 'ambos' | 'ninguno' = 'ninguno';
@@ -536,11 +531,7 @@ export class HandCursorTracker {
 
     // Reset v4
     this.v4ActivePalmCenter = null;
-    this.v4ActiveWrist = null;
-    this.v4ActiveLastSeenMs = null;
-    this.v4ActiveHasValidGesture = false;
     this.v4AlternativeValidSinceMs = null;
-    this.v4AlternativePalmCenter = null;
     this.v4PoseSide = 'None';
     this.v4ClassifierSide = 'None';
     this.v4IndexSource = 'ninguno';
@@ -1361,13 +1352,9 @@ export class HandCursorTracker {
       const activeHasValid = activeHand !== null && isGestureValid(activeHand);
 
       if (activeHand && activeHasValid) {
-        this.v4ActiveHasValidGesture = true;
-        this.v4ActiveLastSeenMs = nowMs;
         this.v4AlternativeValidSinceMs = null;
-        this.v4AlternativePalmCenter = null;
       } else {
         // La mano activa no tiene gesto válido o no está presente
-        this.v4ActiveHasValidGesture = false;
 
         // Buscar otra mano del usuario con gesto válido
         const otherValidHands = userHands.filter((h) => {
@@ -1385,16 +1372,11 @@ export class HandCursorTracker {
 
           if (this.v4AlternativeValidSinceMs === null) {
             this.v4AlternativeValidSinceMs = nowMs;
-            this.v4AlternativePalmCenter = altHand.palmCenter;
           } else if (nowMs - this.v4AlternativeValidSinceMs >= 250) {
             // Cambio de mano (re-anclar)
             activeHand = altHand;
             this.v4ActivePalmCenter = altHand.palmCenter;
-            this.v4ActiveWrist = altHand.wrist;
-            this.v4ActiveLastSeenMs = nowMs;
-            this.v4ActiveHasValidGesture = true;
             this.v4AlternativeValidSinceMs = null;
-            this.v4AlternativePalmCenter = null;
             this.handSwitchCount++;
 
             // Re-anclar
@@ -1415,14 +1397,11 @@ export class HandCursorTracker {
           }
         } else {
           this.v4AlternativeValidSinceMs = null;
-          this.v4AlternativePalmCenter = null;
         }
       }
 
       if (activeHand) {
         this.v4ActivePalmCenter = activeHand.palmCenter;
-        this.v4ActiveWrist = activeHand.wrist;
-        this.v4ActiveLastSeenMs = nowMs;
         this.lastValidHandMs = nowMs;
       }
     } else {
@@ -1437,7 +1416,6 @@ export class HandCursorTracker {
       }
       if (activeHand) {
         this.v4ActivePalmCenter = activeHand.palmCenter;
-        this.v4ActiveWrist = activeHand.wrist;
       }
     }
 
@@ -1484,10 +1462,7 @@ export class HandCursorTracker {
         this.active = true;
         justActivated = true;
         this.lastValidHandMs = nowMs;
-        this.v4ActiveLastSeenMs = nowMs;
         this.v4ActivePalmCenter = activeHand.palmCenter;
-        this.v4ActiveWrist = activeHand.wrist;
-        this.v4ActiveHasValidGesture = true;
         this.v4StepDisarmed = false;
         this.v4NeutralSinceMs = null;
         this.v4BeyondThresholdSinceMs = null;
@@ -1503,11 +1478,7 @@ export class HandCursorTracker {
       } else if (nowMs - this.lastValidHandMs >= effectiveDeactivationTimeoutMs) {
         this.active = false;
         this.v4ActivePalmCenter = null;
-        this.v4ActiveWrist = null;
-        this.v4ActiveLastSeenMs = null;
-        this.v4ActiveHasValidGesture = false;
         this.v4AlternativeValidSinceMs = null;
-        this.v4AlternativePalmCenter = null;
         this.v4StepDisarmed = false;
         this.v4NeutralSinceMs = null;
         this.v4BeyondThresholdSinceMs = null;

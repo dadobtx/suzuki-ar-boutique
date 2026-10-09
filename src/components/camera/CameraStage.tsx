@@ -26,6 +26,7 @@ import { StagePanel } from './StagePanel';
 import { SizingControls } from './SizingControls';
 import { VariantControls } from './VariantControls';
 import { useHandCursor } from '@/hooks/useHandCursor';
+import { useHandCursorStore } from '@/store/handCursor';
 import { HandCursor } from '@/components/hand';
 import { useSizingStore } from '@/store/sizing';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
@@ -199,12 +200,6 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     kioskState !== 'AWAKENING' &&
     kioskState !== 'CALIBRATING' &&
     kioskState !== 'PHOTO_COUNTDOWN';
-
-  const { handleMirrorPointerMove, handleMirrorPointerLeave } = useHandCursor(
-    camera.videoRef,
-    pose,
-    { active: isCatalogVisible },
-  );
 
   // Phase 4: Garment catalog
   const loadCatalog = useGarmentStore((s) => s.loadCatalog);
@@ -445,6 +440,30 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     }
   }, [activeGarment, activeVariantId, camera, sessionId, handleStopLiveTryon, t]);
 
+  // Mano v4: el �ndice sostenido activa EXACTAMENTE el mismo handler del bot�n VERME EN VIVO
+  const isLiveAvailable =
+    showLiveButton &&
+    !isLiveLoading &&
+    !isLiveActive &&
+    kioskState === 'TRYON' &&
+    Boolean(activeGarment);
+
+  const { handleMirrorPointerMove, handleMirrorPointerLeave } = useHandCursor(
+    camera.videoRef,
+    pose,
+    { active: isCatalogVisible, isLiveAvailable },
+  );
+
+  const handLastEvent = useHandCursorStore((s) => s.lastEvent);
+  const handConfirmProgress = useHandCursorStore((s) => s.cursor.confirmProgress ?? 0);
+  useEffect(() => {
+    if (handLastEvent && handLastEvent.type === 'live') {
+      useHandCursorStore.getState().clearLastEvent();
+      if (isLiveAvailable) {
+        void handleStartLiveTryon();
+      }
+    }
+  }, [handLastEvent, isLiveAvailable, handleStartLiveTryon]);
   return (
     <div
       className={
@@ -693,7 +712,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                 onClick={handleStartLiveTryon}
                 disabled={isLiveLoading || isLiveActive}
                 aria-label={t('live.seeLive', 'VERME EN VIVO')}
-                className={`w-[160px] h-[160px] rounded-full bg-fg text-bg border-4 border-fg/30 flex flex-col items-center justify-center shadow-2xl transition-transform ${
+                className={`relative w-[160px] h-[160px] rounded-full bg-fg text-bg border-4 border-fg/30 flex flex-col items-center justify-center shadow-2xl transition-transform ${
                   isLiveLoading
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
@@ -701,6 +720,26 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                       : 'hover:scale-105 active:scale-95'
                 }`}
               >
+                {isLiveAvailable && handConfirmProgress > 0 && (
+                  <svg
+                    data-testid="live-confirm-ring"
+                    className="absolute -inset-1 w-[168px] h-[168px] pointer-events-none"
+                    viewBox="0 0 168 168"
+                    style={{ transform: 'rotate(-90deg)' }}
+                  >
+                    <circle
+                      cx={84}
+                      cy={84}
+                      r={80}
+                      fill="none"
+                      stroke="#E30613"
+                      strokeWidth={6}
+                      strokeLinecap="round"
+                      strokeDasharray={2 * Math.PI * 80}
+                      strokeDashoffset={2 * Math.PI * 80 * (1 - handConfirmProgress)}
+                    />
+                  </svg>
+                )}
                 {isLiveActive ? (
                   <span className="text-6xl font-display">{liveCountdown}</span>
                 ) : (
