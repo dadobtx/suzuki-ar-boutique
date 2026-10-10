@@ -46,6 +46,7 @@ interface CardMeasurement {
   flipFrontCentered?: boolean;
   flipBackRatio?: number;
   flipBackCentered?: boolean;
+  flipFontSize?: number;
 }
 
 async function measureCatalog(
@@ -132,6 +133,7 @@ async function measureCatalog(
     let flipFrontCentered: boolean | undefined;
     let flipBackRatio: number | undefined;
     let flipBackCentered: boolean | undefined;
+    let flipFontSize: number | undefined;
 
     if (hasBack && flipBtn) {
       // 1. Initial State (Frente / Front view, button says ATRÁS / BACK)
@@ -159,6 +161,12 @@ async function measureCatalog(
         const btnCenter = btnBoxBack.x + btnBoxBack.width / 2;
         const textCenter = textBoxBack.x + textBoxBack.width / 2;
         flipBackCentered = Math.abs(textCenter - btnCenter) <= 2.5;
+      }
+
+      if (textElBack) {
+        flipFontSize = await textElBack.evaluate((el: Element) => {
+          return parseFloat(window.getComputedStyle(el).fontSize);
+        });
       }
 
       // Click back to return to initial front view
@@ -190,6 +198,7 @@ async function measureCatalog(
       flipFrontCentered,
       flipBackRatio,
       flipBackCentered,
+      flipFontSize,
     });
   }
 
@@ -302,24 +311,23 @@ async function main() {
     }
 
     console.log(
-      '\n--- Botón ATRÁS / FRENTE (Ancho texto / Diámetro botón <= 86%, Centrado) ---',
+      '\n--- Botón ATRÁS / FRENTE (Ancho texto / Diámetro botón, Centrado, Font Size) ---',
     );
     for (const m of portraitData.measurements.filter((x) => x.hasBack)) {
       const fRatio = m.flipFrontRatio ? `${(m.flipFrontRatio * 100).toFixed(1)}%` : 'N/A';
       const bRatio = m.flipBackRatio ? `${(m.flipBackRatio * 100).toFixed(1)}%` : 'N/A';
+      const fSize = m.flipFontSize ? `${m.flipFontSize.toFixed(1)}px` : 'N/A';
       console.log(
-        `- ${m.sku}: Estado ATRÁS: ${fRatio} (centrado: ${m.flipFrontCentered}) | Estado FRENTE: ${bRatio} (centrado: ${m.flipBackCentered})`,
+        `- ${m.sku}: ATRÁS: ${fRatio} (centrado: ${m.flipFrontCentered}) | FRENTE: ${bRatio} (centrado: ${m.flipBackCentered}, font: ${fSize})`,
       );
-      if (m.flipFrontRatio && m.flipFrontRatio > 0.86) {
+      if (m.flipBackRatio && (m.flipBackRatio < 0.55 || m.flipBackRatio > 0.86)) {
         console.error(
-          `FALLO: ${m.sku} texto en estado ATRÁS supera 86% del diámetro (${fRatio})`,
+          `FALLO: ${m.sku} texto en estado FRENTE fuera de rango 55%-86% (${bRatio})`,
         );
         hasErrors = true;
       }
-      if (m.flipBackRatio && m.flipBackRatio > 0.86) {
-        console.error(
-          `FALLO: ${m.sku} texto en estado FRENTE supera 86% del diámetro (${bRatio})`,
-        );
+      if (m.flipFontSize && m.flipFontSize < 11.0) {
+        console.error(`FALLO: ${m.sku} font-size de FRENTE < 11px (${fSize})`);
         hasErrors = true;
       }
     }
@@ -410,7 +418,7 @@ async function main() {
 
     // 2. catalogo_functional_hooded_wishlist.png
     console.log('Capturando catalogo_functional_hooded_wishlist.png...');
-    const hoodedCard = await portraitPage.$('[data-sku="990F0-BKHM0"]');
+    const hoodedCard = await portraitPage.$('[data-sku="990F0-FCHJ0"]');
     if (hoodedCard) {
       await hoodedCard.scrollIntoViewIfNeeded();
       const heartBtn = await hoodedCard.$('.bg-white button');
@@ -554,6 +562,30 @@ async function main() {
       if (parseInt(m.priceFontWeight) < 600) {
         console.error(
           `FALLO: [Landscape] ${m.sku} peso de fuente de precio es < 600 (${m.priceFontWeight})`,
+        );
+        hasErrors = true;
+      }
+    }
+
+    console.log(
+      '\n--- Botón ATRÁS / FRENTE [Landscape] (Ancho texto / Diámetro botón, Centrado, Font Size) ---',
+    );
+    for (const m of landscapeData.measurements.filter((x) => x.hasBack)) {
+      const fRatio = m.flipFrontRatio ? `${(m.flipFrontRatio * 100).toFixed(1)}%` : 'N/A';
+      const bRatio = m.flipBackRatio ? `${(m.flipBackRatio * 100).toFixed(1)}%` : 'N/A';
+      const fSize = m.flipFontSize ? `${m.flipFontSize.toFixed(1)}px` : 'N/A';
+      console.log(
+        `- ${m.sku}: ATRÁS: ${fRatio} (centrado: ${m.flipFrontCentered}) | FRENTE: ${bRatio} (centrado: ${m.flipBackCentered}, font: ${fSize})`,
+      );
+      if (m.flipBackRatio && (m.flipBackRatio < 0.55 || m.flipBackRatio > 0.86)) {
+        console.error(
+          `FALLO: [Landscape] ${m.sku} texto en estado FRENTE fuera de rango 55%-86% (${bRatio})`,
+        );
+        hasErrors = true;
+      }
+      if (m.flipFontSize && m.flipFontSize < 11.0) {
+        console.error(
+          `FALLO: [Landscape] ${m.sku} font-size de FRENTE < 11px (${fSize})`,
         );
         hasErrors = true;
       }

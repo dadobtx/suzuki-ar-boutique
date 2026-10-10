@@ -233,7 +233,7 @@ describe('CatalogCard vista posterior automática al seleccionar', () => {
     expect(parentContainer?.className).toContain('inset-0');
   });
 
-  it('boton ATRAS/FRENTE tiene container-type:inline-size y el texto b usa clamp(9px, 13cqi, 14px)', () => {
+  it('boton ATRAS/FRENTE tiene container-type:inline-size y el texto b usa clamp(11px, 17cqi, 16px)', () => {
     const { container } = render(<CatalogCard garment={garmentWithBack} />);
     const flipButton = container.querySelector(
       'button[aria-label*="trasera"], button[aria-label*="viewBackAria"], button:has(b)',
@@ -246,7 +246,7 @@ describe('CatalogCard vista posterior automática al seleccionar', () => {
     expect(bText?.className).toContain('tracking-normal');
     expect(bText?.className).toContain('whitespace-nowrap');
     expect(bText?.className).toContain('max-w-[86%]');
-    expect(bText?.style.fontSize).toBe('clamp(9px, 13cqi, 14px)');
+    expect(bText?.style.fontSize).toBe('clamp(11px, 17cqi, 16px)');
   });
 
   it('boton de favoritos se renderiza dentro de .bg-white en ambos caminos y fuera de .faces en prenda con espalda', () => {

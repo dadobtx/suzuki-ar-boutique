@@ -406,7 +406,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
             </svg>
             <b
               className="font-mono font-bold tracking-normal uppercase leading-none mt-1 text-center whitespace-nowrap max-w-[86%]"
-              style={{ fontSize: 'clamp(9px, 13cqi, 14px)' }}
+              style={{ fontSize: 'clamp(11px, 17cqi, 16px)' }}
             >
               {view === 'back' ? t('catalog.viewFront') : t('catalog.viewBack')}
             </b>

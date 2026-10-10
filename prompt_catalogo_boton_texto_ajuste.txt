@@ -1,0 +1,21 @@
+PROMPT PARA ANTIGRAVITY — Catálogo: el texto ATRÁS/FRENTE quedó demasiado pequeño
+Guardar en la raíz del repo como: prompt_catalogo_boton_texto_ajuste.txt
+Rama: la MISMA fix/catalogo-altura-tarjetas, sobre 0fa317d. NO mergear.
+
+Revisión de 0fa317d: todo bien (recuadro 262,5 px en las 10, corazón dentro, tipografía de team y
+precio correcta; tsc -b, lint, 423 tests y build confirmados). Dos ajustes:
+
+1. El texto del botón quedó en el mínimo del clamp (≈9 px): "FRENTE" ocupa solo el 45 % del círculo
+   y en el kiosco a 1–1,5 m no se lee. Cambiar a:
+     font-size: clamp(11px, 17cqi, 16px)
+   manteniendo tracking-normal, whitespace-nowrap y max-w-[86%]. Objetivo: "FRENTE" entre 60 % y 80 %
+   del diámetro. En el script de verificación, agregar que FALLE si el ancho de "FRENTE" es < 55 %
+   o > 86 % del diámetro, y si el font-size computado es < 11 px. Pegar la tabla (1080×1920 y 1920×1080).
+
+2. La captura catalogo_functional_hooded_wishlist.png en realidad muestra el HOODIE, no la
+   FUNCTIONAL HOODED SWEAT JACKET (990F0-FCHJ0). Corregir el script para seleccionar la tarjeta por
+   data-sku="990F0-FCHJ0" y regenerar la captura (nombre en 2 líneas, corazón marcado). Regenerar
+   también catalogo_tshirt_frente_flip.png con el texto nuevo.
+
+Reglas: solo CatalogCard.tsx, el script y tests. Reportar `npx tsc -b`, npm run lint, npm test (raíz y
+backend/), npm run build. Commit fix(catalog): ... sin --no-verify. Push sin mergear. NO wrangler.
