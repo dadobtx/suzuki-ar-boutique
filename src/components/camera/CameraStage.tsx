@@ -1,4 +1,4 @@
-import { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import { useEffect, useRef, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCamera } from '@/hooks/useCamera';
 import { useLayout } from '@/hooks/useLayout';
@@ -21,7 +21,7 @@ import {
   AwakeningSplash,
   CalibrationGuide,
 } from '@/components/kiosk';
-import { LiveTryOnManager } from '@/lib/liveTryon';
+import { useLiveTryon } from '@/hooks/useLiveTryon';
 import { StagePanel } from './StagePanel';
 import { SizingControls } from './SizingControls';
 import { VariantControls } from './VariantControls';
@@ -29,7 +29,6 @@ import { useHandCursor } from '@/hooks/useHandCursor';
 import { useHandCursorStore } from '@/store/handCursor';
 import { HandCursor } from '@/components/hand';
 import { useSizingStore } from '@/store/sizing';
-import { resolveGarmentAssets } from '@/lib/garment-assets';
 import { recomendarTallaGarment, resolverTallaElegida } from '@/lib/sizing';
 import { isOperatorMode, isDebugMode } from '@/lib/debug-mode';
 import {
@@ -38,10 +37,6 @@ import {
   type FramingState,
 } from '@/lib/body-framing';
 import { usePwaAutoUpdate, usePwaStore } from '@/lib/pwa-update';
-
-const PUBLIC_ASSETS_BASE =
-  import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
-  'https://dadobtx.github.io/suzuki-ar-boutique/';
 
 const SIDE_TOP = 'top-32'; // 128 px: deja libre la guía (máx. ~115 px de alto)
 
@@ -271,182 +266,26 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   const showLiveButton =
     isLiveTryOnEnabled && activeGarment?.category === 'top' && garmentActiveWithProfile;
 
-  const [liveManager, setLiveManager] = useState<LiveTryOnManager | null>(null);
-  const [isLiveActive, setIsLiveActive] = useState(false);
-  const [liveStream, setLiveStream] = useState<MediaStream | null>(null);
-  const [liveCountdown, setLiveCountdown] = useState<number | null>(null);
-  const [liveToast, setLiveToast] = useState<string | null>(null);
-  const [isLiveLoading, setIsLiveLoading] = useState(false);
-  const liveVideoRef = useRef<HTMLVideoElement>(null);
-  const sessionStartTimeRef = useRef<number>(0);
-
-  const handleStopLiveTryon = useCallback(() => {
-    if (liveManager) {
-      liveManager.stop();
-    }
-    setLiveManager(null);
-    setIsLiveActive(false);
-    setLiveStream(null);
-    setLiveCountdown(null);
-    setIsLiveLoading(false);
-  }, [liveManager]);
-
-  useEffect(() => {
-    if (isLiveActive && presence === 'absent') {
-      handleStopLiveTryon();
-    }
-  }, [presence, isLiveActive, handleStopLiveTryon]);
-
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.hidden && isLiveActive) {
-        handleStopLiveTryon();
-      }
-    };
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-    return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isLiveActive, handleStopLiveTryon]);
-
-  useEffect(() => {
-    return () => {
-      if (liveManager) liveManager.stop();
-    };
-  }, [liveManager]);
-
-  useEffect(() => {
-    if (isLiveActive && liveManager && activeGarment) {
-      const assets = resolveGarmentAssets(activeGarment, activeVariantId);
-      const referenceImageUrl = new URL(
-        assets.overlayUrl.replace(/^\//, ''),
-        PUBLIC_ASSETS_BASE,
-      ).href;
-      liveManager.sendGarment(referenceImageUrl);
-    }
-  }, [activeGarment, activeVariantId, isLiveActive, liveManager]);
-
-  useEffect(() => {
-    if (!isLiveActive || liveCountdown === null || liveCountdown <= 0) return;
-    const timer = setTimeout(() => {
-      if (liveCountdown - 1 <= 0) {
-        handleStopLiveTryon();
-      } else {
-        setLiveCountdown(liveCountdown - 1);
-      }
-    }, 1000);
-    return () => clearTimeout(timer);
-  }, [isLiveActive, liveCountdown, handleStopLiveTryon]);
-
-  useEffect(() => {
-    if (isLiveActive && liveStream && liveVideoRef.current) {
-      liveVideoRef.current.srcObject = liveStream;
-    }
-  }, [isLiveActive, liveStream]);
-
-  const handleStartLiveTryon = useCallback(async () => {
-    if (!activeGarment || !camera.videoRef.current?.srcObject || !sessionId) return;
-    setIsLiveLoading(true);
-
-    try {
-      const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
-      const event =
-        new URLSearchParams(window.location.search).get('event') || 'default-event';
-
-      const res = await fetch(`${BACKEND_URL}/live/token`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          session_id: sessionId,
-          sku: activeGarment.sku,
-          event,
-        }),
-      });
-
-      const data = await res.json();
-      if (res.status === 429) {
-        const msg =
-          data.limit === 'user'
-            ? t('live.userLimit', 'Ya usaste tus 3 pruebas en vivo')
-            : t('live.dayLimit', 'Prueba en vivo no disponible por hoy');
-        setLiveToast(msg);
-        setTimeout(() => setLiveToast(null), 3000);
-        setIsLiveLoading(false);
-        return;
-      }
-
-      if (data.status !== 'success') {
-        throw new Error(data.error || 'Token error');
-      }
-
-      const stream = camera.videoRef.current.srcObject as MediaStream;
-
-      const assets = resolveGarmentAssets(activeGarment, activeVariantId);
-      const referenceImageUrl = new URL(
-        assets.overlayUrl.replace(/^\//, ''),
-        PUBLIC_ASSETS_BASE,
-      ).href;
-
-      const manager = new LiveTryOnManager({
-        token: data.token,
-        maxSeconds: data.max_seconds,
-        liveId: data.live_id,
-        stream,
-        referenceImageUrl,
-        onUpdate: (remoteStream) => {
-          sessionStartTimeRef.current = Date.now();
-          setLiveStream(remoteStream);
-          setIsLiveActive(true);
-          setIsLiveLoading(false);
-          setLiveCountdown(data.max_seconds);
-
-          fetch(`${BACKEND_URL}/kiosk/interactions`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              session_id: sessionId,
-              sku: activeGarment.sku,
-              accion: 'live_tryon',
-              tabla_origen_id: activeGarment.sku,
-            }),
-          }).catch(() => {});
-        },
-        onError: (err) => {
-          console.error(err);
-          handleStopLiveTryon();
-        },
-        onClose: () => {
-          const elapsedSeconds = Math.floor(
-            (Date.now() - sessionStartTimeRef.current) / 1000,
-          );
-          fetch(`${BACKEND_URL}/live/complete`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              live_id: data.live_id,
-              seconds: Math.max(0, Math.min(elapsedSeconds, data.max_seconds)),
-            }),
-          }).catch(() => {});
-        },
-      });
-
-      setLiveManager(manager);
-      await manager.start();
-    } catch (err) {
-      console.error(err);
-      setIsLiveLoading(false);
-      setLiveToast(
-        t('live.error', 'No pudimos iniciar la prueba en vivo. Intenta otra vez.'),
-      );
-      setTimeout(() => setLiveToast(null), 3000);
-    }
-  }, [activeGarment, activeVariantId, camera, sessionId, handleStopLiveTryon, t]);
-
-  // Mano v4: el índice sostenido activa EXACTAMENTE el mismo handler del botón VERME EN VIVO
-  const isLiveAvailable =
-    showLiveButton &&
-    !isLiveLoading &&
-    !isLiveActive &&
-    kioskState === 'TRYON' &&
-    Boolean(activeGarment);
+  const {
+    isLiveActive,
+    isLiveLoading,
+    isLiveAvailable,
+    isLiveCoolingDown,
+    liveCountdown,
+    liveToast,
+    liveVideoRef,
+    handleStartLiveTryon,
+    handleStopLiveTryon,
+  } = useLiveTryon({
+    activeGarment: activeGarment ?? null,
+    activeVariantId,
+    getCameraStream: () =>
+      (camera.videoRef.current?.srcObject as MediaStream | null) ?? null,
+    sessionId,
+    presence,
+    kioskState,
+    garmentActiveWithProfile,
+  });
 
   const { handleMirrorPointerMove, handleMirrorPointerLeave } = useHandCursor(
     camera.videoRef,
@@ -714,10 +553,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               <button
                 type="button"
                 onClick={handleStartLiveTryon}
-                disabled={isLiveLoading || isLiveActive}
+                disabled={isLiveLoading || isLiveActive || isLiveCoolingDown}
                 aria-label={t('live.seeLive', 'VERME EN VIVO')}
                 className={`relative w-[160px] h-[160px] rounded-full bg-fg text-bg border-4 border-fg/30 flex flex-col items-center justify-center shadow-2xl transition-transform ${
-                  isLiveLoading
+                  isLiveLoading || isLiveCoolingDown
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
                       ? 'cursor-default scale-100'

@@ -173,5 +173,26 @@ describe('Live Try-On API', () => {
       // Verify it clamped using the query that includes `seconds > ?`
       expect(DB_MOCK.bind).toHaveBeenCalledWith(5, 12345, 5);
     });
+
+    it('deletes row if failed is true', async () => {
+      DB_MOCK.run.mockResolvedValueOnce({ success: true });
+
+      const req = new Request('http://localhost/live/complete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ live_id: 12345, failed: true }),
+      });
+
+      const res = await app.fetch(req, MOCK_ENV);
+      expect(res.status).toBe(200);
+
+      const data = (await res.json()) as { status?: string; deleted?: boolean };
+      expect(data.status).toBe('success');
+      expect(data.deleted).toBe(true);
+      expect(DB_MOCK.prepare).toHaveBeenCalledWith(
+        'DELETE FROM live_sesiones WHERE id = ?',
+      );
+      expect(DB_MOCK.bind).toHaveBeenCalledWith(12345);
+    });
   });
 });

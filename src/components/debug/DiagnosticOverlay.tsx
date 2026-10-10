@@ -12,6 +12,70 @@ import {
 import { usePwaStore } from '@/lib/pwa-update';
 import { useHandCursorStore } from '@/store/handCursor';
 import { isHandInputEnabled } from '@/lib/hand-input-flag';
+import { useLiveTryonStore } from '@/store/liveTryon';
+
+function LiveTryOnTelemetryCard() {
+  const { managerState, connectionKey, activeCount, cooldownRemainingSec, lastError } =
+    useLiveTryonStore.getState();
+
+  const shortKey = connectionKey
+    ? connectionKey.length > 20
+      ? `${connectionKey.slice(0, 10)}...${connectionKey.slice(-6)}`
+      : connectionKey
+    : 'ninguna';
+
+  return (
+    <div className="bg-zinc-950/60 p-2 rounded border border-zinc-800/60">
+      <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+        ✨ Live Try-On
+      </div>
+      <div>
+        <span className="text-zinc-400">Estado: </span>
+        <span
+          className={
+            managerState === 'active'
+              ? 'text-emerald-400 font-bold'
+              : managerState === 'connecting'
+                ? 'text-cyan-400 font-bold'
+                : managerState === 'closing'
+                  ? 'text-amber-300 font-bold'
+                  : managerState === 'closed'
+                    ? 'text-zinc-400 font-bold'
+                    : 'text-zinc-500 font-bold'
+          }
+        >
+          {managerState.toUpperCase()}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Conexión: </span>
+        <span className="text-zinc-300 font-mono text-[11px]">{shortKey}</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Instancias activas: </span>
+        <span className="text-emerald-300 font-mono font-bold">{activeCount}</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Enfriamiento: </span>
+        <span
+          className={
+            cooldownRemainingSec > 0
+              ? 'text-amber-300 font-mono font-bold'
+              : 'text-zinc-400 font-mono'
+          }
+        >
+          {cooldownRemainingSec > 0 ? `${cooldownRemainingSec.toFixed(1)}s` : 'listo'}
+        </span>
+      </div>
+      {lastError && (
+        <div className="text-red-400 text-[11px] truncate mt-1">
+          <span className="text-zinc-400">Error: </span>
+          {lastError}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function HandGesturesTelemetryCard() {
   const cursor = useHandCursorStore.getState().cursor;
@@ -486,6 +550,9 @@ function DiagnosticOverlayInner() {
                 {PRESENCE_LEAVING_THRESHOLD} (pts: {PRESENCE_LANDMARK_INDICES.join(',')})
               </div>
             </div>
+
+            {/* 5. Live Try-On Telemetry */}
+            <LiveTryOnTelemetryCard />
           </div>
 
           {/* Bottom Console Logs (scrollable, interactive) */}
