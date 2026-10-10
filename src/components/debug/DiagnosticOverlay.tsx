@@ -13,6 +13,164 @@ import { usePwaStore } from '@/lib/pwa-update';
 import { useHandCursorStore } from '@/store/handCursor';
 import { isHandInputEnabled } from '@/lib/hand-input-flag';
 
+function HandGesturesTelemetryCard() {
+  const cursor = useHandCursorStore.getState().cursor;
+  const detectedHandsCount = useHandCursorStore.getState().detectedHandsCount;
+  const userHandsCount = useHandCursorStore.getState().userHandsCount;
+  const inferenceFps = useHandCursorStore.getState().inferenceFps;
+  const gestureLatencyP95 = useHandCursorStore.getState().gestureLatencyP95;
+  const adaptiveTargetFps = useHandCursorStore.getState().adaptiveTargetFps;
+  const p95 = useHandCursorStore.getState().p95;
+
+  const blockedReason =
+    cursor.stepBlockedReason ?? (cursor.active ? 'ninguno' : 'sin cursor');
+  const dVal =
+    cursor.displacement !== undefined ? cursor.displacement.toFixed(2) : '0.00';
+  const offSwVal =
+    cursor.anchorOffsetSw !== null && cursor.anchorOffsetSw !== undefined
+      ? cursor.anchorOffsetSw.toFixed(2)
+      : 'N/A';
+  const swVal =
+    cursor.swWidth !== null && cursor.swWidth !== undefined
+      ? cursor.swWidth.toFixed(2)
+      : 'N/A';
+
+  return (
+    <div className="bg-zinc-950/60 p-2 rounded border border-zinc-800/60">
+      <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
+        🖐️ Gestos & Mano
+      </div>
+      <div>
+        <span className="text-zinc-400">Paso bloqueado por: </span>
+        <span
+          className={
+            blockedReason === 'ninguno'
+              ? 'text-emerald-400 font-bold'
+              : 'text-amber-300 font-bold'
+          }
+        >
+          {blockedReason}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Métricas paso: </span>
+        <span className="text-cyan-300 font-mono">
+          d: {dVal} · offSw: {offSwVal} · sw: {swVal}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Cursor: </span>
+        <span
+          className={
+            cursor.active ? 'text-emerald-400 font-bold' : 'text-zinc-500 font-bold'
+          }
+        >
+          {cursor.active ? 'ACTIVO' : 'INACTIVO'}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Índice: </span>
+        <span className="text-zinc-200 font-mono">{cursor.index}</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Progreso confirmación: </span>
+        <span className="text-emerald-300 font-mono font-bold">
+          {((cursor.confirmProgress ?? cursor.dwellProgress) * 100).toFixed(0)}%
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Palanca (d / estado): </span>
+        <span className="text-cyan-300 font-mono">
+          {dVal} (
+          {cursor.leverState === 'neutral'
+            ? 'neutra'
+            : cursor.leverState?.startsWith('fast')
+              ? 'rápido'
+              : 'lento'}
+          )
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Ancla x: </span>
+        <span className="text-zinc-200 font-mono">
+          {cursor.anchorX !== null && cursor.anchorX !== undefined
+            ? cursor.anchorX.toFixed(3)
+            : 'N/A'}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Dueño match: </span>
+        <span className="text-emerald-300 font-mono">
+          {cursor.ownerReason === 'wrist'
+            ? 'por muñeca'
+            : cursor.ownerReason === 'continuity'
+              ? 'por continuidad'
+              : cursor.ownerReason === 'box'
+                ? 'por recuadro'
+                : 'ninguno'}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Mano activa: </span>
+        <span className="text-amber-300 font-mono">
+          {cursor.activeHandSide === 'Left'
+            ? 'Izq'
+            : cursor.activeHandSide === 'Right'
+              ? 'Der'
+              : 'Ninguna'}{' '}
+          (cambios: {cursor.handSwitchCount ?? 0})
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Gesto: </span>
+        <span className="text-zinc-200 font-mono">{cursor.gesture}</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Lado (pose / clasificador): </span>
+        <span className="text-amber-300 font-mono">
+          {cursor.poseSide ?? 'None'} / {cursor.classifierSide ?? 'None'}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Índice: </span>
+        <span className="text-cyan-300 font-mono">{cursor.indexSource ?? 'ninguno'}</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Manos (Total / Usuario): </span>
+        <span className="text-zinc-200 font-medium">
+          {detectedHandsCount} / {userHandsCount}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Estado manos: </span>
+        <span className="text-amber-300 font-mono text-[11px]">
+          {cursor.handsRaisedSummary ?? 'ninguna'}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">FPS Gesto: </span>
+        <span className="text-emerald-300 font-bold">{inferenceFps}</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Latencia gesto p95: </span>
+        <span className="text-emerald-300 font-mono">{gestureLatencyP95 ?? 0} ms</span>
+      </div>
+      <div>
+        <span className="text-zinc-400">Frecuencia adaptativa: </span>
+        <span className="text-zinc-200 font-medium">
+          {adaptiveTargetFps === 'auto'
+            ? 'Auto (cada frame)'
+            : `${adaptiveTargetFps} fps`}
+        </span>
+      </div>
+      <div>
+        <span className="text-zinc-400">p95 Combinado (Pose+Gesto): </span>
+        <span className="text-amber-300 font-mono">{p95} ms</span>
+      </div>
+    </div>
+  );
+}
+
 function DiagnosticOverlayInner() {
   const [isCollapsed, setIsCollapsed] = useState(false);
   const [, setTick] = useState(0);
@@ -89,9 +247,16 @@ function DiagnosticOverlayInner() {
           onClick={() => setIsCollapsed((prev) => !prev)}
           className="ml-2 px-2 py-0.5 bg-zinc-800 hover:bg-zinc-700 active:bg-zinc-600 border border-zinc-600 text-zinc-200 hover:text-white rounded text-[11px] transition-colors"
         >
-          {isCollapsed ? '▼ Mostrar' : '▲ Ocultar'}
+          {isCollapsed ? '▼ Mostrar todo' : '▲ Contraer'}
         </button>
       </div>
+
+      {/* Panel Gestos & Mano visible aunque el resto esté contraído (§3.4) */}
+      {isCollapsed && isHandInputEnabled() && (
+        <div className="pointer-events-none mt-1 max-w-sm w-full bg-black/85 border border-zinc-700/80 rounded shadow-xl overflow-hidden">
+          <HandGesturesTelemetryCard />
+        </div>
+      )}
 
       {/* Main panel */}
       {!isCollapsed && (
@@ -265,148 +430,7 @@ function DiagnosticOverlayInner() {
             </div>
 
             {/* 3.5 Hand Gestures Telemetry */}
-            {isHandInputEnabled() && (
-              <div className="bg-zinc-950/60 p-2 rounded border border-zinc-800/60">
-                <div className="text-[11px] font-bold text-zinc-400 uppercase tracking-wider mb-1">
-                  🖐️ Gestos & Mano
-                </div>
-                <div>
-                  <span className="text-zinc-400">Cursor: </span>
-                  <span
-                    className={
-                      useHandCursorStore.getState().cursor.active
-                        ? 'text-emerald-400 font-bold'
-                        : 'text-zinc-500 font-bold'
-                    }
-                  >
-                    {useHandCursorStore.getState().cursor.active ? 'ACTIVO' : 'INACTIVO'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Índice: </span>
-                  <span className="text-zinc-200 font-mono">
-                    {useHandCursorStore.getState().cursor.index}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Progreso confirmación: </span>
-                  <span className="text-emerald-300 font-mono font-bold">
-                    {(
-                      (useHandCursorStore.getState().cursor.confirmProgress ??
-                        useHandCursorStore.getState().cursor.dwellProgress) * 100
-                    ).toFixed(0)}
-                    %
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Palanca (d / estado): </span>
-                  <span className="text-cyan-300 font-mono">
-                    {useHandCursorStore.getState().cursor.displacement !== undefined
-                      ? useHandCursorStore.getState().cursor.displacement!.toFixed(2)
-                      : '0.00'}{' '}
-                    (
-                    {useHandCursorStore.getState().cursor.leverState === 'neutral'
-                      ? 'neutra'
-                      : useHandCursorStore
-                            .getState()
-                            .cursor.leverState?.startsWith('fast')
-                        ? 'rápido'
-                        : 'lento'}
-                    )
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Ancla x: </span>
-                  <span className="text-zinc-200 font-mono">
-                    {useHandCursorStore.getState().cursor.anchorX !== null &&
-                    useHandCursorStore.getState().cursor.anchorX !== undefined
-                      ? useHandCursorStore.getState().cursor.anchorX!.toFixed(3)
-                      : 'N/A'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Dueño match: </span>
-                  <span className="text-emerald-300 font-mono">
-                    {useHandCursorStore.getState().cursor.ownerReason === 'wrist'
-                      ? 'por muñeca'
-                      : useHandCursorStore.getState().cursor.ownerReason === 'continuity'
-                        ? 'por continuidad'
-                        : useHandCursorStore.getState().cursor.ownerReason === 'box'
-                          ? 'por recuadro'
-                          : 'ninguno'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Mano activa: </span>
-                  <span className="text-amber-300 font-mono">
-                    {useHandCursorStore.getState().cursor.activeHandSide === 'Left'
-                      ? 'Izq'
-                      : useHandCursorStore.getState().cursor.activeHandSide === 'Right'
-                        ? 'Der'
-                        : 'Ninguna'}{' '}
-                    (cambios: {useHandCursorStore.getState().cursor.handSwitchCount ?? 0})
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Gesto: </span>
-                  <span className="text-zinc-200 font-mono">
-                    {useHandCursorStore.getState().cursor.gesture}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Lado (pose / clasificador): </span>
-                  <span className="text-amber-300 font-mono">
-                    {useHandCursorStore.getState().cursor.poseSide ?? 'None'} /{' '}
-                    {useHandCursorStore.getState().cursor.classifierSide ?? 'None'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Índice: </span>
-                  <span className="text-cyan-300 font-mono">
-                    {useHandCursorStore.getState().cursor.indexSource ?? 'ninguno'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Manos (Total / Usuario): </span>
-                  <span className="text-zinc-200 font-medium">
-                    {useHandCursorStore.getState().detectedHandsCount} /{' '}
-                    {useHandCursorStore.getState().userHandsCount}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Estado manos: </span>
-                  <span className="text-amber-300 font-mono text-[11px]">
-                    {useHandCursorStore.getState().cursor.handsRaisedSummary ?? 'ninguna'}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">FPS Gesto: </span>
-                  <span className="text-emerald-300 font-bold">
-                    {useHandCursorStore.getState().inferenceFps}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Latencia gesto p95: </span>
-                  <span className="text-emerald-300 font-mono">
-                    {useHandCursorStore.getState().gestureLatencyP95 ?? 0} ms
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">Frecuencia adaptativa: </span>
-                  <span className="text-zinc-200 font-medium">
-                    {useHandCursorStore.getState().adaptiveTargetFps === 'auto'
-                      ? 'Auto (cada frame)'
-                      : `${useHandCursorStore.getState().adaptiveTargetFps} fps`}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-zinc-400">p95 Combinado (Pose+Gesto): </span>
-                  <span className="text-amber-300 font-mono">
-                    {useHandCursorStore.getState().p95} ms
-                  </span>
-                </div>
-              </div>
-            )}
+            {isHandInputEnabled() && <HandGesturesTelemetryCard />}
 
             {/* 4. Presence Inputs & State */}
             <div className="bg-zinc-950/60 p-2 rounded border border-zinc-800/60">

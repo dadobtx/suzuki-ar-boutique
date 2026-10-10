@@ -369,6 +369,7 @@ export function useHandCursor(
         }
 
         targetUser = {
+          userId: pose.activeZone?.lockedIndex ?? null,
           lockedWrists: { left: leftWristVis, right: rightWristVis },
           lockedElbows: { left: leftElbowVis, right: rightElbowVis },
           lockedHips: { left: leftHipVis, right: rightHipVis },
@@ -380,6 +381,7 @@ export function useHandCursor(
       } else if (isHandSim) {
         // Usuario sintético centrado para QA
         targetUser = {
+          userId: 'sim',
           lockedWrists: {
             left: { x: 0.45, y: 0.6 },
             right: { x: 0.55, y: 0.6 },

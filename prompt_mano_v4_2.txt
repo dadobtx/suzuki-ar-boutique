@@ -1,0 +1,67 @@
+PROMPT PARA ANTIGRAVITY — Mano v4.2: recuperar los pasos después de acercarse/alejarse y de la prueba en vivo
+Guardar en la raíz del repo como: prompt_mano_v4_2.txt
+Rama: fix/mano-v4-2 desde main (6c35370 o posterior). NO mergear.
+
+====================================================================
+1. LO QUE PASÓ EN LA PRUEBA REAL DE DARIO
+====================================================================
+Todo funcionó (pasos con ambas manos, prueba automática y VERME EN VIVO con el índice). Luego se
+ACERCÓ a la pantalla para contraer el overlay de debug, se alejó de nuevo a la marca y desde ahí los
+pasos NO funcionaron con ninguna mano (el cursor de mano sigue apareciendo). Además, durante la cuenta
+regresiva de la sesión en vivo el foco del perchero se movió a otra prenda (Jimny), aunque la prenda
+puesta no cambió.
+
+====================================================================
+2. CAUSAS PROBABLES (en src/lib/hand-cursor.ts, modo paso)
+====================================================================
+C1. El ancla relativa al cuerpo guarda anchorOffset = x − cx en unidades de PANTALLA, y d se mide en
+    anchos de hombro (d = (x − ancla) / swWidth). Si la persona se acerca (swWidth grande), ancla, y
+    después se aleja (swWidth pequeño) sin bajar la mano, el mismo offset en pantalla equivale a
+    muchos más anchos de hombro: |d| queda grande todo el tiempo, el disparador queda DESARMADO
+    esperando |d| < 0.20 que nunca llega, y el re-centrado (solo en neutral) nunca corre. Resultado:
+    ningún paso con ninguna mano.
+C2. Durante la sesión en vivo el tracker sigue moviendo su índice interno/foco aunque RackPanel ignore
+    los pasos; al terminar, el índice del tracker y la prenda puesta quedan desalineados.
+
+====================================================================
+3. CAMBIOS
+====================================================================
+3.1 Ancla en anchos de hombro (C1)
+  - Guardar anchorOffsetSw = (x − cx) / swWidth y en cada frame anchorX = cx + anchorOffsetSw · swWidth.
+  - Re-anclar (anchorX = x actual, disparador armado) cuando: cambia la persona fijada, o swWidth
+    cambia más de 25 % respecto al valor del momento de anclar.
+3.2 Auto-recuperación del disparador
+  - Si el disparador lleva DESARMADO más de 1500 ms sin volver a neutral, re-anclar en la posición
+    actual de la mano y re-armar (sin disparar paso en ese momento).
+3.3 Sesión en vivo (C2)
+  - Mientras isLiveActive (o isLiveLoading): el tracker no cambia su índice ni publica foco nuevo;
+    el foco del perchero no se mueve.
+  - Al terminar la sesión: re-anclar en la posición actual, re-armar, y sincronizar el índice del
+    tracker con la prenda puesta (activeGarment), igual que en la activación (v4.1 §3.2).
+3.4 Diagnóstico
+  - En el panel GESTOS & MANO del overlay agregar "Paso bloqueado por:" con el motivo actual:
+    ninguno / desarmado (esperando centro) / anti-rebote / pausado (vuelo) / pausado (en vivo) /
+    pausado (táctil) / índice levantado / mano abajo / sin cursor. Y mostrar d, anchorOffsetSw y swWidth.
+  - Este panel debe quedar visible aunque los de cámara y video estén contraídos.
+
+====================================================================
+4. TESTS NUEVOS (tests/unit/hand-cursor-v4-2.test.ts), jitter ±20 % a 10 y 24 fps
+====================================================================
+- Activar con swWidth 0.30 (cerca), luego swWidth pasa a 0.15 (lejos) con la mano quieta respecto al
+  cuerpo → d se mantiene cerca de 0, y un gesto a la derecha da exactamente 1 paso.
+- Forzar el disparador desarmado (d = 0.6 sostenido) 1600 ms sin volver al centro → se re-ancla y
+  re-arma; el siguiente gesto da 1 paso.
+- swWidth cambia 30 % → re-ancla sin disparar paso.
+- Con isLiveActive true durante 3 s y gestos laterales → 0 'step' y el índice no cambia; al pasar a
+  false con la prenda del índice 5 puesta → índice 5, y el siguiente paso a la derecha → 6.
+- Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+5. REGLAS Y EVIDENCIA
+====================================================================
+- Solo hand-cursor.ts, useHandCursor.ts, RackPanel.tsx (foco durante en vivo), DiagnosticOverlay.tsx
+  y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Si un test nuevo no pasa en 3 intentos: detenerse, commit WIP con --no-verify, push, y reportar el
+  error exacto. No cambiar aserciones existentes.
+- Commit final fix(hand): ... sin --no-verify. Push sin mergear.

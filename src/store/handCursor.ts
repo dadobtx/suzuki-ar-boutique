@@ -52,6 +52,9 @@ const DEFAULT_CURSOR: HandCursorData = {
   indexSource: 'ninguno',
   isStepDisarmed: false,
   pulseArrow: null,
+  anchorOffsetSw: null,
+  swWidth: null,
+  stepBlockedReason: 'sin cursor',
 };
 
 export const useHandCursorStore = create<HandCursorStoreState>((set) => ({

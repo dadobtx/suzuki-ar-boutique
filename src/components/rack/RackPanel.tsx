@@ -520,6 +520,20 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
   const handCursor = useHandCursorStore((s) => s.cursor);
   const handLastEvent = useHandCursorStore((s) => s.lastEvent);
 
+  // Al terminar la sesión en vivo: sincronizar foco con la prenda puesta
+  const prevLiveActiveRef = useRef(isLiveActive);
+  useEffect(() => {
+    if (prevLiveActiveRef.current && !isLiveActive) {
+      if (activeGarmentId) {
+        const activeIdx = items.findIndex((it) => it.id === activeGarmentId);
+        if (activeIdx >= 0) {
+          setFocus(activeIdx);
+        }
+      }
+    }
+    prevLiveActiveRef.current = isLiveActive;
+  }, [isLiveActive, activeGarmentId, items, setFocus]);
+
   // Cambio de foco por cursor de mano
   useEffect(() => {
     if (mode !== 'interactive' || !active || isLiveActive || isBusyRef.current) return;
