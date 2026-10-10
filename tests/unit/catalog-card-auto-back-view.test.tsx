@@ -169,4 +169,22 @@ describe('CatalogCard vista posterior automática al seleccionar', () => {
     );
     expect(hasFlipBtn).toBe(false);
   });
+
+  it('el contenedor del nombre reserva alto mínimo de 2 líneas con min-h-[2.75em] para nombres cortos y largos', () => {
+    // 1. Prenda con nombre corto ("Team Black T-Shirt" -> displayName "T-Shirt")
+    const { container: c1 } = render(<CatalogCard garment={garmentWithBack} />);
+    const nameEl1 = c1.querySelector('.font-display');
+    expect(nameEl1).toBeTruthy();
+    expect(nameEl1?.className).toContain('min-h-[2.75em]');
+
+    // 2. Prenda con nombre largo que ocupa 2 líneas ("Functional Hooded Sweat Jacket")
+    const garmentLongName: Garment = {
+      ...garmentWithoutBack,
+      name: 'Team Black Functional Hooded Sweat Jacket',
+    };
+    const { container: c2 } = render(<CatalogCard garment={garmentLongName} />);
+    const nameEl2 = c2.querySelector('.font-display');
+    expect(nameEl2).toBeTruthy();
+    expect(nameEl2?.className).toContain('min-h-[2.75em]');
+  });
 });

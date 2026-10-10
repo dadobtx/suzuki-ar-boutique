@@ -1,12 +1,13 @@
 import type { Garment } from '@/types/garment';
 import { resolveGarmentIllustration } from '@/lib/garment-illustration';
+import { resolveBackView } from '@/lib/back-view';
 
 export type ShowcaseSlide =
   | {
       kind: 'garment';
       garment: Garment;
       illustrations: string[]; // 0, 1 o 2 URLs (2 cuando hay variantes con ilustración)
-      photos: { thumb?: string; full?: string }[]; // en paralelo a illustrations (mismo índice = misma variante)
+      photos: { thumb?: string; full?: string; back?: string }[]; // en paralelo a illustrations (mismo índice = misma variante)
       colorCount: number; // variants.length si >1, si no colors.length
     }
   | {
@@ -33,7 +34,7 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
   for (const garment of maxGarments) {
     // 1. Resolve illustrations and photos in parallel
     const illustrations: string[] = [];
-    const photos: { thumb?: string; full?: string }[] = [];
+    const photos: { thumb?: string; full?: string; back?: string }[] = [];
 
     if (garment.variants && garment.variants.length > 0) {
       for (const v of garment.variants) {
@@ -44,9 +45,12 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
             illustrations.push(formatted);
             const thumb = prefixBaseUrl(v.thumbnailUrl || garment.thumbnailUrl);
             const full = prefixBaseUrl(v.overlayUrl || garment.overlayUrl);
+            const backResolved = resolveBackView(garment, v.id);
+            const back = prefixBaseUrl(backResolved?.thumbnailUrl);
             photos.push({
               ...(thumb ? { thumb } : {}),
               ...(full ? { full } : {}),
+              ...(back ? { back } : {}),
             });
           }
         }
@@ -56,10 +60,13 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
         for (const v of garment.variants) {
           const thumb = prefixBaseUrl(v.thumbnailUrl || garment.thumbnailUrl);
           const full = prefixBaseUrl(v.overlayUrl || garment.overlayUrl);
-          if (thumb || full) {
+          const backResolved = resolveBackView(garment, v.id);
+          const back = prefixBaseUrl(backResolved?.thumbnailUrl);
+          if (thumb || full || back) {
             photos.push({
               ...(thumb ? { thumb } : {}),
               ...(full ? { full } : {}),
+              ...(back ? { back } : {}),
             });
           }
         }
@@ -74,10 +81,13 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
       }
       const thumb = prefixBaseUrl(garment.thumbnailUrl);
       const full = prefixBaseUrl(garment.overlayUrl);
-      if (thumb || full) {
+      const backResolved = resolveBackView(garment);
+      const back = prefixBaseUrl(backResolved?.thumbnailUrl);
+      if (thumb || full || back) {
         photos.push({
           ...(thumb ? { thumb } : {}),
           ...(full ? { full } : {}),
+          ...(back ? { back } : {}),
         });
       }
     }
