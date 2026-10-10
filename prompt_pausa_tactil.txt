@@ -1,0 +1,52 @@
+PROMPT PARA ANTIGRAVITY — El mouse pausa los gestos de mano ("pausado (táctil)")
+Guardar en la raíz del repo como: prompt_pausa_tactil.txt
+Rama: fix/pausa-tactil desde main (3fa9340 o posterior). NO mergear.
+
+====================================================================
+1. LO QUE MOSTRÓ LA PRUEBA DE DARIO CON 2 PERSONAS
+====================================================================
+Con una persona los pasos funcionan y con la otra no. En el video, mientras falla, el overlay muestra
+casi siempre "Paso bloqueado por: pausado (táctil)" con el cursor ACTIVO, mano "por muñeca" y d hasta
+1.10 (más que el umbral 0.35): el gesto está bien hecho, pero la pausa lo bloquea. Se ve el puntero
+del mouse moviéndose sobre la página: alguien estaba en el computador (grabando o contrayendo el
+overlay) mientras la otra persona probaba.
+
+====================================================================
+2. CAUSA (src/components/rack/RackPanel.tsx y src/hooks/useHandCursor.ts)
+====================================================================
+- RackPanel.handlePointerMove llama pause(2000) ante CUALQUIER pointermove sobre el perchero, incluido
+  el mouse que solo pasa por encima (hover, sin clic). Además, una vez pausado, cada movimiento
+  renueva la pausa (`if (isHandActive && !isPaused) return;` deja pasar los movimientos mientras dura
+  la pausa), así que un mouse que se mueve de vez en cuando mantiene la mano bloqueada indefinidamente.
+- El pointerdown global (useHandCursor) pausa 2 s ante clics en cualquier parte, incluido el overlay
+  de debug.
+
+====================================================================
+3. CAMBIOS
+====================================================================
+- Hover del mouse NO pausa: en handlePointerMove, si e.pointerType === 'mouse' y no hay botón
+  presionado (e.buttons === 0), no llamar pause() (puede seguir moviendo el foco como hoy si el cursor
+  de mano está inactivo). Toque (touch) y lápiz (pen) siguen pausando como hoy.
+- La pausa por pointermove no se renueva sola: solo un pointerdown o un movimiento táctil/con botón
+  nuevo la extiende.
+- Clics dentro del overlay de debug (data-debug-overlay o el contenedor de DiagnosticOverlay) no
+  pausan la mano.
+- Debug: en "Paso bloqueado por: pausado (táctil)" agregar el origen y el tiempo restante, p. ej.
+  "pausado (táctil: touch, 1.4 s)" / "(clic)" / "(mouse con botón)".
+
+====================================================================
+4. TESTS
+====================================================================
+- pointermove con pointerType 'mouse' y buttons 0 sobre el perchero, repetido cada 200 ms durante 5 s,
+  con el cursor de mano activo → pausedUntilMs no cambia y los pasos funcionan.
+- pointermove 'touch' → pausa 2 s (comportamiento actual).
+- pointerdown dentro del overlay de debug → sin pausa; pointerdown en el perchero → pausa 2 s.
+- Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+5. REGLAS Y EVIDENCIA
+====================================================================
+- Solo RackPanel.tsx, useHandCursor.ts, store/handCursor.ts (origen de la pausa), DiagnosticOverlay.tsx
+  y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Commit fix(hand): ... sin --no-verify. Push sin mergear.

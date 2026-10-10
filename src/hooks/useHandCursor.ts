@@ -214,6 +214,18 @@ export function useHandCursor(
   useEffect(() => {
     const handleGlobalPointer = (e: PointerEvent) => {
       if (!isHandGloballyEnabled) return;
+
+      // Clics dentro del overlay de debug no pausan la mano
+      const target = e.target as Element | null;
+      const element =
+        target instanceof Element ? target : (target as Node | null)?.parentElement;
+      if (
+        element &&
+        (element.closest('[data-debug-overlay]') || element.closest('#debug-overlay'))
+      ) {
+        return;
+      }
+
       // Si estamos en modo simulado y el evento ocurrió dentro del espejo, no pausar
       if (isHandSim) {
         const mirrorEl =
@@ -223,7 +235,9 @@ export function useHandCursor(
           return;
         }
       }
-      useHandCursorStore.getState().pause(2000);
+
+      const origin = e.pointerType === 'mouse' ? 'clic' : e.pointerType || 'touch';
+      useHandCursorStore.getState().pause(2000, origin);
     };
 
     window.addEventListener('pointerdown', handleGlobalPointer);

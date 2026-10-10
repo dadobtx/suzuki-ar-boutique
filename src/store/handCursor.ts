@@ -13,11 +13,12 @@ export interface HandCursorStoreState {
   userHandsCount: number;
   isBusy: boolean;
   pausedUntilMs: number;
+  pauseOrigin: string | null;
   rackFocusIndex: number | null;
 
   setRackFocusIndex: (idx: number | null) => void;
   setBusy: (busy: boolean) => void;
-  pause: (durationMs?: number) => void;
+  pause: (durationMs?: number, origin?: string) => void;
   updateFromOutput: (
     output: HandFrameOutput,
     metrics?: {
@@ -69,12 +70,17 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
   userHandsCount: 0,
   isBusy: false,
   pausedUntilMs: 0,
+  pauseOrigin: null,
   rackFocusIndex: null,
 
   setRackFocusIndex: (idx: number | null) => set({ rackFocusIndex: idx }),
   setBusy: (busy: boolean) => set({ isBusy: busy }),
 
-  pause: (durationMs = 2000) => set({ pausedUntilMs: Date.now() + durationMs }),
+  pause: (durationMs = 2000, origin = 'touch') =>
+    set({
+      pausedUntilMs: Date.now() + durationMs,
+      pauseOrigin: origin,
+    }),
 
   updateFromOutput: (output, metrics) =>
     set((state) => ({
@@ -104,6 +110,7 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
       userHandsCount: 0,
       isBusy: false,
       pausedUntilMs: 0,
+      pauseOrigin: null,
       rackFocusIndex: null,
     }),
 }));
