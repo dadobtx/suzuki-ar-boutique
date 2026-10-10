@@ -6,6 +6,8 @@ import {
   type HandFrameUser,
   type HandFrameOutput,
 } from '@/lib/hand-cursor';
+import { selectUser, DEFAULT_ACTIVE_ZONE_CONFIG } from '@/lib/active-zone';
+import type { NormalizedLandmark } from '@mediapipe/tasks-vision';
 
 function createPrng(seed: number) {
   let s = seed % 2147483647;
@@ -37,7 +39,7 @@ const makeUser = (
   },
   sw: opts.sw ?? 0.2,
   cx: opts.cx ?? 0.5,
-  userId: opts.userId ?? 'person_1',
+  userId: opts.userId !== undefined ? opts.userId : 'person_1',
 });
 
 const makeHand = (
@@ -60,6 +62,33 @@ const makeHand = (
     handedness: side === 'left' ? 'Left' : 'Right',
   };
 };
+
+function createDummyLandmarks(options: {
+  cx?: number;
+  sw?: number;
+  cy?: number;
+  vis?: number;
+}): NormalizedLandmark[] {
+  const cx = options.cx ?? 0.5;
+  const sw = options.sw ?? 0.28;
+  const cy = options.cy ?? 0.5;
+  const vis = options.vis ?? 0.9;
+
+  const lms: NormalizedLandmark[] = [];
+  for (let i = 0; i < 33; i++) {
+    lms.push({ x: cx, y: cy, z: 0, visibility: vis });
+  }
+
+  lms[0] = { x: cx, y: cy - 0.2, z: 0, visibility: vis };
+  lms[11] = { x: cx - sw / 2, y: cy, z: 0, visibility: vis };
+  lms[12] = { x: cx + sw / 2, y: cy, z: 0, visibility: vis };
+  lms[15] = { x: cx - sw / 2 - 0.05, y: cy + 0.25, z: 0, visibility: vis };
+  lms[16] = { x: cx + sw / 2 + 0.05, y: cy + 0.25, z: 0, visibility: vis };
+  lms[23] = { x: cx - sw / 2, y: cy + 0.3, z: 0, visibility: vis };
+  lms[24] = { x: cx + sw / 2, y: cy + 0.3, z: 0, visibility: vis };
+
+  return lms;
+}
 
 class Sim {
   tracker = new HandCursorTracker({ mode: 'step' });
@@ -335,6 +364,226 @@ describe('Mano v4.2: Recuperar pasos y sesión en vivo (tests/unit/hand-cursor-v
         busy: true,
       });
       expect(out.cursor.stepBlockedReason).toBe('pausado (vuelo)');
+    });
+  });
+
+  describe('4.6 Identidad de persona fijada y resiliencia a null/swaps (v4.2 ajuste)', () => {
+    it('mismo userId con la mano desplazada en mitad de un gesto, y un cuadro con userId null -> 1 paso igual, 0 re-anclajes', () => {
+      const tracker = new HandCursorTracker({ mode: 'step' });
+      const userA = makeUser({ sw: 0.2, cx: 0.5, userId: 'user_A' });
+      const userNull = makeUser({ sw: 0.2, cx: 0.5, userId: null });
+
+      // Activar cursor centrado con mano derecha (screenX = 0.50, videoX = 0.50)
+      let out = tracker.update({
+        nowMs: 100,
+        hands: [makeHand('right', 1 - 0.5)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      for (let t = 200; t <= 700; t += 100) {
+        out = tracker.update({
+          nowMs: t,
+          hands: [makeHand('right', 1 - 0.5)],
+          user: userA,
+          itemCount: 10,
+          currentIndex: 5,
+        });
+      }
+      expect(out.cursor.active).toBe(true);
+      const initialAnchorX = out.cursor.anchorX;
+      expect(initialAnchorX).toBeCloseTo(0.5, 1);
+
+      // Iniciar gesto a la derecha: desplazar mano derecha a screenX = 0.58 (videoX = 0.42)
+      // d = (0.58 - 0.50) / 0.20 = 0.40 (> 0.30 umbral)
+      const allStepEvents: HandCursorEvent[] = [];
+
+      // Frame 1: mano desplazada con userA (t = 800)
+      out = tracker.update({
+        nowMs: 800,
+        hands: [makeHand('right', 1 - 0.6)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      allStepEvents.push(...out.events.filter((e) => e.type === 'step'));
+      expect(allStepEvents.length).toBe(0);
+      expect(out.cursor.anchorX).toBeCloseTo(initialAnchorX!, 1);
+
+      // Frame 2: en mitad del gesto, cuadro con userId null transitorio (t = 850)
+      out = tracker.update({
+        nowMs: 850,
+        hands: [makeHand('right', 1 - 0.6)],
+        user: userNull,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      allStepEvents.push(...out.events.filter((e) => e.type === 'step'));
+      expect(allStepEvents.length).toBe(0);
+      // NO debe re-anclar a 0.60; debe conservar el ancla en ~0.50
+      expect(out.cursor.anchorX).toBeCloseTo(initialAnchorX!, 1);
+
+      // Frame 3: mano sigue desplazada con userA (t = 900)
+      out = tracker.update({
+        nowMs: 900,
+        hands: [makeHand('right', 1 - 0.6)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      allStepEvents.push(...out.events.filter((e) => e.type === 'step'));
+
+      // Frame 4: mano sigue desplazada con userA (t = 950)
+      out = tracker.update({
+        nowMs: 950,
+        hands: [makeHand('right', 1 - 0.6)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      allStepEvents.push(...out.events.filter((e) => e.type === 'step'));
+
+      // Frame 5: mano sigue desplazada con userA (t = 1000)
+      out = tracker.update({
+        nowMs: 1000,
+        hands: [makeHand('right', 1 - 0.6)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      allStepEvents.push(...out.events.filter((e) => e.type === 'step'));
+
+      // El gesto continuó y emite exactamente 1 paso
+      expect(allStepEvents.length).toBe(1);
+      expect(allStepEvents[0].direction).toBe('right');
+      expect(allStepEvents[0].index).toBe(6);
+      // El ancla nunca se re-ancló a la mano desplazada (0 re-anclajes en el gesto)
+      expect(out.cursor.anchorX).toBeCloseTo(initialAnchorX!, 1);
+    });
+
+    it("userId cambia de 'A' a 'B' (ambos no nulos) -> re-ancla sin dar paso", () => {
+      const tracker = new HandCursorTracker({ mode: 'step' });
+      const userA = makeUser({ sw: 0.2, cx: 0.5, userId: 'user_A' });
+      const userB = makeUser({ sw: 0.2, cx: 0.5, userId: 'user_B' });
+
+      // Activar con userA centrado
+      let out = tracker.update({
+        nowMs: 100,
+        hands: [makeHand('right', 1 - 0.5)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      for (let t = 200; t <= 700; t += 100) {
+        out = tracker.update({
+          nowMs: t,
+          hands: [makeHand('right', 1 - 0.5)],
+          user: userA,
+          itemCount: 10,
+          currentIndex: 5,
+        });
+      }
+      expect(out.cursor.active).toBe(true);
+      expect(out.cursor.anchorX).toBeCloseTo(0.5, 1);
+
+      // Desplazar mano a screenX = 0.58 con userA
+      out = tracker.update({
+        nowMs: 800,
+        hands: [makeHand('right', 1 - 0.58)],
+        user: userA,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      expect(out.events.filter((e) => e.type === 'step').length).toBe(0);
+
+      // Al siguiente frame entra userB (ambos no nulos y distintos)
+      out = tracker.update({
+        nowMs: 850,
+        hands: [makeHand('right', 1 - 0.58)],
+        user: userB,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+
+      // Debe re-anclar en la posición actual de la mano (0.58) sin emitir paso
+      expect(out.events.filter((e) => e.type === 'step').length).toBe(0);
+      expect(out.cursor.anchorX).toBeCloseTo(0.58, 1);
+      expect(out.cursor.isStepDisarmed).toBe(false);
+
+      // Siguiente frame manteniendo la mano en 0.58 no da paso porque ahora está en el nuevo centro
+      out = tracker.update({
+        nowMs: 950,
+        hands: [makeHand('right', 1 - 0.58)],
+        user: userB,
+        itemCount: 10,
+        currentIndex: 5,
+      });
+      expect(out.events.filter((e) => e.type === 'step').length).toBe(0);
+    });
+
+    it('dos personas que intercambian su orden en el arreglo cada 3 cuadros -> la clave de la persona fijada no cambia', () => {
+      const personA = createDummyLandmarks({ cx: 0.5, sw: 0.28 });
+      const personB = createDummyLandmarks({ cx: 0.35, sw: 0.24 });
+
+      // Iniciar selección con personA en índice 0
+      let state = selectUser(
+        [{ landmarks: personA }, { landmarks: personB }],
+        null,
+        DEFAULT_ACTIVE_ZONE_CONFIG,
+        0,
+      ).state;
+
+      // Esperar 600 ms para fijar personA
+      let res = selectUser(
+        [{ landmarks: personA }, { landmarks: personB }],
+        state,
+        DEFAULT_ACTIVE_ZONE_CONFIG,
+        600,
+      );
+      state = res.state;
+      expect(res.lockedIndex).toBe(0);
+      expect(state.lockedPerson).not.toBeNull();
+      const initialLockKey = String(state.lockedPerson!.lockedSinceMs);
+
+      // Simular intercambio de orden en el array cada 3 cuadros
+      let nowMs = 650;
+      for (let cycle = 0; cycle < 4; cycle++) {
+        // 3 cuadros con [personA, personB] (personA en índice 0)
+        for (let frame = 0; frame < 3; frame++) {
+          nowMs += 50;
+          res = selectUser(
+            [{ landmarks: personA }, { landmarks: personB }],
+            state,
+            DEFAULT_ACTIVE_ZONE_CONFIG,
+            nowMs,
+          );
+          state = res.state;
+          expect(res.lockedIndex).toBe(0);
+          const currentLockKey = state.lockedPerson
+            ? String(state.lockedPerson.lockedSinceMs)
+            : null;
+          expect(currentLockKey).toBe(initialLockKey);
+        }
+
+        // 3 cuadros con [personB, personA] (personA en índice 1)
+        for (let frame = 0; frame < 3; frame++) {
+          nowMs += 50;
+          res = selectUser(
+            [{ landmarks: personB }, { landmarks: personA }],
+            state,
+            DEFAULT_ACTIVE_ZONE_CONFIG,
+            nowMs,
+          );
+          state = res.state;
+          // lockedIndex cambia de 0 a 1 debido al orden de MediaPipe
+          expect(res.lockedIndex).toBe(1);
+          // Pero la clave de la persona fijada (lockedSinceMs) es idéntica
+          const currentLockKey = state.lockedPerson
+            ? String(state.lockedPerson.lockedSinceMs)
+            : null;
+          expect(currentLockKey).toBe(initialLockKey);
+        }
+      }
     });
   });
 });

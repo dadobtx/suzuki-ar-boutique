@@ -369,7 +369,7 @@ export function useHandCursor(
         }
 
         targetUser = {
-          userId: pose.activeZone?.lockedIndex ?? null,
+          userId: pose.activeZone?.lockKey ?? null,
           lockedWrists: { left: leftWristVis, right: rightWristVis },
           lockedElbows: { left: leftElbowVis, right: rightElbowVis },
           lockedHips: { left: leftHipVis, right: rightHipVis },

@@ -583,11 +583,12 @@ export class HandCursorTracker {
     if (user && swWidth > 0) {
       this.anchorOffsetSw = (x - user.cx) / swWidth;
       this.anchorOffset = x - user.cx;
-      this.lastUserPersonId = user.userId ?? null;
+      if (user.userId != null) {
+        this.lastUserPersonId = user.userId;
+      }
     } else {
       this.anchorOffsetSw = 0;
       this.anchorOffset = 0;
-      this.lastUserPersonId = null;
     }
     this.v4StepDisarmed = false;
     this.v4DisarmedSinceMs = null;
@@ -1686,11 +1687,15 @@ export class HandCursorTracker {
       let personChanged = false;
       if (
         user &&
-        user.userId !== undefined &&
-        this.lastUserPersonId !== null &&
+        user.userId != null &&
+        this.lastUserPersonId != null &&
         user.userId !== this.lastUserPersonId
       ) {
         personChanged = true;
+      }
+
+      if (user && user.userId != null && !personChanged) {
+        this.lastUserPersonId = user.userId;
       }
 
       let swChanged = false;

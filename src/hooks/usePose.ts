@@ -38,6 +38,7 @@ export interface ActiveZonePoseTelemetry {
   lockedIndex: number | null;
   candidates: ActiveZoneCandidateTelemetry[];
   approaching: boolean;
+  lockKey?: string | null;
 }
 
 export interface UsePoseResult {
@@ -166,6 +167,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
     lockedIndex: null,
     candidates: [],
     approaching: false,
+    lockKey: null,
   });
   const [lockedWrists, setLockedWrists] = useState<{
     left: NormalizedLandmark | null;
@@ -298,6 +300,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             lockedIndex: null,
             candidates: [],
             approaching: false,
+            lockKey: null,
           };
 
           if (isZonaEnabled) {
@@ -339,6 +342,10 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
             );
             activeZoneStateRef.current = selectionResult.state;
 
+            const currentPersonKey = selectionResult.state.lockedPerson
+              ? String(selectionResult.state.lockedPerson.lockedSinceMs)
+              : null;
+
             nextActiveZoneTelemetry = {
               enabled: true,
               lockedIndex: selectionResult.lockedIndex,
@@ -353,6 +360,7 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
                 box: c.box,
               })),
               approaching: selectionResult.approaching,
+              lockKey: currentPersonKey,
             };
 
             const lockedIdx = selectionResult.lockedIndex;
@@ -383,9 +391,6 @@ export function usePose(videoRef?: RefObject<HTMLVideoElement | null>): UsePoseR
                 currentShouldersY = (pose[11] ?? pose[12])!.y;
               }
 
-              const currentPersonKey = selectionResult.state.lockedPerson
-                ? String(selectionResult.state.lockedPerson.lockedSinceMs)
-                : null;
               if (lastLockedPersonKeyRef.current !== currentPersonKey) {
                 filterRef.current.forEach((f) => f.reset());
                 lastLockedPersonKeyRef.current = currentPersonKey;
