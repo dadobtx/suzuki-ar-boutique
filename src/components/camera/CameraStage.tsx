@@ -270,6 +270,7 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     isLiveActive,
     isLiveLoading,
     isLiveAvailable,
+    isLiveCoolingDown,
     liveCountdown,
     liveToast,
     liveVideoRef,
@@ -278,7 +279,8 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   } = useLiveTryon({
     activeGarment: activeGarment ?? null,
     activeVariantId,
-    cameraStream: camera.videoRef.current?.srcObject as MediaStream | null,
+    getCameraStream: () =>
+      (camera.videoRef.current?.srcObject as MediaStream | null) ?? null,
     sessionId,
     presence,
     kioskState,
@@ -551,10 +553,10 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               <button
                 type="button"
                 onClick={handleStartLiveTryon}
-                disabled={isLiveLoading || isLiveActive}
+                disabled={isLiveLoading || isLiveActive || isLiveCoolingDown}
                 aria-label={t('live.seeLive', 'VERME EN VIVO')}
                 className={`relative w-[160px] h-[160px] rounded-full bg-fg text-bg border-4 border-fg/30 flex flex-col items-center justify-center shadow-2xl transition-transform ${
-                  isLiveLoading
+                  isLiveLoading || isLiveCoolingDown
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
                       ? 'cursor-default scale-100'

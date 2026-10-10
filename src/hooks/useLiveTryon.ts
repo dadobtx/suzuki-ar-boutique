@@ -17,7 +17,8 @@ export const CONCURRENT_RETRY_DELAY_MS = 5000;
 export interface UseLiveTryOnProps {
   activeGarment: Garment | null;
   activeVariantId?: string | null;
-  cameraStream: MediaStream | null;
+  cameraStream?: MediaStream | null;
+  getCameraStream?: () => MediaStream | null;
   sessionId: string | null;
   presence: PresenceState;
   kioskState: KioskState;
@@ -28,6 +29,7 @@ export interface UseLiveTryOnResult {
   isLiveActive: boolean;
   isLiveLoading: boolean;
   isLiveAvailable: boolean;
+  isLiveCoolingDown: boolean;
   liveStream: MediaStream | null;
   liveCountdown: number | null;
   liveToast: string | null;
@@ -40,6 +42,7 @@ export function useLiveTryon({
   activeGarment,
   activeVariantId,
   cameraStream,
+  getCameraStream,
   sessionId,
   presence,
   kioskState,
@@ -140,9 +143,16 @@ export function useLiveTryon({
 
   // Iniciar sesión
   const startSession = useCallback(async () => {
-    if (!activeGarment || !cameraStream || !sessionId) {
+    if (!activeGarment || !sessionId) {
       liveStartingRef.current = false;
       setIsLiveLoading(false);
+      return;
+    }
+
+    const stream = getCameraStream ? getCameraStream() : (cameraStream ?? null);
+    if (!stream) {
+      liveStartingRef.current = false;
+      cleanupAfterFailure('live.error');
       return;
     }
 
@@ -195,7 +205,7 @@ export function useLiveTryon({
         token: data.token,
         maxSeconds: data.max_seconds,
         liveId: data.live_id,
-        stream: cameraStream,
+        stream,
         referenceImageUrl,
         onUpdate: (remoteStream) => {
           if (!isMountedRef.current) return;
@@ -309,6 +319,7 @@ export function useLiveTryon({
     activeVariantId,
     cameraStream,
     cleanupAfterFailure,
+    getCameraStream,
     kioskState,
     sessionId,
     stopInternal,
@@ -397,6 +408,7 @@ export function useLiveTryon({
 
   // Disponibilidad de Live (incluyendo enfriamiento de 4 s)
   const isCooldownActive = cooldownRemainingSec > 0;
+  const isLiveCoolingDown = isCooldownActive;
   const isLiveAvailable =
     showLiveButton &&
     !isLiveLoading &&
@@ -409,6 +421,7 @@ export function useLiveTryon({
     isLiveActive,
     isLiveLoading,
     isLiveAvailable,
+    isLiveCoolingDown,
     liveStream,
     liveCountdown,
     liveToast,

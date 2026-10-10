@@ -3,7 +3,8 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, act } from '@testing-library/react';
+import React from 'react';
+import { renderHook, render, act } from '@testing-library/react';
 import { LiveTryOnManager } from '@/lib/liveTryon';
 import { useLiveTryon, LIVE_COOLDOWN_MS } from '@/hooks/useLiveTryon';
 import type { Garment } from '@/types/garment';
@@ -381,20 +382,23 @@ describe('useLiveTryon hook integration', () => {
       result.current.handleStopLiveTryon();
     });
 
-    // Right after stop: cooldown active (remaining 4s), so isLiveAvailable is false
+    // Right after stop: cooldown active (remaining 4s), so isLiveAvailable is false and isLiveCoolingDown is true
     expect(result.current.isLiveAvailable).toBe(false);
+    expect(result.current.isLiveCoolingDown).toBe(true);
 
     // Advance 2000 ms (still within cooldown)
     act(() => {
       vi.advanceTimersByTime(2000);
     });
     expect(result.current.isLiveAvailable).toBe(false);
+    expect(result.current.isLiveCoolingDown).toBe(true);
 
     // Advance past cooldown (total > 4000 ms)
     act(() => {
       vi.advanceTimersByTime(LIVE_COOLDOWN_MS - 2000 + 500);
     });
     expect(result.current.isLiveAvailable).toBe(true);
+    expect(result.current.isLiveCoolingDown).toBe(false);
 
     vi.useRealTimers();
   });
@@ -533,5 +537,128 @@ describe('useLiveTryon hook integration', () => {
     expect(completedPayload.live_id).toBe(88);
     expect(completedPayload.seconds).toBe(0);
     expect(completedPayload.failed).toBe(true);
+  });
+
+  it('getCameraStream devuelve null → toast live.error e isLiveLoading false', async () => {
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        getCameraStream: () => null,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    expect(result.current.isLiveLoading).toBe(false);
+    expect(result.current.liveToast).toContain('No pudimos iniciar la prueba en vivo');
+    expect(result.current.isLiveActive).toBe(false);
+  });
+
+  it('después de terminar una sesión el botón tiene el atributo disabled durante 4 s y luego no', async () => {
+    vi.useFakeTimers();
+
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'success',
+            token: 'test-token',
+            max_seconds: 15,
+            live_id: 20,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+
+    function TestLiveButton() {
+      const {
+        isLiveLoading,
+        isLiveActive,
+        isLiveCoolingDown,
+        handleStartLiveTryon,
+        handleStopLiveTryon,
+      } = useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      });
+
+      return React.createElement(
+        'div',
+        null,
+        React.createElement(
+          'button',
+          {
+            'data-testid': 'live-button',
+            disabled: isLiveLoading || isLiveActive || isLiveCoolingDown,
+            onClick: handleStartLiveTryon,
+          },
+          'VERME EN VIVO',
+        ),
+        React.createElement(
+          'button',
+          {
+            'data-testid': 'stop-button',
+            onClick: handleStopLiveTryon,
+          },
+          'STOP',
+        ),
+      );
+    }
+
+    const { getByTestId } = render(React.createElement(TestLiveButton));
+    const liveBtn = getByTestId('live-button') as HTMLButtonElement;
+    const stopBtn = getByTestId('stop-button') as HTMLButtonElement;
+
+    // Inicialmente disponible y no deshabilitado
+    expect(liveBtn.hasAttribute('disabled')).toBe(false);
+
+    // Iniciar sesión
+    await act(async () => {
+      liveBtn.click();
+    });
+    expect(liveBtn.hasAttribute('disabled')).toBe(true);
+
+    // Terminar sesión
+    act(() => {
+      stopBtn.click();
+    });
+
+    // Inmediatamente después de terminar: enfriamiento activo → tiene atributo disabled
+    expect(liveBtn.hasAttribute('disabled')).toBe(true);
+
+    // A los 2 s (dentro de los 4 s) → sigue teniendo atributo disabled
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(liveBtn.hasAttribute('disabled')).toBe(true);
+
+    // Pasados los 4 s (4000 ms + tick del intervalo) → ya no tiene el atributo disabled
+    act(() => {
+      vi.advanceTimersByTime(LIVE_COOLDOWN_MS - 2000 + 500);
+    });
+    expect(liveBtn.hasAttribute('disabled')).toBe(false);
+
+    vi.useRealTimers();
   });
 });

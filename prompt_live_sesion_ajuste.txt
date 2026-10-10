@@ -1,0 +1,24 @@
+PROMPT PARA ANTIGRAVITY — Prueba en vivo, ajuste final
+Guardar en la raíz del repo como: prompt_live_sesion_ajuste.txt
+Rama: la MISMA fix/live-sesion (sobre c01b48b). NO mergear.
+
+Revisión de c01b48b: tsc -b, lint, 405 tests raíz, 22 backend y build confirmados. El manager y el hook
+están bien. Faltan dos detalles:
+
+1. El botón NO se ve deshabilitado durante el enfriamiento (lo dice el reporte, pero el código no lo
+   hace). En CameraStage el botón tiene `disabled={isLiveLoading || isLiveActive}`, así que en los 4 s
+   de enfriamiento se ve normal, el toque no hace nada y parece que "dejó de funcionar" (justo lo que
+   reportó Dario en el modo clásico).
+   - Exponer `isLiveCoolingDown` desde useLiveTryon y usar
+     `disabled={isLiveLoading || isLiveActive || isLiveCoolingDown}` con la misma apariencia de
+     deshabilitado que isLiveLoading (opacity-50). Sin textos nuevos.
+   - Test: después de terminar una sesión el botón tiene el atributo disabled durante 4 s y luego no.
+
+2. cameraStream se lee de `camera.videoRef.current?.srcObject` durante el render y queda capturado en
+   startSession. Si la cámara se reinicia, se usaría el stream viejo (o null y el inicio se cancela en
+   silencio). Pasar al hook una función `getCameraStream: () => MediaStream | null` que lea el ref al
+   momento de iniciar. Si devuelve null: toast live.error (no salir en silencio).
+   - Test: getCameraStream devuelve null → toast live.error e isLiveLoading false.
+
+Reglas: solo useLiveTryon.ts, CameraStage.tsx y tests. Reportar `npx tsc -b`, npm run lint, npm test
+(raíz y backend/), npm run build. Commit fix(live): ... sin --no-verify. Push a fix/live-sesion sin mergear.
