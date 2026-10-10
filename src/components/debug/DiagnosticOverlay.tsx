@@ -15,6 +15,8 @@ import { isHandInputEnabled } from '@/lib/hand-input-flag';
 
 function HandGesturesTelemetryCard() {
   const cursor = useHandCursorStore.getState().cursor;
+  const pausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
+  const pauseOrigin = useHandCursorStore.getState().pauseOrigin;
   const detectedHandsCount = useHandCursorStore.getState().detectedHandsCount;
   const userHandsCount = useHandCursorStore.getState().userHandsCount;
   const inferenceFps = useHandCursorStore.getState().inferenceFps;
@@ -22,8 +24,14 @@ function HandGesturesTelemetryCard() {
   const adaptiveTargetFps = useHandCursorStore.getState().adaptiveTargetFps;
   const p95 = useHandCursorStore.getState().p95;
 
-  const blockedReason =
+  const rawBlockedReason =
     cursor.stepBlockedReason ?? (cursor.active ? 'ninguno' : 'sin cursor');
+  let blockedReason: string = rawBlockedReason;
+  if (rawBlockedReason === 'pausado (táctil)' && pausedUntilMs > Date.now()) {
+    const remainingSec = Math.max(0, (pausedUntilMs - Date.now()) / 1000).toFixed(1);
+    const originText = pauseOrigin ?? 'touch';
+    blockedReason = `pausado (táctil: ${originText}, ${remainingSec} s)`;
+  }
   const dVal =
     cursor.displacement !== undefined ? cursor.displacement.toFixed(2) : '0.00';
   const offSwVal =
@@ -222,6 +230,8 @@ function DiagnosticOverlayInner() {
 
   return (
     <div
+      data-debug-overlay="true"
+      id="debug-overlay"
       className="fixed top-0 left-0 right-0 z-[999999] pointer-events-none p-2 flex flex-col items-start select-none"
       style={{
         fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',

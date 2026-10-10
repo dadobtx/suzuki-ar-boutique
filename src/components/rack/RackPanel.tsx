@@ -578,12 +578,20 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
   const handlePointerMove = (e: React.PointerEvent) => {
     if (mode !== 'interactive' || !active || isBusyRef.current) return;
 
-    // Si el cursor de mano está activo, el puntero no cambia el foco (y viceversa durante la pausa)
     const isHandActive = useHandCursorStore.getState().cursor.active;
-    const isPaused = useHandCursorStore.getState().pausedUntilMs > Date.now();
-    if (isHandActive && !isPaused) return;
+    const isMouseHover = e.pointerType === 'mouse' && e.buttons === 0;
 
-    useHandCursorStore.getState().pause(2000);
+    if (isMouseHover) {
+      // Hover del mouse NO pausa. Si el cursor de mano está activo, tampoco mueve el foco.
+      if (isHandActive) return;
+    } else {
+      // Toque (touch), lápiz (pen) o mouse con botón presionado
+      const reason =
+        e.pointerType === 'mouse'
+          ? 'mouse con botón'
+          : (e.pointerType as 'touch' | 'pen') || 'touch';
+      useHandCursorStore.getState().pause(2000, reason);
+    }
 
     const x = e.clientX;
 
@@ -703,7 +711,10 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
       data-testid="rack-panel"
       data-mode={mode}
       aria-label="Perchero Suzuki"
-      onPointerDown={() => useHandCursorStore.getState().pause(2000)}
+      onPointerDown={(e) => {
+        const origin = e.pointerType === 'mouse' ? 'clic' : e.pointerType || 'touch';
+        useHandCursorStore.getState().pause(2000, origin);
+      }}
       onPointerMove={handlePointerMove}
       className="relative w-full h-full bg-surface border-t border-line overflow-hidden select-none"
     >
