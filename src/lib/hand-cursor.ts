@@ -71,6 +71,7 @@ export interface HandFrameUser {
   sw: number;
   cx: number;
   box?: CandidateBoundingBox;
+  userId?: number | string | null;
 }
 
 export interface HandFrameInput {
@@ -96,6 +97,17 @@ export type LeverState =
   | 'fast_right';
 export type OwnerMatchReason = 'wrist' | 'continuity' | 'box' | 'none';
 
+export type StepBlockedReason =
+  | 'ninguno'
+  | 'desarmado (esperando centro)'
+  | 'anti-rebote'
+  | 'pausado (vuelo)'
+  | 'pausado (en vivo)'
+  | 'pausado (táctil)'
+  | 'índice levantado'
+  | 'mano abajo'
+  | 'sin cursor';
+
 export interface HandCursorData {
   active: boolean;
   x: number;
@@ -120,6 +132,10 @@ export interface HandCursorData {
   pulseArrow?: 'left' | 'right' | null;
   handRaisedState?: 'levantada' | 'abajo' | 'ninguna';
   handsRaisedSummary?: string;
+  // Propiedades v4.2
+  anchorOffsetSw?: number | null;
+  swWidth?: number | null;
+  stepBlockedReason?: StepBlockedReason;
 }
 
 export interface HandCursorTakeEvent {
@@ -538,6 +554,13 @@ export class HandCursorTracker {
   private v4LiveDisarmed = false;
   private v4LiveNotPointingSinceMs: number | null = null;
 
+  // Estado v4.2
+  private anchorOffsetSw: number | null = null;
+  private anchorSwWidth: number | null = null;
+  private lastUserPersonId: string | number | null = null;
+  private v4DisarmedSinceMs: number | null = null;
+  private lastLiveActive = false;
+
   private options: HandCursorTrackerOptions;
 
   constructor(options?: HandCursorTrackerOptions) {
@@ -552,6 +575,27 @@ export class HandCursorTracker {
 
   setOptions(opts: Partial<HandCursorTrackerOptions>): void {
     this.options = { ...this.options, ...opts };
+  }
+
+  private reanchor(x: number, user?: HandFrameUser | null, swWidth = 0.2): void {
+    this.anchorX = x;
+    this.anchorSwWidth = swWidth;
+    if (user && swWidth > 0) {
+      this.anchorOffsetSw = (x - user.cx) / swWidth;
+      this.anchorOffset = x - user.cx;
+      if (user.userId != null) {
+        this.lastUserPersonId = user.userId;
+      }
+    } else {
+      this.anchorOffsetSw = 0;
+      this.anchorOffset = 0;
+    }
+    this.v4StepDisarmed = false;
+    this.v4DisarmedSinceMs = null;
+    this.v4NeutralSinceMs = null;
+    this.v4BeyondThresholdSinceMs = null;
+    this.v4BeyondThresholdFrames = 0;
+    this.v4PendingDirection = null;
   }
 
   reset(): void {
@@ -610,6 +654,13 @@ export class HandCursorTracker {
     this.v4LiveLastSeenMs = null;
     this.v4LiveDisarmed = false;
     this.v4LiveNotPointingSinceMs = null;
+
+    // Reset v4.2
+    this.anchorOffsetSw = null;
+    this.anchorSwWidth = null;
+    this.lastUserPersonId = null;
+    this.v4DisarmedSinceMs = null;
+    this.lastLiveActive = false;
   }
 
   update(input: HandFrameInput): HandFrameOutput {
@@ -1274,11 +1325,12 @@ export class HandCursorTracker {
 
     const effectiveProgress = enableDwell ? this.dwellProgress : this.confirmProgress;
 
-    const publishedIndex = this.active
-      ? this.index
-      : typeof currentIndex === 'number' && currentIndex >= 0
-        ? currentIndex
-        : null;
+    const publishedIndex =
+      this.active && !isLiveActive
+        ? this.index
+        : typeof currentIndex === 'number' && currentIndex >= 0
+          ? currentIndex
+          : null;
 
     return {
       cursor: {
@@ -1296,6 +1348,9 @@ export class HandCursorTracker {
         ownerReason: this.lastOwnerReason,
         activeHandSide: this.lockedHandSide,
         handSwitchCount: this.handSwitchCount,
+        anchorOffsetSw: this.anchorOffsetSw,
+        swWidth: user?.sw ?? null,
+        stepBlockedReason: this.active ? 'ninguno' : 'sin cursor',
       },
       events,
       userHandsCount,
@@ -1320,6 +1375,23 @@ export class HandCursorTracker {
     } = input;
     const isPaused = busy || pausedUntilMs > nowMs || isLiveActive;
     const events: HandCursorEvent[] = [];
+
+    const liveSessionJustEnded = this.lastLiveActive && !isLiveActive;
+    this.lastLiveActive = isLiveActive;
+
+    if (liveSessionJustEnded) {
+      // 3.3 Al terminar la sesión: re-anclar en la posición actual, re-armar, y sincronizar
+      // el índice del tracker con la prenda puesta (activeGarment)
+      const swWidth = user && user.sw > 0 ? user.sw : 0.2;
+      this.reanchor(this.x, user, swWidth);
+      if (
+        typeof currentIndex === 'number' &&
+        currentIndex >= 0 &&
+        currentIndex < itemCount
+      ) {
+        this.index = currentIndex;
+      }
+    }
 
     // Muestreo de intervalos observados
     const prevUpdateMs = this.lastUpdateMs;
@@ -1473,15 +1545,7 @@ export class HandCursorTracker {
             this.y = altHand.palmCenter.y;
             this.xFilter.reset();
             this.yFilter.reset();
-            this.anchorX = rawNewX;
-            if (user) {
-              this.anchorOffset = rawNewX - user.cx;
-            }
-            this.v4StepDisarmed = false;
-            this.v4NeutralSinceMs = null;
-            this.v4BeyondThresholdSinceMs = null;
-            this.v4BeyondThresholdFrames = 0;
-            this.v4PendingDirection = null;
+            this.reanchor(rawNewX, user, sw);
           }
         } else {
           this.v4AlternativeValidSinceMs = null;
@@ -1601,11 +1665,10 @@ export class HandCursorTracker {
     }
 
     // 5. Ancla y zona neutra (relativa al cuerpo)
+    const swWidth = user && user.sw > 0 ? user.sw : 0.2;
+
     if (justActivated) {
-      this.anchorX = this.x;
-      if (user) {
-        this.anchorOffset = this.x - user.cx;
-      }
+      this.reanchor(this.x, user, swWidth);
       if (
         typeof currentIndex === 'number' &&
         currentIndex >= 0 &&
@@ -1616,17 +1679,44 @@ export class HandCursorTracker {
         this.index = Math.floor(itemCount / 2);
       }
     } else if (this.active && this.anchorX === null) {
-      this.anchorX = this.x;
-      if (user) {
-        this.anchorOffset = this.x - user.cx;
+      this.reanchor(this.x, user, swWidth);
+    } else if (this.active && this.anchorX !== null) {
+      // 3.1 Re-anclar (anchorX = x actual, disparador armado) cuando:
+      // - cambia la persona fijada, o
+      // - swWidth cambia más de 25 % respecto al valor del momento de anclar
+      let personChanged = false;
+      if (
+        user &&
+        user.userId != null &&
+        this.lastUserPersonId != null &&
+        user.userId !== this.lastUserPersonId
+      ) {
+        personChanged = true;
       }
-    } else if (
-      this.active &&
-      this.anchorX !== null &&
-      user &&
-      this.anchorOffset !== null
-    ) {
-      this.anchorX = user.cx + this.anchorOffset;
+
+      if (user && user.userId != null && !personChanged) {
+        this.lastUserPersonId = user.userId;
+      }
+
+      let swChanged = false;
+      if (this.anchorSwWidth !== null && this.anchorSwWidth > 0) {
+        const swDiffRatio = Math.abs(swWidth - this.anchorSwWidth) / this.anchorSwWidth;
+        if (swDiffRatio > 0.25) {
+          swChanged = true;
+        }
+      }
+
+      if (personChanged || swChanged) {
+        const currentX = activeHand ? 1 - activeHand.palmCenter.x : this.x;
+        this.x = currentX;
+        this.xFilter.reset();
+        this.yFilter.reset();
+        this.reanchor(currentX, user, swWidth);
+      } else if (user && this.anchorOffsetSw !== null) {
+        // En cada frame: anchorX = cx + anchorOffsetSw · swWidth
+        this.anchorX = user.cx + this.anchorOffsetSw * swWidth;
+        this.anchorOffset = this.anchorX - user.cx;
+      }
     }
 
     // 6. Detección de Índice (Geométrico + Clasificador)
@@ -1649,7 +1739,6 @@ export class HandCursorTracker {
     }
 
     // 7. Desplazamiento y lógica de Pasos
-    const swWidth = user && user.sw > 0 ? user.sw : 0.2;
     let d = 0;
 
     if (this.active && this.anchorX !== null) {
@@ -1660,8 +1749,10 @@ export class HandCursorTracker {
         const frameDt = Math.max(0, Math.min(500, nowMs - prevUpdateMs));
         const alpha = 1 - Math.exp(-frameDt / 2000);
         this.anchorX = this.anchorX + alpha * (this.x - this.anchorX);
-        if (user) {
+        if (user && swWidth > 0) {
+          this.anchorOffsetSw = (this.anchorX - user.cx) / swWidth;
           this.anchorOffset = this.anchorX - user.cx;
+          this.anchorSwWidth = swWidth;
         }
         d = (this.x - this.anchorX) / swWidth;
       }
@@ -1672,9 +1763,28 @@ export class HandCursorTracker {
           this.v4NeutralSinceMs = nowMs;
         } else if (nowMs - this.v4NeutralSinceMs >= STEP_RESET_MS) {
           this.v4StepDisarmed = false;
+          this.v4DisarmedSinceMs = null;
         }
       } else {
         this.v4NeutralSinceMs = null;
+      }
+
+      // 3.2 Auto-recuperación del disparador:
+      // Si el disparador lleva DESARMADO más de 1500 ms sin volver a neutral,
+      // re-anclar en la posición actual de la mano y re-armar (sin disparar paso en ese momento).
+      if (this.v4StepDisarmed) {
+        if (this.v4DisarmedSinceMs === null) {
+          this.v4DisarmedSinceMs = nowMs;
+        } else if (nowMs - this.v4DisarmedSinceMs > 1500) {
+          const currentX = activeHand ? 1 - activeHand.palmCenter.x : this.x;
+          this.x = currentX;
+          this.xFilter.reset();
+          this.yFilter.reset();
+          this.reanchor(currentX, user, swWidth);
+          d = 0;
+        }
+      } else {
+        this.v4DisarmedSinceMs = null;
       }
 
       // Disparo de Paso por Gesto:
@@ -1747,6 +1857,7 @@ export class HandCursorTracker {
             }
             this.v4LastStepTriggeredMs = nowMs;
             this.v4StepDisarmed = true;
+            this.v4DisarmedSinceMs = nowMs;
             this.v4NeutralSinceMs = null;
             this.v4BeyondThresholdSinceMs = null;
             this.v4BeyondThresholdFrames = 0;
@@ -1812,11 +1923,12 @@ export class HandCursorTracker {
       ? clamp(this.v4LiveAccumulatedMs / CONFIRM_LIVE_MS, 0, 1)
       : 0;
 
-    const publishedIndex = this.active
-      ? this.index
-      : typeof currentIndex === 'number' && currentIndex >= 0
-        ? currentIndex
-        : null;
+    const publishedIndex =
+      this.active && !isLiveActive
+        ? this.index
+        : typeof currentIndex === 'number' && currentIndex >= 0
+          ? currentIndex
+          : null;
 
     const handsStatus = hands.map((h) => {
       const side = computeHandPoseSide(h.wrist, user);
@@ -1832,6 +1944,28 @@ export class HandCursorTracker {
         ? 'levantada'
         : 'abajo'
       : 'ninguna';
+
+    let stepBlockedReason: StepBlockedReason = 'ninguno';
+
+    if (!this.active) {
+      stepBlockedReason = 'sin cursor';
+    } else if (!activeHand || !isHandRaised(activeHand, user)) {
+      stepBlockedReason = 'mano abajo';
+    } else if (isIndexUp) {
+      stepBlockedReason = 'índice levantado';
+    } else if (isLiveActive) {
+      stepBlockedReason = 'pausado (en vivo)';
+    } else if (pausedUntilMs > nowMs) {
+      stepBlockedReason = 'pausado (táctil)';
+    } else if (busy) {
+      stepBlockedReason = 'pausado (vuelo)';
+    } else if (nowMs - this.v4LastStepTriggeredMs < STEP_COOLDOWN_MS) {
+      stepBlockedReason = 'anti-rebote';
+    } else if (this.v4StepDisarmed) {
+      stepBlockedReason = 'desarmado (esperando centro)';
+    } else {
+      stepBlockedReason = 'ninguno';
+    }
 
     return {
       cursor: {
@@ -1856,6 +1990,9 @@ export class HandCursorTracker {
         pulseArrow,
         handRaisedState,
         handsRaisedSummary,
+        anchorOffsetSw: this.anchorOffsetSw,
+        swWidth,
+        stepBlockedReason,
       },
       events,
       userHandsCount,

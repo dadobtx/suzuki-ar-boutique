@@ -1,0 +1,42 @@
+PROMPT PARA ANTIGRAVITY — Mano v4.2, ajuste: identidad de la persona fijada
+Guardar en la raíz del repo como: prompt_mano_v4_2_ajuste.txt
+Rama: la MISMA fix/mano-v4-2 (sobre 8c342d8). NO mergear.
+
+====================================================================
+1. PROBLEMA (revisión de 8c342d8)
+====================================================================
+Las verificaciones salen bien (tsc -b, lint, 392 tests raíz, 21 backend y build: confirmado). Pero en
+useHandCursor.ts:
+    userId: pose.activeZone?.lockedIndex ?? null
+lockedIndex es la POSICIÓN de la persona en el arreglo de poses de ESE cuadro (0, 1 o 2), no su
+identidad. Con varias personas en cámara (el autoshow) MediaPipe cambia el orden entre cuadros, y
+durante un corte breve (gracia LOST_MS) lockedIndex pasa a null. En ambos casos hand-cursor.ts cree que
+"cambió la persona" (null !== 0 también cuenta), re-ancla, reinicia los filtros y borra el gesto en
+curso: se pierden pasos justo cuando hay gente alrededor. Con una sola persona en las pruebas no se nota.
+
+====================================================================
+2. CAMBIO
+====================================================================
+- La identidad de la persona fijada es lockedPerson.lockedSinceMs de la zona activa (es la misma
+  clave que usePose ya usa para reiniciar sus filtros: lastLockedPersonKeyRef). Exponerla en la
+  telemetría de la zona activa (p. ej. activeZone.lockKey: string | null) y usarla como userId.
+- En hand-cursor.ts, "cambió la persona" solo si el userId anterior y el actual son AMBOS no nulos y
+  distintos. Un null transitorio no re-ancla ni borra lastUserPersonId.
+- No tocar la lógica de active-zone.ts (solo exponer el dato).
+
+====================================================================
+3. TESTS (agregar a tests/unit/hand-cursor-v4-2.test.ts)
+====================================================================
+- Mismo userId con la mano desplazada en mitad de un gesto, y un cuadro con userId null → 1 paso igual,
+  0 re-anclajes.
+- userId cambia de 'A' a 'B' (ambos no nulos) → re-ancla sin dar paso (como hoy).
+- Si existe un test de usePose/telemetría: dos personas que intercambian su orden en el arreglo cada
+  3 cuadros → la clave de la persona fijada no cambia.
+Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo useHandCursor.ts, usePose.ts (exponer la clave), hand-cursor.ts y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build.
+- Commit fix(hand): ... sin --no-verify. Push a fix/mano-v4-2 sin mergear.
