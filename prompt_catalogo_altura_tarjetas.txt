@@ -1,0 +1,51 @@
+PROMPT PARA ANTIGRAVITY — Catálogo: el recuadro de imagen tiene distinto alto según la prenda
+Guardar en la raíz del repo como: prompt_catalogo_altura_tarjetas.txt
+Rama: fix/catalogo-altura-tarjetas desde main (4f2f225 o posterior). NO mergear.
+
+====================================================================
+1. LO QUE SE VE (video de Dario, catálogo en vertical)
+====================================================================
+Las tarjetas de VEST, SOFTSHELL JACKET y REVERSIBLE JACKET tienen el recuadro blanco de la imagen
+MÁS ALTO que las demás, y por eso su precio queda cortado abajo ("$86.48" y "$177.73" casi no se ven).
+Son justamente las 3 prendas SIN vista posterior (sin botón ATRÁS).
+
+====================================================================
+2. CAUSA (src/components/catalog/CatalogCard.tsx)
+====================================================================
+Hay dos caminos para el área de imagen:
+- CON vista posterior: contenedor `relative flex-1 ... mt-12` y la imagen va dentro de caras
+  `absolute inset-0 ... p-8`. Al ser absolutas, la imagen no empuja el alto: flex-1 reparte bien.
+- SIN vista posterior: contenedor `relative flex-1 ... p-8 mt-12` con el <img> como hijo NORMAL
+  (w-full h-full). Un ítem flex tiene min-height:auto, así que el PNG de 512 px impone su alto
+  intrínseco: el área de imagen crece y le quita espacio al bloque de texto (precio cortado).
+
+====================================================================
+3. CAMBIO
+====================================================================
+- Hacer que el camino SIN vista posterior tenga exactamente la misma estructura que la cara frontal
+  del otro camino: contenedor `relative flex-1 min-h-0 w-full bg-white pointer-events-none mt-12`
+  y dentro un `absolute inset-0 flex items-center justify-center p-8` con el spinner y el <img>.
+- Agregar también `min-h-0` al contenedor del camino CON vista posterior (por seguridad).
+- No cambiar el alto total de la tarjeta (h-[500px]), el min-h-[2.75em] del nombre, tipografías,
+  colores, sombras ni el botón ATRÁS.
+
+====================================================================
+4. VERIFICACIÓN (jsdom no calcula layout: usar el navegador)
+====================================================================
+- Ampliar el script de captura de Playwright existente (o uno nuevo en scripts/) que abra el catálogo
+  en 1080×1920 (?layout=portrait), y para CADA una de las 10 tarjetas mida con boundingBox():
+    a) el alto del área de imagen (el contenedor bg-white),
+    b) que el precio esté completamente dentro de la tarjeta (bottom del precio ≤ bottom de la tarjeta).
+  Debe imprimir una tabla sku / alto imagen / precio visible y FALLAR si la diferencia de alto entre
+  tarjetas es > 1 px o si algún precio queda cortado. Pegar esa tabla en el reporte.
+- Captura del catálogo mostrando VEST junto a HOODIE y SOFTSHELL junto a PARKA.
+- Tests unitarios: un test de clases que verifique que ambos caminos usan `flex-1 min-h-0` y que el
+  <img> del camino sin vista posterior está dentro de un contenedor `absolute inset-0`.
+- Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+5. REGLAS Y EVIDENCIA
+====================================================================
+- Solo CatalogCard.tsx, el script de captura y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Commit fix(catalog): ... sin --no-verify. Push sin mergear. NO ejecutar wrangler.

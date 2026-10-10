@@ -214,6 +214,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
   return (
     <div
       role="article"
+      data-sku={garment.sku}
       data-view={view}
       className={`
         relative bg-surface rounded-sm border transition-all clip-hud flex flex-col h-[500px] overflow-hidden
@@ -265,28 +266,30 @@ export function CatalogCard({ garment }: CatalogCardProps) {
 
       {/* Image Area */}
       {!resolvedBackView ? (
-        <div className="relative flex-1 w-full bg-white pointer-events-none flex items-center justify-center p-8 mt-12">
-          {!imgLoaded && !imgError && (
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-          <img
-            src={imageUrl}
-            alt={garment.name}
-            className={`w-full h-full object-contain drop-shadow-xl transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
-            onLoad={() => setImgLoaded(true)}
-            onError={() => {
-              setImgError(true);
-              setImgLoaded(true);
-            }}
-            loading="lazy"
-          />
+        <div className="relative flex-1 min-h-0 w-full bg-white pointer-events-none mt-12">
+          <div className="absolute inset-0 flex items-center justify-center p-8">
+            {!imgLoaded && !imgError && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-10 h-10 border-4 border-brand-red border-t-transparent rounded-full animate-spin" />
+              </div>
+            )}
+            <img
+              src={imageUrl}
+              alt={garment.name}
+              className={`w-full h-full object-contain drop-shadow-xl transition-opacity duration-300 ${imgLoaded ? 'opacity-100' : 'opacity-0'}`}
+              onLoad={() => setImgLoaded(true)}
+              onError={() => {
+                setImgError(true);
+                setImgLoaded(true);
+              }}
+              loading="lazy"
+            />
+          </div>
         </div>
       ) : (
         <div
           ref={imgboxRef}
-          className="relative flex-1 w-full bg-white pointer-events-none flex items-center justify-center mt-12 [perspective:1200px]"
+          className="relative flex-1 min-h-0 w-full bg-white pointer-events-none flex items-center justify-center mt-12 [perspective:1200px]"
         >
           {/* Faces container */}
           <div

@@ -187,4 +187,30 @@ describe('CatalogCard vista posterior automática al seleccionar', () => {
     expect(nameEl2).toBeTruthy();
     expect(nameEl2?.className).toContain('min-h-[2.75em]');
   });
+
+  it('ambos caminos usan flex-1 min-h-0 en el contenedor de imagen y el img sin vista posterior esta en absolute inset-0', () => {
+    // 1. Camino con vista posterior
+    const { container: withBack } = render(<CatalogCard garment={garmentWithBack} />);
+    const imgAreaWithBack = withBack.querySelector('.bg-white');
+    expect(imgAreaWithBack).toBeTruthy();
+    expect(imgAreaWithBack?.className).toContain('flex-1');
+    expect(imgAreaWithBack?.className).toContain('min-h-0');
+
+    // 2. Camino sin vista posterior
+    const { container: withoutBack } = render(
+      <CatalogCard garment={garmentWithoutBack} />,
+    );
+    const imgAreaWithoutBack = withoutBack.querySelector('.bg-white');
+    expect(imgAreaWithoutBack).toBeTruthy();
+    expect(imgAreaWithoutBack?.className).toContain('flex-1');
+    expect(imgAreaWithoutBack?.className).toContain('min-h-0');
+
+    // El img sin vista posterior debe estar dentro de un contenedor absolute inset-0
+    const imgEl = withoutBack.querySelector('img');
+    expect(imgEl).toBeTruthy();
+    const parentContainer = imgEl?.parentElement;
+    expect(parentContainer).toBeTruthy();
+    expect(parentContainer?.className).toContain('absolute');
+    expect(parentContainer?.className).toContain('inset-0');
+  });
 });
