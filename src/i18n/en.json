@@ -244,7 +244,9 @@
     "exit": "EXIT LIVE",
     "errorToast": "Live mode unavailable right now. Try again.",
     "fallbackToast": "Static mode active",
-    "readyToast": "Live try-on active!"
+    "readyToast": "Live try-on active!",
+    "error": "Could not start live try-on. Please try again.",
+    "busy": "Live try-on is busy. Please try again in a few seconds."
   },
   "variant": {
     "title": "COLOR"

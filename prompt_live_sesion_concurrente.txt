@@ -1,0 +1,141 @@
+PROMPT PARA ANTIGRAVITY — Prueba en vivo: funciona una vez y después "Concurrent session limit reached"
+Guardar en la raíz del repo como: prompt_live_sesion_concurrente.txt
+Rama: fix/live-sesion desde main (6c35370 o posterior). NO mergear.
+Es independiente de fix/mano-v4-2 (no tocar hand-cursor.ts ni RackPanel.tsx).
+
+====================================================================
+1. LO QUE PASÓ EN LA PRUEBA REAL DE DARIO
+====================================================================
+La primera sesión VERME EN VIVO funcionó (15 s). Los intentos siguientes fallan y en la consola aparece:
+    Error: INTERNAL_ERROR: Decart: Concurrent session limit reached.   (onError en index-*.js)
+La línea "Unchecked runtime.lastError: Could not establish connection. Receiving end does not exist."
+es de una extensión de Chrome: ignorarla.
+Interpretación: la cuenta de fal/Decart solo admite N sesiones simultáneas (probablemente 1) y la
+sesión anterior sigue VIVA del lado del servidor cuando pedimos la siguiente.
+
+====================================================================
+2. CAUSAS ENCONTRADAS EN EL CÓDIGO (src/lib/liveTryon.ts, @fal-ai/client 1.10.1)
+====================================================================
+C1. connectionKey FIJO ('lucy2-vton'). fal guarda en un Map global el intérprete de estado y el
+    "throttledSend" por connectionKey, así que TODAS las sesiones comparten la misma máquina de estados,
+    el mismo throttle y los mismos callbacks. Ver node_modules/@fal-ai/client/src/realtime.js
+    (reuseInterpreter / connectionCache).
+C2. Reconexión fantasma después de stop(): en fal, un send() en estado "idle" pasa a "connecting",
+    pide el token al tokenProvider (que devuelve el mismo JWT, válido 60 s) y ABRE UN WEBSOCKET NUEVO.
+    El throttle (DEFAULT_THROTTLE_INTERVAL = 128 ms, con setTimeout) puede ejecutar un send pendiente
+    DESPUÉS de close(). Además sendGarment() puede llamarse desde el efecto de CameraStage después de
+    parar. Ese websocket nuevo arranca otra sesión de Decart que nadie cierra (this.connection ya es
+    null) y ocupa el cupo hasta recargar la página. Encaja con "solo funcionó una vez".
+C3. closeConnection de fal solo cierra el websocket si readyState === OPEN. Si paramos durante
+    "connecting" (por ejemplo, error o la persona se va antes de que llegue el video), el socket queda
+    huérfano y vivo.
+C4. El throttle con setTimeout DESCARTA mensajes enviados con < 128 ms de separación (solo sobrevive
+    el último): offer + varios icecandidate seguidos pueden perderse. No es la causa del error, pero
+    hace la conexión poco confiable.
+C5. stop() no es idempotente: se llama varias veces (countdown, cleanup del useEffect al cambiar
+    liveManager, onError → this.stop() + handleStopLiveTryon) y cada vez dispara onClose →
+    /live/complete repetido.
+C6. Un intento fallido igual cuenta para el límite de 3 por visitante (el Worker inserta la fila con
+    15 s pesimistas y nunca la libera si no hubo video).
+
+====================================================================
+3. CAMBIOS
+====================================================================
+3.1 LiveTryOnManager (src/lib/liveTryon.ts)
+  - connectionKey ÚNICO por sesión: `lucy2-vton-${liveId}-${crypto.randomUUID()}`.
+  - throttleInterval: 0 (no descartar offer/icecandidate).
+  - Estado interno: 'idle' | 'connecting' | 'active' | 'closing' | 'closed'. Una vez 'closing' o
+    'closed': sendGarment() y el envío de icecandidate/offer NO hacen nada; onResult/onError ignoran
+    mensajes tardíos; el tokenProvider LANZA error (así fal no puede reconectar con el token viejo).
+  - stop() idempotente: la segunda llamada no hace nada. onClose se llama UNA sola vez.
+  - Cierre completo en stop(): detener los transceivers/senders del pc (sin parar los tracks de la
+    cámara: son del CameraView), pc.close(), connection.close(). Si la documentación de fal/Decart para
+    lucy2-vton realtime define un mensaje de fin de sesión (p. ej. {type:'stop'} o similar), enviarlo
+    ANTES de close(); revisar la doc y explicar en el reporte qué se encontró. No inventar mensajes.
+  - Exponer `closedAt` (ms) y un método estático/global `LiveTryOnManager.activeCount()` para saber si
+    queda alguna instancia sin cerrar.
+  - Logs con prefijo "[live]" en cada transición (connect, iceservers, offer, answer, track, error,
+    stop, close) para poder leerlos en la consola del kiosco.
+
+3.2 Una sola sesión a la vez y enfriamiento (CameraStage.tsx)
+  - Guardar el manager en un useRef (además del estado si hace falta para render). handleStopLiveTryon
+    debe usar el ref, no la variable capturada en el closure (hoy onError usa un handleStopLiveTryon
+    viejo donde liveManager era null).
+  - Candado `liveStartingRef`: si ya hay un inicio en curso o una sesión activa, handleStartLiveTryon
+    no hace nada (protege contra botón + gesto del índice en el mismo instante).
+  - Enfriamiento: no permitir un nuevo inicio hasta LIVE_COOLDOWN_MS = 4000 ms después del último
+    stop(). isLiveAvailable = ... && !enEnfriamiento (así el anillo del índice no avanza y el botón se
+    ve deshabilitado con su estado normal, sin texto nuevo).
+  - Quitar el efecto de cleanup que llama stop() cada vez que cambia liveManager; dejar solo el de
+    desmontaje real del componente (useEffect con [] que lee el ref).
+  - El efecto que reenvía la prenda (sendGarment cuando cambia activeGarment) solo si el manager está
+    'active'.
+
+3.3 Error "Concurrent session limit reached"
+  - Detectarlo (mensaje contiene "Concurrent session limit", sin distinguir mayúsculas).
+  - Cerrar todo (stop), esperar 5 s y reintentar UNA sola vez con un token nuevo (nuevo /live/token).
+    Mientras tanto mantener isLiveLoading = true y el texto del botón como hoy en carga.
+  - Si el reintento también falla: toast "La prueba en vivo está ocupada. Intenta en unos segundos."
+    (i18n es/en, clave live.busy), estado limpio (isLiveLoading false, isLiveActive false) y el botón
+    vuelve a estar disponible después del enfriamiento.
+  - Cualquier otro error: el toast actual live.error y estado limpio. Nunca dejar isLiveLoading en true.
+
+3.4 Intentos fallidos no cuentan (Worker, backend/src/index.ts)
+  - /live/complete acepta `failed: true`. Si llega failed y la sesión nunca produjo video, BORRAR la
+    fila de live_sesiones (no cuenta para el límite de 3 ni para el presupuesto). Sin failed, comportamiento
+    actual.
+  - El cliente manda failed: true cuando stop() ocurre sin haber recibido nunca el track remoto
+    (onUpdate). El reintento de 3.3 pide un token nuevo, así que primero libera la fila del intento fallido.
+  - No exponer FAL_API_KEY ni cambiar los límites existentes.
+
+3.5 Debug (solo con ?debug=1)
+  - En el overlay, sección LIVE: estado del manager, connectionKey abreviado, activeCount(), segundos de
+    enfriamiento restantes y último error.
+
+====================================================================
+4. TESTS
+====================================================================
+tests/unit/live-tryon.test.ts (mock de @fal-ai/client y RTCPeerConnection):
+  - Cada start() usa un connectionKey distinto y throttleInterval 0.
+  - stop() dos veces → connection.close y pc.close una vez cada uno, onClose una sola vez.
+  - sendGarment() después de stop() → no llama connection.send.
+  - Después de stop(), el tokenProvider lanza error.
+  - onResult/onError tardíos después de stop() → no llaman config.onError ni onUpdate.
+  - activeCount() vuelve a 0 después de stop().
+Integración CameraStage (o test del hook si se extrae a useLiveTryon.ts, recomendado):
+  - Dos llamadas a handleStartLiveTryon en el mismo tick → un solo fetch a /live/token.
+  - Tras terminar una sesión, isLiveAvailable es false durante 4000 ms y luego true.
+  - Error "Decart: Concurrent session limit reached." → stop, 5 s, segundo /live/token, segundo start.
+    Si vuelve a fallar → toast live.busy, isLiveLoading false.
+  - Fallo antes de recibir video → /live/complete con failed: true.
+backend/tests/live.test.ts:
+  - /live/complete con failed: true borra la fila; sin failed solo actualiza seconds (test existente
+    sin cambiar aserciones).
+Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+5. PRUEBA MANUAL QUE DEBE DOCUMENTAR EN EL REPORTE
+====================================================================
+Dario observó que con el perchero (índice arriba) la prueba en vivo se repite bien, pero con la
+selección normal (catálogo clásico, botón) funcionó una vez y no más. Ambos caminos usan el mismo
+handleStartLiveTryon de CameraStage, así que la diferencia probablemente es el TIEMPO entre sesiones
+(con el botón se vuelve a pedir enseguida, antes de que Decart libere la anterior). Probar los DOS modos:
+  a) ?ui=perchero&hand=1&debug=1 (índice) y
+  b) sin ?ui (catálogo clásico, tocando el botón) con ?debug=1:
+en cada uno, 3 sesiones VERME EN VIVO seguidas (esperando que termine cada una), y una cuarta pidiéndola
+apenas termina la tercera. Si el modo clásico se comporta distinto, encontrar y explicar la causa. Pegar los logs "[live]" de la
+consola. Nota: el límite de 3 por visitante sigue vigente; para la prueba usar "Reiniciar sesión"
+entre intentos o un session_id nuevo.
+
+====================================================================
+6. REGLAS Y EVIDENCIA
+====================================================================
+- Solo src/lib/liveTryon.ts, CameraStage.tsx (o un hook nuevo useLiveTryon.ts), DiagnosticOverlay.tsx,
+  es.json/en.json, backend/src/index.ts (/live/complete) y tests. No tocar hand-cursor.ts, RackPanel,
+  perchero, zona activa ni la lógica de límites/costos fuera de 3.4.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Si un test nuevo no pasa en 3 intentos: detenerse, commit WIP con --no-verify, push y reportar el
+  error exacto. No cambiar aserciones existentes.
+- Commit final fix(live): ... sin --no-verify. Push sin mergear.
+- Después del merge hay que desplegar el Worker (wrangler deploy) además del frontend: indicarlo en
+  el reporte.

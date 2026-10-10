@@ -348,9 +348,16 @@ app.post('/live/token', async (c) => {
 
 app.post('/live/complete', async (c) => {
   try {
-    const { live_id, seconds } = await c.req.json();
-    if (!live_id || seconds === undefined) {
+    const { live_id, seconds, failed } = await c.req.json();
+    if (!live_id || (seconds === undefined && !failed)) {
       return c.json({ status: 'error', error: 'Missing parameters' }, 400);
+    }
+
+    if (failed) {
+      await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+        .bind(live_id)
+        .run();
+      return c.json({ status: 'success', deleted: true });
     }
 
     const maxSeconds = Number(c.env.LIVE_SESSION_SECONDS || 15);

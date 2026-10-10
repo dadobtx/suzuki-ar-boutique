@@ -244,7 +244,9 @@
     "exit": "SALIR DE LIVE",
     "errorToast": "Live no disponible en este momento. Inténtalo de nuevo.",
     "fallbackToast": "Modo estático activo",
-    "readyToast": "¡Probador en vivo activo!"
+    "readyToast": "¡Probador en vivo activo!",
+    "error": "No pudimos iniciar la prueba en vivo. Intenta otra vez.",
+    "busy": "La prueba en vivo está ocupada. Intenta en unos segundos."
   },
   "variant": {
     "title": "COLOR"
