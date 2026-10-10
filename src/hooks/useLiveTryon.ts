@@ -8,8 +8,8 @@ import type { PresenceState } from '@/hooks/usePresence';
 import type { KioskState } from '@/store/kiosk';
 
 const PUBLIC_ASSETS_BASE =
-  import.meta.env.VITE_ASSETS_BASE_URL ||
-  (typeof window !== 'undefined' ? window.location.origin : '');
+  import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
+  'https://dadobtx.github.io/suzuki-ar-boutique/';
 
 export const LIVE_COOLDOWN_MS = 4000;
 export const CONCURRENT_RETRY_DELAY_MS = 5000;

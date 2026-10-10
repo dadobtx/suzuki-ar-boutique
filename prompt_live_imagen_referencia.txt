@@ -1,0 +1,52 @@
+PROMPT PARA ANTIGRAVITY — Prueba en vivo: Lucy recibe una URL de imagen rota
+Guardar en la raíz del repo como: prompt_live_imagen_referencia.txt
+Rama: fix/live-imagen-ref desde main (342372c o posterior). NO mergear.
+
+====================================================================
+1. PROBLEMA (regresión de fix/live-sesion)
+====================================================================
+En la prueba real, con "Team Black Reversible Jacket" puesta, Lucy le pone a la persona una camiseta
+negra con un gráfico que NO existe en el catálogo. Lucy está inventando la prenda porque no recibe la
+imagen de referencia.
+
+Causa: al mover la lógica de CameraStage.tsx a src/hooks/useLiveTryon.ts se cambió la base de las URLs:
+  ANTES (CameraStage, funcionaba):
+    const PUBLIC_ASSETS_BASE =
+      import.meta.env.VITE_PUBLIC_ASSETS_BASE ||
+      'https://dadobtx.github.io/suzuki-ar-boutique/';
+  AHORA (useLiveTryon.ts):
+    const PUBLIC_ASSETS_BASE =
+      import.meta.env.VITE_ASSETS_BASE_URL ||
+      (typeof window !== 'undefined' ? window.location.origin : '');
+window.location.origin es "https://dadobtx.github.io" SIN "/suzuki-ar-boutique/", así que la URL queda
+https://dadobtx.github.io/garments/990F0-BKQJ5.png → 404. Además cambió el nombre de la variable de
+entorno.
+
+====================================================================
+2. CAMBIO
+====================================================================
+- Restaurar EXACTAMENTE la constante anterior en useLiveTryon.ts (mismo nombre de variable
+  VITE_PUBLIC_ASSETS_BASE y mismo valor por defecto con /suzuki-ar-boutique/ y barra final).
+- Usarla en los dos lugares donde se arma referenceImageUrl (inicio de sesión y reenvío al cambiar de
+  prenda). Mantener new URL(path.replace(/^\//, ''), PUBLIC_ASSETS_BASE).
+- Revisar con grep que ningún otro archivo use window.location.origin para armar URLs de prendas que
+  salgan hacia servicios externos (Lucy, FASHN, Replicate). Reportar el resultado del grep.
+
+====================================================================
+3. TESTS
+====================================================================
+- Test que verifique que la URL enviada a Lucy (mock de LiveTryOnManager / config.referenceImageUrl)
+  para 990F0-BKQJ5 variante 'roja' es exactamente:
+    https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png
+  y para la variante 'negra':
+    https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png
+- Lo mismo para el reenvío al cambiar de prenda durante la sesión.
+- Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo src/hooks/useLiveTryon.ts y tests.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Commit fix(live): ... sin --no-verify. Push sin mergear.
+- NO ejecutar wrangler (no hay cambios de backend).

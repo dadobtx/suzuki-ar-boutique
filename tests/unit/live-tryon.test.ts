@@ -79,6 +79,42 @@ const sampleGarment: Garment = {
   anchorsUrl: '/garments/anchors.json',
 };
 
+const reversibleGarment: Garment = {
+  id: '990F0-BKQJ5',
+  sku: '990F0-BKQJ5',
+  name: 'Team Black Reversible Jacket',
+  category: 'top',
+  gender: 'unisex',
+  defaultPrice: 120,
+  images: {
+    front: '/garments/990F0-BKQJ5.png',
+    flat: '/garments/990F0-BKQJ5.png',
+  },
+  layers: {
+    overlay: '/garments/990F0-BKQJ5.png',
+  },
+  overlayUrl: '/garments/990F0-BKQJ5.png',
+  anchorsUrl: '/garments/990F0-BKQJ5.anchors.json',
+  variants: [
+    {
+      id: 'roja',
+      label: 'Roja',
+      color: '#CB1C2A',
+      overlayUrl: '/garments/990F0-BKQJ5.png',
+      anchorsUrl: '/garments/990F0-BKQJ5.anchors.json',
+      thumbnailUrl: '/garments/990F0-BKQJ5.thumb.png',
+    },
+    {
+      id: 'negra',
+      label: 'Negra',
+      color: '#14161B',
+      overlayUrl: '/garments/990F0-BKQJ5_2.png',
+      anchorsUrl: '/garments/990F0-BKQJ5_2.anchors.json',
+      thumbnailUrl: '/garments/990F0-BKQJ5_2.thumb.png',
+    },
+  ],
+};
+
 describe('LiveTryOnManager', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -660,5 +696,176 @@ describe('useLiveTryon hook integration', () => {
     expect(liveBtn.hasAttribute('disabled')).toBe(false);
 
     vi.useRealTimers();
+  });
+
+  it('la URL enviada a Lucy para 990F0-BKQJ5 variante roja es exactamente https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png y para negra es ..._2.png', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'success',
+            token: 'test-token',
+            max_seconds: 15,
+            live_id: 10,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+
+    // 1. Variante 'roja'
+    const sendGarmentSpy = vi.spyOn(LiveTryOnManager.prototype, 'sendGarment');
+
+    const { result: rojaResult } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: reversibleGarment,
+        activeVariantId: 'roja',
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await rojaResult.current.handleStartLiveTryon();
+    });
+
+    expect(sendGarmentSpy).toHaveBeenCalledWith(
+      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png',
+    );
+    expect(mockFalConnection.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reference_image_url:
+          'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png',
+      }),
+    );
+
+    act(() => {
+      rojaResult.current.handleStopLiveTryon();
+    });
+    sendGarmentSpy.mockClear();
+    mockFalConnection.send.mockClear();
+
+    // 2. Variante 'negra'
+    const { result: negraResult } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: reversibleGarment,
+        activeVariantId: 'negra',
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await negraResult.current.handleStartLiveTryon();
+    });
+
+    expect(sendGarmentSpy).toHaveBeenCalledWith(
+      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png',
+    );
+    expect(mockFalConnection.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reference_image_url:
+          'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png',
+      }),
+    );
+
+    act(() => {
+      negraResult.current.handleStopLiveTryon();
+    });
+    sendGarmentSpy.mockRestore();
+  });
+
+  it('al cambiar de prenda o variante durante la sesión activa, Lucy recibe la nueva referenceImageUrl', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'success',
+            token: 'test-token',
+            max_seconds: 15,
+            live_id: 10,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+    const sendGarmentSpy = vi.spyOn(LiveTryOnManager.prototype, 'sendGarment');
+
+    let currentVariant = 'roja';
+    const { result, rerender } = renderHook(
+      ({ variant }) =>
+        useLiveTryon({
+          activeGarment: reversibleGarment,
+          activeVariantId: variant,
+          cameraStream: stream,
+          sessionId: 'test-session',
+          presence: 'present',
+          kioskState: 'TRYON',
+          garmentActiveWithProfile: true,
+        }),
+      { initialProps: { variant: currentVariant } },
+    );
+
+    // Iniciar sesión con variante roja
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    expect(sendGarmentSpy).toHaveBeenLastCalledWith(
+      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png',
+    );
+
+    // Simular que se establece la conexión WebRTC y pasa a estado 'active'
+    await act(async () => {
+      await lastConnectConfig.onResult({ type: 'iceservers', iceservers: [] });
+    });
+    act(() => {
+      mockPcInstances[0].ontrack?.({ streams: [new MediaStream() as any] });
+    });
+
+    expect(result.current.isLiveActive).toBe(true);
+    sendGarmentSpy.mockClear();
+    mockFalConnection.send.mockClear();
+
+    // Cambiar a variante negra durante la sesión activa
+    currentVariant = 'negra';
+    rerender({ variant: currentVariant });
+
+    expect(sendGarmentSpy).toHaveBeenCalledWith(
+      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png',
+    );
+    expect(mockFalConnection.send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        reference_image_url:
+          'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png',
+      }),
+    );
+
+    act(() => {
+      result.current.handleStopLiveTryon();
+    });
+    sendGarmentSpy.mockRestore();
   });
 });
