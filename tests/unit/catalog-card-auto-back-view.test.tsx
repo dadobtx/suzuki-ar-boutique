@@ -7,6 +7,25 @@ import { useSizingStore } from '@/store/sizing';
 import { useAnalyticsStore } from '@/store/analytics';
 import type { Garment } from '@/types/garment';
 
+// jsdom's cssstyle does not support container query units like 'cqi'
+if (typeof document !== 'undefined') {
+  const styleProto = Object.getPrototypeOf(document.createElement('div').style);
+  const origDesc = Object.getOwnPropertyDescriptor(styleProto, 'fontSize');
+  if (origDesc) {
+    const customValues = new WeakMap<object, string>();
+    Object.defineProperty(styleProto, 'fontSize', {
+      get() {
+        return customValues.get(this) || origDesc.get?.call(this) || '';
+      },
+      set(val: string) {
+        customValues.set(this, val);
+        origDesc.set?.call(this, val);
+      },
+      configurable: true,
+    });
+  }
+}
+
 const garmentWithBack: Garment = {
   id: '990F0-BKTM1',
   line: 'Team Black',
@@ -212,5 +231,81 @@ describe('CatalogCard vista posterior automática al seleccionar', () => {
     expect(parentContainer).toBeTruthy();
     expect(parentContainer?.className).toContain('absolute');
     expect(parentContainer?.className).toContain('inset-0');
+  });
+
+  it('boton ATRAS/FRENTE tiene container-type:inline-size y el texto b usa clamp(9px, 13cqi, 14px)', () => {
+    const { container } = render(<CatalogCard garment={garmentWithBack} />);
+    const flipButton = container.querySelector(
+      'button[aria-label*="trasera"], button[aria-label*="viewBackAria"], button:has(b)',
+    );
+    expect(flipButton).toBeTruthy();
+    expect(flipButton?.className).toContain('[container-type:inline-size]');
+
+    const bText = flipButton?.querySelector('b');
+    expect(bText).toBeTruthy();
+    expect(bText?.className).toContain('tracking-normal');
+    expect(bText?.className).toContain('whitespace-nowrap');
+    expect(bText?.className).toContain('max-w-[86%]');
+    expect(bText?.style.fontSize).toBe('clamp(9px, 13cqi, 14px)');
+  });
+
+  it('boton de favoritos se renderiza dentro de .bg-white en ambos caminos y fuera de .faces en prenda con espalda', () => {
+    // 1. Prenda con vista posterior
+    const { container: withBack } = render(<CatalogCard garment={garmentWithBack} />);
+    const imgBoxWithBack = withBack.querySelector('.bg-white');
+    expect(imgBoxWithBack).toBeTruthy();
+    const heartBtnWithBack = imgBoxWithBack?.querySelector(
+      'button[aria-label*="favoritos"], button[aria-label*="Wishlist"]',
+    );
+    expect(heartBtnWithBack).toBeTruthy();
+    expect(heartBtnWithBack?.className).toContain('absolute');
+    expect(heartBtnWithBack?.className).toContain('top-2');
+    expect(heartBtnWithBack?.className).toContain('right-2');
+    expect(heartBtnWithBack?.className).toContain('z-20');
+    expect(heartBtnWithBack?.className).toContain('pointer-events-auto');
+
+    // Comprobar que NO está dentro de .faces
+    const faces = withBack.querySelector('.faces');
+    expect(faces).toBeTruthy();
+    expect(faces?.contains(heartBtnWithBack)).toBe(false);
+
+    // 2. Prenda sin vista posterior
+    const { container: withoutBack } = render(
+      <CatalogCard garment={garmentWithoutBack} />,
+    );
+    const imgBoxWithoutBack = withoutBack.querySelector('.bg-white');
+    expect(imgBoxWithoutBack).toBeTruthy();
+    const heartBtnWithoutBack = imgBoxWithoutBack?.querySelector(
+      'button[aria-label*="favoritos"], button[aria-label*="Wishlist"]',
+    );
+    expect(heartBtnWithoutBack).toBeTruthy();
+    expect(heartBtnWithoutBack?.className).toContain('absolute');
+    expect(heartBtnWithoutBack?.className).toContain('top-2');
+    expect(heartBtnWithoutBack?.className).toContain('right-2');
+    expect(heartBtnWithoutBack?.className).toContain('z-20');
+    expect(heartBtnWithoutBack?.className).toContain('pointer-events-auto');
+  });
+
+  it('linea de la prenda tiene text-accent-cyan y barrita roja acento', () => {
+    const { container } = render(<CatalogCard garment={garmentWithBack} />);
+    const lineEl = container.querySelector('.font-mono.text-base');
+    expect(lineEl).toBeTruthy();
+    expect(lineEl?.className).toContain('text-accent-cyan');
+    expect(lineEl?.className).toContain('tracking-[0.16em]');
+
+    const barEl = lineEl?.querySelector('span.bg-brand-red');
+    expect(barEl).toBeTruthy();
+    expect(barEl?.className).toContain('w-[12px]');
+    expect(barEl?.className).toContain('h-[2px]');
+  });
+
+  it('el precio tiene text-2xl font-semibold text-fg tabular-nums', () => {
+    const { container } = render(<CatalogCard garment={garmentWithBack} />);
+    const priceEl = container.querySelector('.font-mono.text-2xl');
+    expect(priceEl).toBeTruthy();
+    expect(priceEl?.className).toContain('font-semibold');
+    expect(priceEl?.className).toContain('text-fg');
+    expect(priceEl?.className).toContain('tabular-nums');
+    expect(priceEl?.textContent).toContain('$35.29');
   });
 });

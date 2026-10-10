@@ -1,0 +1,85 @@
+PROMPT PARA ANTIGRAVITY — Catálogo: corrección visual completa de las tarjetas
+Guardar en la raíz del repo como: prompt_catalogo_tarjetas_visual.txt
+Rama: la MISMA fix/catalogo-altura-tarjetas, sobre bc20dce. NO mergear.
+Reemplaza a prompt_catalogo_boton_atras.txt y prompt_catalogo_tipografia.txt (no ejecutar esos).
+
+Contexto: kiosco vertical de 32" (1080×1920, ~0,37 mm por px) visto a 1–1,5 m. Todo en
+src/components/catalog/CatalogCard.tsx. Hacer las 4 partes en este orden, en UN solo commit.
+
+====================================================================
+PARTE A. RECUADRO BLANCO DEL MISMO ALTO (ya hecho en bc20dce — conservar)
+====================================================================
+- Ya corregido: ambos caminos (con y sin vista posterior) usan `relative flex-1 min-h-0 ... mt-12` y
+  la imagen va en `absolute inset-0 ... p-8`. NO deshacerlo. Las partes B, C y D deben mantener el
+  alto del recuadro igual en las 10 tarjetas (diferencia ≤ 1 px) y ningún precio cortado.
+
+====================================================================
+PARTE B. TEXTO "ATRÁS" / "FRENTE" DENTRO DEL CÍRCULO
+====================================================================
+Problema: la palabra se sale por los lados del botón redondo. El texto usa
+`fontSize: clamp(10px, 1.1vw, 20px)` (depende del ANCHO DE LA VENTANA) con tracking-wider en mono,
+y el botón mide `w-[11%] min-w-[72px]`: "FRENTE" a 20 px (~90 px) no cabe en ~65 px útiles.
+Cambio:
+- En el botón: `[container-type:inline-size]`. En el texto <b>: `font-size: clamp(9px, 13cqi, 14px)`,
+  `tracking-normal`, `whitespace-nowrap`, `max-w-[86%]`.
+- Mantener diámetro (w-[11%] min-w-[72px] aspect-square), ícono, colores, borde y comportamiento.
+  No cambiar textos de i18n. "FRENTE", "ATRÁS", "FRONT" y "BACK" deben quedar dentro del círculo.
+
+====================================================================
+PARTE C. CORAZÓN (FAVORITO) DENTRO DEL RECUADRO BLANCO
+====================================================================
+Problema: el botón está `absolute top-2 right-2` respecto a la TARJETA y queda en la franja oscura de
+arriba (el recuadro blanco empieza con mt-12).
+Cambio:
+- Renderizar el mismo <button> dentro del contenedor bg-white del área de imagen, en ambos caminos,
+  con `absolute top-2 right-2 z-20 pointer-events-auto` (el contenedor es pointer-events-none).
+  Mantener e.stopPropagation(), aria-label y área táctil mínima de 60×60.
+- Color sobre blanco: sin marcar, trazo #17191E al ~55 %; marcado, relleno y trazo brand-red como hoy;
+  hover brand-red. Que quede sobre el margen p-8 y no tape la prenda.
+- Si en el camino con vista posterior el corazón queda dentro de las caras que giran (flip), sacarlo
+  fuera de `.faces` para que NO gire con la prenda.
+
+====================================================================
+PARTE D. TAMAÑO Y LEGIBILIDAD DE TEAM, NOMBRE Y PRECIO
+====================================================================
+Hoy (bloque "Info Area"):
+| Rol          | Clase actual                                     | Tamaño | Contraste sobre #17191E |
+|--------------|--------------------------------------------------|--------|-------------------------|
+| Línea (team) | font-mono text-sm text-brand-red tracking-widest | 14 px  | 3,66:1 (no pasa AA)     |
+| Nombre       | font-display text-3xl leading-snug line-clamp-2  | 30 px  | 16:1                    |
+| Precio       | font-mono text-lg text-fg-muted mt-1             | 18 px  | 6,5:1                   |
+La jerarquía queda nombre > team > precio; debe ser nombre > precio > team. Además Dario quiere el
+rojo solo como acento, no como color de texto.
+Cambio:
+- Línea (team): font-mono text-base (16 px), uppercase, tracking-[0.16em], `text-accent-cyan` (plata
+  #C9CED6), leading-none, con una barrita roja de acento antes del texto: inline-block 12×2 px
+  bg-brand-red align-middle mr-2.
+- Nombre: SIN cambios (text-3xl leading-snug line-clamp-2 min-h-[2.75em]).
+- Precio: font-mono text-2xl (24 px) font-semibold `text-fg` `tabular-nums` mt-2. Formato "$35.29".
+- Mantener h-[500px] de la tarjeta. Si el recuadro blanco baja de 240 px de alto en 1080×1920,
+  reducir primero el padding del bloque a `px-5 pt-4 pb-4` (no las letras). Reportar el alto final.
+
+====================================================================
+VERIFICACIÓN EN NAVEGADOR (ampliar scripts/verify_catalog_card_heights.ts)
+====================================================================
+En 1080×1920 (?layout=portrait) y 1920×1080, para las 10 tarjetas, imprimir una tabla con:
+  sku | alto recuadro blanco | precio visible | corazón dentro del recuadro | font-size team/nombre/precio
+Y para el botón ATRÁS/FRENTE (en las 7 prendas con vista posterior), en estado frente y atrás (clic):
+  ancho del texto / diámetro del botón (≤ 86 %) y texto centrado.
+El script debe FALLAR si: diferencia de alto del recuadro > 1 px, algún precio cortado, algún corazón
+fuera del recuadro blanco, o algún texto del botón fuera del círculo. Pegar las tablas en el reporte.
+Capturas ampliadas: T-SHIRT (nombre de 1 línea, corazón vacío, botón en "FRENTE" después de girar) y
+FUNCTIONAL HOODED SWEAT JACKET (2 líneas, corazón marcado), y VEST junto a HOODIE.
+
+Tests unitarios (clases): botón con container-type y texto con clamp en cqi; corazón dentro del
+contenedor bg-white en ambos caminos; team con text-accent-cyan y barrita roja; precio con
+text-2xl text-fg tabular-nums. Los tests existentes siguen pasando sin cambiar aserciones.
+
+====================================================================
+REGLAS Y EVIDENCIA
+====================================================================
+- Solo CatalogCard.tsx, el script de verificación y tests. No tocar perchero, vitrina, AR, Lucy, gestos.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Si un punto no se puede cumplir, detenerse y reportarlo con el número medido (no cambiar umbrales).
+- Commit fix(catalog): ... sin --no-verify. Push a fix/catalogo-altura-tarjetas sin mergear.
+  NO ejecutar wrangler.

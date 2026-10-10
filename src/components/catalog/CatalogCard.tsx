@@ -211,6 +211,31 @@ export function CatalogCard({ garment }: CatalogCardProps) {
     typeof window.matchMedia === 'function' &&
     window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
+  const wishlistButton = (
+    <button
+      type="button"
+      aria-label={t(isWishlisted ? 'catalog.removeWishlist' : 'catalog.addWishlist')}
+      onClick={(e) => {
+        e.stopPropagation();
+        toggleWishlist(garment.sku);
+      }}
+      className={`absolute top-2 right-2 p-3 z-20 pointer-events-auto transition-colors cursor-pointer ${
+        isWishlisted ? 'text-brand-red' : 'text-[#17191E]/55 hover:text-brand-red'
+      }`}
+      style={{
+        minHeight: '60px',
+        minWidth: '60px',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+      }}
+    >
+      <Heart
+        className={`w-7 h-7 transition-all ${isWishlisted ? 'fill-brand-red text-brand-red' : ''}`}
+      />
+    </button>
+  );
+
   return (
     <div
       role="article"
@@ -230,28 +255,6 @@ export function CatalogCard({ garment }: CatalogCardProps) {
         className="absolute inset-0 z-0 w-full h-full min-w-[64px] min-h-[64px] cursor-pointer focus:outline-none"
       />
 
-      {/* Wishlist Button - Top Right */}
-      <button
-        type="button"
-        aria-label={t(isWishlisted ? 'catalog.removeWishlist' : 'catalog.addWishlist')}
-        onClick={(e) => {
-          e.stopPropagation();
-          toggleWishlist(garment.sku);
-        }}
-        className="absolute top-2 right-2 p-3 z-10 text-fg-muted hover:text-brand-red transition-colors cursor-pointer"
-        style={{
-          minHeight: '60px',
-          minWidth: '60px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Heart
-          className={`w-7 h-7 transition-all ${isWishlisted ? 'fill-brand-red text-brand-red' : ''}`}
-        />
-      </button>
-
       {/* Badges - Top Left */}
       <div className="absolute top-4 left-4 z-10 flex flex-col gap-2 pointer-events-none">
         {garment.badges?.map((b) => (
@@ -267,6 +270,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
       {/* Image Area */}
       {!resolvedBackView ? (
         <div className="relative flex-1 min-h-0 w-full bg-white pointer-events-none mt-12">
+          {wishlistButton}
           <div className="absolute inset-0 flex items-center justify-center p-8">
             {!imgLoaded && !imgError && (
               <div className="absolute inset-0 flex items-center justify-center">
@@ -291,6 +295,8 @@ export function CatalogCard({ garment }: CatalogCardProps) {
           ref={imgboxRef}
           className="relative flex-1 min-h-0 w-full bg-white pointer-events-none flex items-center justify-center mt-12 [perspective:1200px]"
         >
+          {wishlistButton}
+
           {/* Faces container */}
           <div
             className="faces absolute inset-0 [transform-style:preserve-3d]"
@@ -376,7 +382,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
               handleManualFlip();
             }}
             className={`
-              absolute right-3 bottom-3 z-10 w-[11%] min-w-[72px] min-h-[72px] aspect-square rounded-full border pointer-events-auto
+              absolute right-3 bottom-3 z-10 w-[11%] min-w-[72px] min-h-[72px] aspect-square rounded-full border pointer-events-auto [container-type:inline-size]
               bg-surface/90 backdrop-blur-sm flex flex-col items-center justify-center p-1 cursor-pointer transition-all active:scale-95
               ${view === 'back' ? 'border-brand-red text-brand-red shadow-lg' : 'border-line hover:border-fg-muted text-fg-muted hover:text-white'}
             `}
@@ -399,8 +405,8 @@ export function CatalogCard({ garment }: CatalogCardProps) {
               <path d="M21 3v5h-5" />
             </svg>
             <b
-              className="font-mono font-bold tracking-wider uppercase leading-none mt-1 text-center"
-              style={{ fontSize: 'clamp(10px, 1.1vw, 20px)' }}
+              className="font-mono font-bold tracking-normal uppercase leading-none mt-1 text-center whitespace-nowrap max-w-[86%]"
+              style={{ fontSize: 'clamp(9px, 13cqi, 14px)' }}
             >
               {view === 'back' ? t('catalog.viewFront') : t('catalog.viewBack')}
             </b>
@@ -410,8 +416,12 @@ export function CatalogCard({ garment }: CatalogCardProps) {
 
       {/* Info Area */}
       <div className="p-5 flex flex-col gap-1 bg-surface/90 backdrop-blur-sm pointer-events-none z-10 border-t border-line">
-        <div className="font-mono text-sm text-brand-red tracking-widest uppercase">
-          {garment.line}
+        <div className="font-mono text-base uppercase tracking-[0.16em] text-accent-cyan leading-none flex items-center">
+          <span
+            className="inline-block w-[12px] h-[2px] bg-brand-red align-middle mr-2 flex-shrink-0"
+            aria-hidden="true"
+          />
+          <span>{garment.line}</span>
         </div>
         <div
           className="font-display text-3xl leading-snug line-clamp-2 min-h-[2.75em]"
@@ -419,7 +429,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
         >
           {displayName}
         </div>
-        <div className="font-mono text-lg text-fg-muted mt-1">
+        <div className="font-mono text-2xl font-semibold text-fg tabular-nums mt-2">
           ${((garment.priceCents || 0) / 100).toFixed(2)}
         </div>
       </div>
