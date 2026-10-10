@@ -51,7 +51,7 @@ async function main() {
     await page1.goto('http://localhost:4173/?layout=portrait');
     await page1.waitForSelector('text=Team Black T-Shirt', { timeout: 15000 });
     // Esperar a que la tarjeta de espalda monte y anime (delay 0.55s)
-    await page1.waitForSelector('text=ASÍ ES POR DETRÁS', { timeout: 10000 });
+    await page1.waitForSelector('[data-testid="showcase-back-card"]', { timeout: 10000 });
     await page1.waitForTimeout(2000);
     const path1 = path.join(OUT_DIR, '1_bktm1_tarjeta_espalda.png');
     await page1.screenshot({ path: path1 });

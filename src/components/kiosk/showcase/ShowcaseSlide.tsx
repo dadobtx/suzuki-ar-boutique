@@ -231,7 +231,8 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                 {/* Layer E: Real Photo Card Superimposed on bottom-right (Back View) */}
                 {currentPhoto?.back && (
                   <motion.div
-                    className="absolute bottom-[2%] right-[2%] w-[36%] aspect-square bg-white rounded-sm p-[6%] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] border-b-[3px] border-b-brand-red flex flex-col justify-between z-20 pointer-events-none"
+                    data-testid="showcase-back-card"
+                    className="absolute bottom-[2%] right-[2%] w-[36%] aspect-square bg-white rounded-sm p-[2%] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] border-b-[3px] border-b-brand-red flex items-center justify-center z-20 pointer-events-none"
                     initial={
                       shouldReduceMotion
                         ? { opacity: 0 }
@@ -252,10 +253,7 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                           }
                     }
                   >
-                    <span className="font-mono text-[10px] sm:text-xs font-bold tracking-wider text-[#17191E] uppercase select-none">
-                      {t('kiosk.attract.showcase.backView', 'ASÍ ES POR DETRÁS')}
-                    </span>
-                    <div className="flex-1 w-full flex items-center justify-center overflow-hidden min-h-0 relative">
+                    <div className="w-full h-full flex items-center justify-center overflow-hidden relative">
                       <AnimatePresence mode="wait">
                         <motion.img
                           key={currentPhoto.back}

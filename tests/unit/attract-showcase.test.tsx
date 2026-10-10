@@ -181,7 +181,7 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       });
     });
 
-    it('handles garments without illustration with illustrations [] and renders without "ASÍ ES POR DETRÁS"', () => {
+    it('handles garments without illustration with illustrations [] and renders without back view card', () => {
       const customGarment: Garment = {
         id: 'no-illust-1',
         sku: 'TEST-SKU-1',
@@ -205,8 +205,8 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       render(<AttractPanel />);
 
       expect(screen.getByText('Prenda Sin Ilustración')).toBeTruthy();
-      // Should NOT render the small "ASÍ ES POR DETRÁS" card badge
-      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+      // Should NOT render the back view card
+      expect(screen.queryByTestId('showcase-back-card')).toBeNull();
     });
 
     it('skips garments that have neither illustration NOR photo', () => {
@@ -259,7 +259,7 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       });
     });
 
-    it('renders "ASÍ ES POR DETRÁS" card for 990F0-BKTM1 with correct image and alt text', () => {
+    it('renders back view card for 990F0-BKTM1 with correct image and alt text, without text', () => {
       const slides = buildShowcaseSlides(realCatalog as unknown as Garment[]);
       const bktm1Slide = slides.find(
         (s): s is Extract<ShowcaseSlide, { kind: 'garment' }> =>
@@ -268,7 +268,10 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       expect(bktm1Slide).toBeDefined();
 
       const { container } = render(<ShowcaseSlideComponent slide={bktm1Slide!} />);
-      expect(screen.getByText('ASÍ ES POR DETRÁS')).toBeTruthy();
+      const card = screen.getByTestId('showcase-back-card');
+      expect(card).toBeTruthy();
+      // El texto fue eliminado para ampliar la imagen
+      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
 
       const backImg = container.querySelector(
         'img[src*="990F0-BKTM1.back.thumb.png"]',
@@ -291,7 +294,7 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       );
       expect(bkbw5Slide).toBeDefined();
       const { unmount } = render(<ShowcaseSlideComponent slide={bkbw5Slide!} />);
-      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+      expect(screen.queryByTestId('showcase-back-card')).toBeNull();
       unmount();
 
       // 990F0-BKQJ5 (2 variants)
@@ -303,13 +306,13 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       const { unmount: unmount2 } = render(
         <ShowcaseSlideComponent slide={bkqj5Slide!} />,
       );
-      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+      expect(screen.queryByTestId('showcase-back-card')).toBeNull();
 
       // Cycle to second variant (after 1600ms)
       act(() => {
         vi.advanceTimersByTime(1600);
       });
-      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+      expect(screen.queryByTestId('showcase-back-card')).toBeNull();
       unmount2();
     });
   });
