@@ -74,7 +74,8 @@
       "title": "PRUÉBATE LA COLECCIÓN SUZUKI",
       "standOnMark": "PÁRATE EN LA MARCA DEL PISO",
       "showcase": {
-        "realOne": "ASÍ ES LA REAL",
+        "backView": "ASÍ ES POR DETRÁS",
+        "backViewAlt": "vista posterior",
         "sizes": "TALLAS",
         "colors": "{{count}} COLORES",
         "cta": "PRUÉBATELA EN EL ESPEJO",

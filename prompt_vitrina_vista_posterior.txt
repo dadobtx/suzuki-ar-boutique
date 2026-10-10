@@ -1,0 +1,69 @@
+PROMPT PARA ANTIGRAVITY — Vitrina: tarjeta "ASÍ ES POR DETRÁS" y tarjetas del catálogo del mismo tamaño
+Guardar en la raíz del repo como: prompt_vitrina_vista_posterior.txt
+Rama: fix/vitrina-vista-posterior desde main. NO mergear.
+
+====================================================================
+1. TARJETA BLANCA DEL PANEL DE ATRACCIÓN → VISTA POSTERIOR
+====================================================================
+Hoy (src/components/kiosk/showcase/ShowcaseSlide.tsx, "Layer E") la tarjeta blanca dice "ASÍ ES LA
+REAL" y muestra la foto FRONTAL (thumbnailUrl), que es casi lo mismo que la ilustración grande. Dario
+quiere que muestre la ESPALDA de la prenda, y solo en las prendas que tienen foto posterior.
+
+Cambios:
+- src/components/kiosk/showcase/buildShowcaseSlides.ts: en `photos` (paralelo a `illustrations`, mismo
+  índice = misma variante) agregar `back?: string` con la miniatura posterior, resuelta con la función
+  existente resolveBackView(garment, v.id) de src/lib/back-view.ts (o resolveBackView(garment) si no
+  hay variantes). Usar back.thumbnailUrl con prefixBaseUrl. NO duplicar la lógica de back-view.
+  Mantener `thumb`/`full` como están (los usa el fallback "sin ilustración").
+- ShowcaseSlide.tsx, Layer E: renderizar la tarjeta solo si `currentPhoto?.back` existe, y mostrar esa
+  imagen (no `thumb`). Sin vista posterior → no se muestra la tarjeta (sin hueco ni placeholder).
+  Mantener exactamente la animación, el tamaño (w-[36%] aspect-square), la rotación y el borde rojo.
+- Texto: clave nueva kiosk.attract.showcase.backView
+    es: "ASÍ ES POR DETRÁS"
+    en: "THIS IS THE BACK"
+  Quitar la clave realOne de es.json y en.json si ya no se usa en ningún lado (verificar con grep).
+- alt de la imagen: `${garment.name} — vista posterior` (en en: "back view").
+
+Estado actual del catálogo (verificado en public/catalog.json):
+  con espalda: 990F0-BKTM1, BKPM5, BKHM0, BLMJ4, BLPK0, JYFJ1, FCHJ0
+  sin espalda (no muestran tarjeta): 990F0-BKBW5, BKQJ5 (ninguna de sus 2 variantes), RSSM0
+
+====================================================================
+2. CATÁLOGO: LA IMAGEN DE LA PRENDA BLANCA SE VE MÁS PEQUEÑA
+====================================================================
+Causa (src/components/catalog/CatalogCard.tsx): la tarjeta mide h-[500px]; el área de imagen es
+`flex-1` y el nombre usa `line-clamp-2`. "FUNCTIONAL HOODED SWEAT JACKET" ocupa 2 líneas, el bloque de
+texto crece y el área de imagen se encoge. Como las miniaturas son PNG cuadrados con fondo blanco
+opaco y llevan `drop-shadow-xl`, el cuadrado blanco con sombra se ve más chico en esa tarjeta.
+(Pasa con cualquier prenda cuyo nombre ocupe 2 líneas.)
+
+Cambio:
+- Reservar SIEMPRE el alto de 2 líneas para el nombre (p. ej. `min-h-[2.75em]` junto a
+  `leading-snug line-clamp-2`), para que el área de imagen tenga el mismo alto en todas las tarjetas.
+  Aplicar al nombre en ambos caminos de render de la imagen (con y sin vista posterior).
+- No cambiar el tamaño total de la tarjeta, tipografías, colores ni el botón ATRÁS.
+- Revisar si RackPanel / el perchero tiene el mismo patrón (nombre de largo variable que encoge la
+  imagen) y, si lo tiene, aplicar la misma corrección. Reportarlo.
+
+====================================================================
+3. TESTS
+====================================================================
+- tests/unit/attract-showcase.test.tsx (actualizar/agregar):
+  - Slide de 990F0-BKTM1 → la tarjeta existe, dice "ASÍ ES POR DETRÁS" y la imagen apunta a
+    990F0-BKTM1.back.thumb.png (con el prefijo de BASE_URL).
+  - Slide de 990F0-BKBW5 y de 990F0-BKQJ5 (ambas variantes) → no hay tarjeta.
+  - buildShowcaseSlides: `back` presente solo en las prendas con espalda.
+- CatalogCard: el contenedor del nombre tiene la clase de alto mínimo de 2 líneas (test de clase o de
+  estilo), para un nombre corto y uno largo.
+- Si algún test existente esperaba "ASÍ ES LA REAL" o la foto frontal en esa tarjeta, cambiar SOLO
+  esa expectativa y explicarlo en el reporte. Ningún otro test cambia sus aserciones.
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo buildShowcaseSlides.ts, ShowcaseSlide.tsx, CatalogCard.tsx (y RackPanel/buildRack si aplica),
+  es.json, en.json y tests. No tocar ilustraciones, imágenes de public/, AR, Lucy ni gestos.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Capturas en 1080×1920 (?layout=portrait): panel de atracción con BKTM1 (tarjeta con espalda) y con
+  BKBW5 (sin tarjeta), y catálogo mostrando Fleece Jacket y Functional Hooded Sweat Jacket lado a lado.
+- Commit fix(attract): ... sin --no-verify. Push sin mergear. NO ejecutar wrangler.

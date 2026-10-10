@@ -411,7 +411,7 @@ export function CatalogCard({ garment }: CatalogCardProps) {
           {garment.line}
         </div>
         <div
-          className="font-display text-3xl leading-snug line-clamp-2"
+          className="font-display text-3xl leading-snug line-clamp-2 min-h-[2.75em]"
           title={garment.name}
         >
           {displayName}

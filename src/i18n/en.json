@@ -74,7 +74,8 @@
       "title": "TRY THE SUZUKI COLLECTION",
       "standOnMark": "STAND ON THE FLOOR MARK",
       "showcase": {
-        "realOne": "THE REAL ONE",
+        "backView": "THIS IS THE BACK",
+        "backViewAlt": "back view",
         "sizes": "SIZES",
         "colors": "{{count}} COLORS",
         "cta": "TRY IT ON IN THE MIRROR",

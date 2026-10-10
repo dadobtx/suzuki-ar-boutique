@@ -15,6 +15,7 @@ import {
   buildShowcaseSlides,
   type ShowcaseSlide,
 } from '@/components/kiosk/showcase/buildShowcaseSlides';
+import { ShowcaseSlide as ShowcaseSlideComponent } from '@/components/kiosk/showcase/ShowcaseSlide';
 import { AttractPanel } from '@/components/kiosk/AttractPanel';
 import { AttractLoop } from '@/components/kiosk/AttractLoop';
 import { CameraStage } from '@/components/camera/CameraStage';
@@ -54,7 +55,8 @@ vi.mock('react-i18next', () => ({
       }
       if (key === 'kiosk.attract.standOnMark') return 'PÁRATE EN LA MARCA DEL PISO';
       if (key === 'kiosk.attract.title') return 'PRUÉBATE LA COLECCIÓN SUZUKI';
-      if (key === 'kiosk.attract.showcase.realOne') return 'ASÍ ES LA REAL';
+      if (key === 'kiosk.attract.showcase.backView') return 'ASÍ ES POR DETRÁS';
+      if (key === 'kiosk.attract.showcase.backViewAlt') return 'vista posterior';
       if (key === 'kiosk.attract.showcase.sizes') return 'TALLAS';
       if (key === 'kiosk.attract.showcase.colors') return `${values?.count} COLORES`;
       if (key === 'kiosk.attract.showcase.cta') return 'PRUÉBATELA EN EL ESPEJO';
@@ -179,7 +181,7 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       });
     });
 
-    it('handles garments without illustration with illustrations [] and renders without "ASÍ ES LA REAL"', () => {
+    it('handles garments without illustration with illustrations [] and renders without "ASÍ ES POR DETRÁS"', () => {
       const customGarment: Garment = {
         id: 'no-illust-1',
         sku: 'TEST-SKU-1',
@@ -203,8 +205,8 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       render(<AttractPanel />);
 
       expect(screen.getByText('Prenda Sin Ilustración')).toBeTruthy();
-      // Should NOT render the small "ASÍ ES LA REAL" card badge
-      expect(screen.queryByText('ASÍ ES LA REAL')).toBeNull();
+      // Should NOT render the small "ASÍ ES POR DETRÁS" card badge
+      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
     });
 
     it('skips garments that have neither illustration NOR photo', () => {
@@ -220,6 +222,95 @@ describe('Attract Showcase & Impeccable Improvements', () => {
 
       const slides = buildShowcaseSlides([emptyGarment]);
       expect(slides).toHaveLength(0);
+    });
+  });
+
+  describe('ShowcaseSlide Back View Card ("ASÍ ES POR DETRÁS")', () => {
+    it('populates back thumbnail in buildShowcaseSlides only for garments with back view', () => {
+      const slides = buildShowcaseSlides(realCatalog as unknown as Garment[]);
+      const garmentSlides = slides.filter(
+        (s): s is Extract<ShowcaseSlide, { kind: 'garment' }> => s.kind === 'garment',
+      );
+
+      const withBackSkus = [
+        '990F0-BKTM1',
+        '990F0-BKPM5',
+        '990F0-BKHM0',
+        '990F0-BLMJ4',
+        '990F0-BLPK0',
+        '990F0-JYFJ1',
+        '990F0-FCHJ0',
+      ];
+      const withoutBackSkus = ['990F0-BKBW5', '990F0-BKQJ5', '990F0-RSSM0'];
+
+      withBackSkus.forEach((id) => {
+        const slide = garmentSlides.find((s) => s.garment.id === id);
+        expect(slide).toBeDefined();
+        expect(slide?.photos[0]?.back).toBeDefined();
+        expect(slide?.photos[0]?.back).toMatch(/\.back\.thumb\.png$/);
+      });
+
+      withoutBackSkus.forEach((id) => {
+        const slide = garmentSlides.find((s) => s.garment.id === id);
+        expect(slide).toBeDefined();
+        slide?.photos.forEach((photo) => {
+          expect(photo.back).toBeUndefined();
+        });
+      });
+    });
+
+    it('renders "ASÍ ES POR DETRÁS" card for 990F0-BKTM1 with correct image and alt text', () => {
+      const slides = buildShowcaseSlides(realCatalog as unknown as Garment[]);
+      const bktm1Slide = slides.find(
+        (s): s is Extract<ShowcaseSlide, { kind: 'garment' }> =>
+          s.kind === 'garment' && s.garment.id === '990F0-BKTM1',
+      );
+      expect(bktm1Slide).toBeDefined();
+
+      const { container } = render(<ShowcaseSlideComponent slide={bktm1Slide!} />);
+      expect(screen.getByText('ASÍ ES POR DETRÁS')).toBeTruthy();
+
+      const backImg = container.querySelector(
+        'img[src*="990F0-BKTM1.back.thumb.png"]',
+      ) as HTMLImageElement;
+      expect(backImg).toBeTruthy();
+      const baseUrl = import.meta.env.BASE_URL;
+      const srcAttr = backImg.getAttribute('src') || '';
+      expect(srcAttr.startsWith(baseUrl)).toBe(true);
+      expect(backImg.alt).toBe('Team Black T-Shirt — vista posterior');
+    });
+
+    it('does NOT render card for 990F0-BKBW5 or 990F0-BKQJ5 (both variants)', () => {
+      vi.useFakeTimers();
+      const slides = buildShowcaseSlides(realCatalog as unknown as Garment[]);
+
+      // 990F0-BKBW5
+      const bkbw5Slide = slides.find(
+        (s): s is Extract<ShowcaseSlide, { kind: 'garment' }> =>
+          s.kind === 'garment' && s.garment.id === '990F0-BKBW5',
+      );
+      expect(bkbw5Slide).toBeDefined();
+      const { unmount } = render(<ShowcaseSlideComponent slide={bkbw5Slide!} />);
+      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+      unmount();
+
+      // 990F0-BKQJ5 (2 variants)
+      const bkqj5Slide = slides.find(
+        (s): s is Extract<ShowcaseSlide, { kind: 'garment' }> =>
+          s.kind === 'garment' && s.garment.id === '990F0-BKQJ5',
+      );
+      expect(bkqj5Slide).toBeDefined();
+      const { unmount: unmount2 } = render(
+        <ShowcaseSlideComponent slide={bkqj5Slide!} />,
+      );
+      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+
+      // Cycle to second variant (after 1600ms)
+      act(() => {
+        vi.advanceTimersByTime(1600);
+      });
+      expect(screen.queryByText('ASÍ ES POR DETRÁS')).toBeNull();
+      unmount2();
     });
   });
 
