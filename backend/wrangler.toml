@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [[kv_namespaces]]
 binding = "RATE_LIMITER"
-id = "2d21cf062beb49f08566d3e4a23b852c" # Rate Limiter KV
+id = "9355c750421143358ac517d9ab836921" # Rate Limiter KV
 
 [vars]
 ALLOWED_ORIGIN = "https://dadobtx.github.io"
@@ -19,4 +19,4 @@ LIVE_BUDGET_CENTS_PER_EVENT = 10000
 [[d1_databases]]
 binding = "DB"
 database_name = "kiosk-sizing-db"
-database_id = "0c3048f1-82fb-4fd0-b666-40b0e36c5e52"
+database_id = "ac979b1d-4c4c-4149-ae5b-76b250313715" # Placeholder for local dev
