@@ -13,6 +13,7 @@ import realCatalog from '../../public/catalog.json';
 import type { Garment } from '@/types/garment';
 import {
   buildShowcaseSlides,
+  preloadSlideImages,
   type ShowcaseSlide,
 } from '@/components/kiosk/showcase/buildShowcaseSlides';
 import { ShowcaseSlide as ShowcaseSlideComponent } from '@/components/kiosk/showcase/ShowcaseSlide';
@@ -314,6 +315,45 @@ describe('Attract Showcase & Impeccable Improvements', () => {
       });
       expect(screen.queryByTestId('showcase-back-card')).toBeNull();
       unmount2();
+    });
+
+    it('preloadSlideImages extracts and attempts preloading of illustration, thumbs and back view photos', () => {
+      const slides = buildShowcaseSlides(realCatalog as unknown as Garment[]);
+      const bktm1Slide = slides.find(
+        (s): s is Extract<ShowcaseSlide, { kind: 'garment' }> =>
+          s.kind === 'garment' && s.garment.id === '990F0-BKTM1',
+      );
+      expect(bktm1Slide).toBeDefined();
+
+      const createdUrls: string[] = [];
+      const originalImage = window.Image;
+      class MockImage {
+        src = '';
+        decode = vi.fn().mockResolvedValue(undefined);
+        constructor() {
+          return new Proxy(this, {
+            set(target, prop, value) {
+              if (prop === 'src') {
+                createdUrls.push(String(value));
+              }
+              (target as unknown as Record<string | symbol, unknown>)[prop] = value;
+              return true;
+            },
+          });
+        }
+      }
+      window.Image = MockImage as unknown as typeof Image;
+
+      try {
+        preloadSlideImages(bktm1Slide!);
+        expect(createdUrls.some((u) => u.includes('990F0-BKTM1.png'))).toBe(true);
+        expect(createdUrls.some((u) => u.includes('990F0-BKTM1.thumb.png'))).toBe(true);
+        expect(createdUrls.some((u) => u.includes('990F0-BKTM1.back.thumb.png'))).toBe(
+          true,
+        );
+      } finally {
+        window.Image = originalImage;
+      }
     });
   });
 

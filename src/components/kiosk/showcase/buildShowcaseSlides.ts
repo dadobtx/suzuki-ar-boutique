@@ -134,5 +134,33 @@ export function buildShowcaseSlides(catalog: Garment[]): ShowcaseSlide[] {
     });
   }
 
+  if (typeof window !== 'undefined') {
+    slides.forEach((s) => preloadSlideImages(s));
+  }
+
   return slides;
+}
+
+export function preloadSlideImages(slide: ShowcaseSlide): void {
+  if (typeof window === 'undefined' || typeof Image === 'undefined') return;
+  const urls: string[] = [];
+  if (slide.kind === 'garment') {
+    urls.push(...slide.illustrations);
+    slide.photos.forEach((p) => {
+      if (p.thumb) urls.push(p.thumb);
+      if (p.full) urls.push(p.full);
+      if (p.back) urls.push(p.back);
+    });
+  } else if (slide.kind === 'summary') {
+    urls.push(...slide.illustrations);
+  }
+  urls.forEach((url) => {
+    try {
+      const img = new Image();
+      img.src = url;
+      img.decode?.().catch(() => {});
+    } catch {
+      // Ignore preload errors
+    }
+  });
 }

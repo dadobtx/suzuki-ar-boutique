@@ -6,6 +6,8 @@ import { RackSlot } from './RackSlot';
 import { RackCaption } from './RackCaption';
 import { useHandCursorStore } from '@/store/handCursor';
 import { useAnalyticsStore } from '@/store/analytics';
+import { isDebugMode } from '@/lib/debug-mode';
+import { computeMirrorTargetRect, sanitizeSlotRect } from './rack-geometry';
 import './rack.css';
 
 interface RackPanelProps {
@@ -301,8 +303,15 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
 
       const dx = to.left - from.left;
       const dy = to.top - from.top;
-      const sx = from.width > 0 ? to.width / from.width : 1;
-      const sy = from.height > 0 ? to.height / from.height : 1;
+      const rawSx = from.width > 0 ? to.width / from.width : 1;
+      const rawSy = from.height > 0 ? to.height / from.height : 1;
+      const sx = Math.min(Math.max(rawSx, 0.05), 4);
+      const sy = Math.min(Math.max(rawSy, 0.05), 4);
+
+      if (isDebugMode()) {
+        console.log('[flyElement]', { from, to, sx, sy });
+      }
+
       const mid = `translate(${dx * 0.38}px, ${dy * 0.38 + arc}px) scale(${1 + (sx - 1) * 0.5}, ${1 + (sy - 1) * 0.5}) rotate(${tilt}deg)`;
 
       try {
@@ -353,26 +362,15 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
       const mirrorEl =
         document.querySelector('[data-stage="mirror"]') ||
         document.getElementById('mirror');
-      if (!mirrorEl) {
-        return {
-          left: window.innerWidth * 0.5 - 150,
-          top: window.innerHeight * 0.25,
-          width: 300,
-          height: 300,
-        };
-      }
-      const mRect = mirrorEl.getBoundingClientRect();
-      const targetW = mRect.width * 0.45;
-      const aspect = from.width > 0 && from.height > 0 ? from.width / from.height : 1;
-      const targetH = targetW / aspect;
-      const targetLeft = mRect.left + mRect.width * 0.5 - targetW * 0.5;
-      const targetTop = mRect.top + mRect.height * 0.38 - targetH * 0.5;
-      return {
-        left: targetLeft,
-        top: targetTop,
-        width: targetW,
-        height: targetH,
-      };
+      const mRect = mirrorEl
+        ? mirrorEl.getBoundingClientRect()
+        : {
+            left: window.innerWidth * 0.5 - 150,
+            top: window.innerHeight * 0.25,
+            width: 300,
+            height: 300,
+          };
+      return computeMirrorTargetRect(mRect, from);
     },
     [],
   );
@@ -417,7 +415,7 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
           selectGarment(null);
 
           if (slotImg && flySrc) {
-            const slotRect = slotImg.getBoundingClientRect();
+            const slotRect = sanitizeSlotRect(slotImg.getBoundingClientRect());
             const mirrorRect = getMirrorTargetRect(slotRect);
             await flyElement(flySrc, mirrorRect, slotRect, { arc: -60, tilt: 5 });
           }
@@ -445,7 +443,9 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
                 prevSlotEl?.querySelector<HTMLElement>('.rack-garment') || prevSlotEl;
               const prevFlySrc = prevItem.illustrationUrl || prevItem.fallbackPhotoUrl;
               if (prevSlotImg && prevFlySrc) {
-                const prevSlotRect = prevSlotImg.getBoundingClientRect();
+                const prevSlotRect = sanitizeSlotRect(
+                  prevSlotImg.getBoundingClientRect(),
+                );
                 const mirrorRect = getMirrorTargetRect(prevSlotRect);
                 await flyElement(prevFlySrc, mirrorRect, prevSlotRect, {
                   arc: -60,
@@ -461,7 +461,7 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
           const takePromise = (async () => {
             await new Promise((resolve) => registerTimeout(() => resolve(true), 120));
             if (slotImg && flySrc) {
-              const slotRect = slotImg.getBoundingClientRect();
+              const slotRect = sanitizeSlotRect(slotImg.getBoundingClientRect());
               const mirrorRect = getMirrorTargetRect(slotRect);
               await flyElement(flySrc, slotRect, mirrorRect, { arc: -140, tilt: -6 });
             }
@@ -475,7 +475,7 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
           selectGarment(item.id);
 
           if (slotImg && flySrc) {
-            const slotRect = slotImg.getBoundingClientRect();
+            const slotRect = sanitizeSlotRect(slotImg.getBoundingClientRect());
             const mirrorRect = getMirrorTargetRect(slotRect);
             await flyElement(flySrc, slotRect, mirrorRect, { arc: -140, tilt: -6 });
           }

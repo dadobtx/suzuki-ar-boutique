@@ -2,7 +2,10 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ScanLine } from 'lucide-react';
-import type { ShowcaseSlide as ShowcaseSlideType } from './buildShowcaseSlides';
+import {
+  preloadSlideImages,
+  type ShowcaseSlide as ShowcaseSlideType,
+} from './buildShowcaseSlides';
 import { useLayoutStore } from '@/store/layout';
 
 interface ShowcaseSlideProps {
@@ -29,6 +32,11 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
   const { garment, illustrations, photos, colorCount } = slide;
   const hasIllustration = illustrations.length > 0;
 
+  // Preload all slide images (illustrations, thumbnails, back views)
+  useEffect(() => {
+    preloadSlideImages(slide);
+  }, [slide]);
+
   // Handle multi-variant cycling (e.g., 990F0-BKQJ5)
   const [variantIdx, setVariantIdx] = useState(0);
 
@@ -42,6 +50,27 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
 
   // Current photo for the active variant
   const currentPhoto = photos[variantIdx] ?? photos[0];
+
+  // Track whether the back image has finished loading (onLoad) to prevent white card flicker
+  const [backLoadedSrc, setBackLoadedSrc] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!currentPhoto?.back) {
+      setBackLoadedSrc(null);
+      return;
+    }
+    const img = new Image();
+    img.onload = () => {
+      setBackLoadedSrc(currentPhoto.back!);
+    };
+    img.src = currentPhoto.back;
+    if (img.complete && img.naturalWidth > 0) {
+      setBackLoadedSrc(currentPhoto.back);
+    }
+  }, [currentPhoto?.back]);
+
+  const isBackLoaded =
+    backLoadedSrc === currentPhoto?.back || import.meta.env.MODE === 'test';
 
   // Layer A: Background Glow Color Calculation
   const firstColor = garment.colors?.[0];
@@ -232,16 +261,20 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                 {currentPhoto?.back && (
                   <motion.div
                     data-testid="showcase-back-card"
-                    className="absolute bottom-[2%] right-[2%] w-[36%] aspect-square bg-white rounded-sm p-[2%] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] border-b-[3px] border-b-brand-red flex items-center justify-center z-20 pointer-events-none"
+                    className={`absolute bottom-[2%] right-[2%] w-[36%] aspect-square rounded-sm p-[2%] shadow-[0_18px_36px_-10px_rgba(0,0,0,0.6)] border-b-[3px] border-b-brand-red flex items-center justify-center z-20 pointer-events-none transition-colors duration-200 ${
+                      isBackLoaded ? 'bg-white' : 'bg-transparent'
+                    }`}
                     initial={
                       shouldReduceMotion
                         ? { opacity: 0 }
                         : { x: 40, y: 30, rotate: 10, opacity: 0 }
                     }
                     animate={
-                      shouldReduceMotion
-                        ? { opacity: 1 }
-                        : { x: 0, y: 0, rotate: 4, opacity: 1 }
+                      !isBackLoaded
+                        ? { opacity: 0 }
+                        : shouldReduceMotion
+                          ? { opacity: 1 }
+                          : { x: 0, y: 0, rotate: 4, opacity: 1 }
                     }
                     transition={
                       shouldReduceMotion
@@ -260,8 +293,13 @@ export function ShowcaseSlide({ slide }: ShowcaseSlideProps) {
                           src={currentPhoto.back}
                           alt={`${garment.name} — ${t('kiosk.attract.showcase.backViewAlt', 'vista posterior')}`}
                           draggable={false}
+                          onLoad={() => {
+                            if (currentPhoto?.back) {
+                              setBackLoadedSrc(currentPhoto.back);
+                            }
+                          }}
                           initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
+                          animate={{ opacity: isBackLoaded ? 1 : 0 }}
                           exit={{ opacity: 0 }}
                           transition={{ duration: 0.2, ease: 'easeInOut' }}
                           className="w-full h-full object-contain select-none pointer-events-none"

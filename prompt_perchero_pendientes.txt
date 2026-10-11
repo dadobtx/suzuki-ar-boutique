@@ -1,0 +1,49 @@
+PROMPT PARA ANTIGRAVITY — Perchero: pendientes de pulido (vuelo gigante, parpadeo de vitrina, flags de debug)
+Guardar en la raíz del repo como: prompt_perchero_pendientes.txt
+Rama: fix/perchero-pendientes desde main (f764b83 o posterior). NO mergear.
+
+====================================================================
+1. ?pose_n y ?pose_masks SOLO EN MODO DEBUG
+====================================================================
+src/lib/active-zone.ts (lectura de pose_n / pose_masks): hoy cualquiera puede cambiar el número de
+poses o apagar las máscaras desde la URL aunque no esté ?debug=1. En el kiosco eso no debe pasar.
+- Leer pose_n y pose_masks SOLO si isDebugMode() (src/lib/debug-mode.ts). Sin debug →
+  { poseN: null, outputMasks: true } (comportamiento por defecto).
+- Test: sin debug, ?pose_n=1&pose_masks=0 → valores por defecto; con ?debug=1 → se aplican.
+
+====================================================================
+2. EL VUELO DE LA PRENDA SE VE GIGANTE (observado con el overlay de debug abierto)
+====================================================================
+src/components/rack/RackPanel.tsx, flyElement(src, from, to): la prenda que vuela del perchero al
+espejo (y de vuelta) a veces se ve enorme. El tamaño final sale de `to` (rect de destino en el espejo)
+y la escala sx/sy = to/from, sin límite.
+- Reproducir: ?ui=perchero&hand=1&debug=1&layout=portrait, con el overlay expandido, poner y devolver
+  prendas con toque y con pasos de mano. Registrar en consola (solo con debug) from, to, sx, sy de cada
+  vuelo. Explicar en el reporte de dónde sale el `to` gigante (p. ej. un rect medido sobre un elemento
+  equivocado, el overlay, o el canvas completo).
+- Corregir la causa. Además, como protección: limitar el rect de destino a lo sumo al 70 % del ancho y
+  60 % del alto de la celda del espejo, centrado en el punto de destino, y limitar sx/sy a ≤ 4.
+- Test unitario de la función que calcula el destino con un rect enorme → queda limitado.
+
+====================================================================
+3. PARPADEO DE TARJETA EN BLANCO EN LA VITRINA
+====================================================================
+En el panel de atracción (ShowcaseSlide / vitrina), al cambiar de prenda a veces aparece un instante
+una tarjeta en blanco.
+- Reproducir con ?layout=portrait dejando correr la vitrina 2–3 vueltas (grabar con Playwright a
+  ~10 fps o capturar cuadros) y describir qué elemento queda en blanco (¿la ilustración grande aún sin
+  cargar?, ¿la tarjeta blanca de la espalda antes de su imagen?).
+- Corrección esperada: precargar las imágenes de la siguiente diapositiva (ilustración y espalda)
+  antes de la transición, y no mostrar la tarjeta blanca hasta que su imagen haya cargado (onLoad), con
+  el mismo fade de entrada. Sin cambiar tiempos ni el diseño.
+- Evidencia: secuencia de cuadros antes/después mostrando que ya no hay cuadro en blanco.
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo active-zone.ts, RackPanel.tsx (y un helper nuevo si hace falta), ShowcaseSlide.tsx /
+  buildShowcaseSlides.ts, y tests/scripts. No tocar gestos, Lucy ni el catálogo.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Si alguno de los dos bugs (2 o 3) no se puede reproducir, decirlo con lo que se probó; aplicar
+  igual las protecciones descritas y no inventar una causa.
+- Commit fix(rack): ... sin --no-verify. Push sin mergear. NO ejecutar wrangler.

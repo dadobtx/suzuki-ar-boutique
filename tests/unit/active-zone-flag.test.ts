@@ -6,6 +6,7 @@ import {
   readUrlActiveZone,
   readSessionActiveZone,
   writeSessionActiveZone,
+  getDiagnosticPoseParams,
   ACTIVE_ZONE_STORAGE_KEY,
   POSE_MAX_PERSONS,
 } from '@/lib/active-zone';
@@ -93,6 +94,58 @@ describe('Active Zone - Interruptor y prioridad', () => {
     sessionStorage.setItem(ACTIVE_ZONE_STORAGE_KEY, '1');
     window.location = new URL('http://localhost/?zona=0') as unknown as Location;
     expect(isActiveZoneEnabled()).toBe(false);
+  });
+
+  describe('getDiagnosticPoseParams (?pose_n, ?pose_masks)', () => {
+    it('sin debug, ?pose_n=1&pose_masks=0 → valores por defecto (poseN: null, outputMasks: true)', () => {
+      window.location = new URL(
+        'http://localhost/?pose_n=1&pose_masks=0',
+      ) as unknown as Location;
+      expect(getDiagnosticPoseParams()).toEqual({
+        poseN: null,
+        outputMasks: true,
+      });
+    });
+
+    it('con ?debug=1, ?pose_n=1&pose_masks=0 → se aplican los valores de diagnóstico', () => {
+      window.location = new URL(
+        'http://localhost/?debug=1&pose_n=1&pose_masks=0',
+      ) as unknown as Location;
+      expect(getDiagnosticPoseParams()).toEqual({
+        poseN: 1,
+        outputMasks: false,
+      });
+    });
+
+    it('con ?debug=1, ?pose_n=2&pose_masks=1 → se aplican', () => {
+      window.location = new URL(
+        'http://localhost/?debug=1&pose_n=2&pose_masks=1',
+      ) as unknown as Location;
+      expect(getDiagnosticPoseParams()).toEqual({
+        poseN: 2,
+        outputMasks: true,
+      });
+    });
+
+    it('con hash #/?debug=1&pose_n=3&pose_masks=0 → se aplican', () => {
+      window.location = new URL(
+        'http://localhost/#/?debug=1&pose_n=3&pose_masks=0',
+      ) as unknown as Location;
+      expect(getDiagnosticPoseParams()).toEqual({
+        poseN: 3,
+        outputMasks: false,
+      });
+    });
+
+    it('sin debug con hash #/?pose_n=2&pose_masks=0 → valores por defecto', () => {
+      window.location = new URL(
+        'http://localhost/#/?pose_n=2&pose_masks=0',
+      ) as unknown as Location;
+      expect(getDiagnosticPoseParams()).toEqual({
+        poseN: null,
+        outputMasks: true,
+      });
+    });
   });
 
   it('Con OFF, usePose inicializa PoseLandmarker con numPoses: 1', async () => {

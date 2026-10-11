@@ -1,5 +1,6 @@
 import type { NormalizedLandmark } from '@/types/pose';
 import { computeCropOffset } from './center-crop';
+import { isDebugMode } from './debug-mode';
 
 export const ACTIVE_ZONE_STORAGE_KEY = 'suzuki-active-zone';
 export const POSE_MAX_PERSONS = 3;
@@ -170,21 +171,24 @@ export function getDiagnosticPoseParams(): {
   poseN: number | null;
   outputMasks: boolean;
 } {
-  if (typeof window === 'undefined' || !window.location) {
+  if (!isDebugMode() || typeof window === 'undefined' || !window.location) {
     return { poseN: null, outputMasks: true };
   }
-  let query = window.location.search;
-  if (!query && window.location.hash.includes('?')) {
-    query = window.location.hash.slice(window.location.hash.indexOf('?'));
-  }
   try {
-    const params = new URLSearchParams(query);
-    const poseNRaw = params.get('pose_n');
+    const searchParams = new URLSearchParams(window.location.search || '');
+    let hashParams: URLSearchParams | null = null;
+    const hash = window.location.hash || '';
+    const qIndex = hash.indexOf('?');
+    if (qIndex !== -1) {
+      hashParams = new URLSearchParams(hash.slice(qIndex));
+    }
+
+    const poseNRaw = searchParams.get('pose_n') ?? hashParams?.get('pose_n');
     let poseN: number | null = null;
     if (poseNRaw === '1' || poseNRaw === '2' || poseNRaw === '3') {
       poseN = parseInt(poseNRaw, 10);
     }
-    const poseMasksRaw = params.get('pose_masks');
+    const poseMasksRaw = searchParams.get('pose_masks') ?? hashParams?.get('pose_masks');
     const outputMasks = poseMasksRaw !== '0';
     return { poseN, outputMasks };
   } catch {
