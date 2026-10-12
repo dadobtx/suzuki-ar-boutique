@@ -235,3 +235,87 @@ describe('deriveHandGuide - strict priority validation', () => {
     expect(state).toBe('raise');
   });
 });
+
+describe('deriveHandGuide - isPaused behavior', () => {
+  const activeRightCursor: HandGuideCursorInput = {
+    active: true,
+    activeHandSide: 'Right',
+    isStepDisarmed: false,
+    confirmProgress: 0,
+  };
+
+  const activeLeftCursor: HandGuideCursorInput = {
+    active: true,
+    activeHandSide: 'Left',
+    isStepDisarmed: false,
+    confirmProgress: 0,
+  };
+
+  it('mantiene estado neutro "raise" cuando isPaused es true (no promete move-right)', () => {
+    const state = deriveHandGuide(
+      activeRightCursor,
+      { isLiveActive: false, isLiveLoading: false },
+      { isInteractive: true, currentIndex: 2, itemCount: 6, isPaused: true },
+    );
+    expect(state).toBe('raise');
+  });
+
+  it('mantiene estado neutro "raise" cuando isPaused es true (no promete move-left)', () => {
+    const state = deriveHandGuide(
+      activeLeftCursor,
+      { isLiveActive: false, isLiveLoading: false },
+      { isInteractive: true, currentIndex: 2, itemCount: 6, isPaused: true },
+    );
+    expect(state).toBe('raise');
+  });
+
+  it('mantiene estado neutro "raise" en el extremo cuando isPaused es true (no promete edge)', () => {
+    const state = deriveHandGuide(
+      activeRightCursor,
+      { isLiveActive: false, isLiveLoading: false },
+      { isInteractive: true, currentIndex: 5, itemCount: 6, isPaused: true },
+    );
+    expect(state).toBe('raise');
+    expect(
+      deriveHandGuideEdgeType(activeRightCursor, {
+        currentIndex: 5,
+        itemCount: 6,
+        isPaused: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('deriveHandGuideEdgeType devuelve null cuando isPaused es true en el primer elemento', () => {
+    expect(
+      deriveHandGuideEdgeType(activeLeftCursor, {
+        currentIndex: 0,
+        itemCount: 6,
+        isPaused: true,
+      }),
+    ).toBeNull();
+  });
+
+  it('live-active y live-loading tienen mayor prioridad que isPaused', () => {
+    expect(
+      deriveHandGuide(
+        activeRightCursor,
+        { isLiveActive: true },
+        { isInteractive: true, isPaused: true },
+      ),
+    ).toBe('live-active');
+
+    expect(
+      deriveHandGuide(
+        activeRightCursor,
+        { isLiveLoading: true },
+        { isInteractive: true, isPaused: true },
+      ),
+    ).toBe('live-loading');
+  });
+
+  it('isInteractive=false tiene mayor prioridad que isPaused (devuelve hidden)', () => {
+    expect(
+      deriveHandGuide(activeRightCursor, {}, { isInteractive: false, isPaused: true }),
+    ).toBe('hidden');
+  });
+});

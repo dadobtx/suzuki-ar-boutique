@@ -12,6 +12,7 @@ export interface HandCursorStoreState {
   detectedHandsCount: number;
   userHandsCount: number;
   isBusy: boolean;
+  /** Timestamp de expiración de pausa táctil en tiempo Unix (Date.now() + durationMs). */
   pausedUntilMs: number;
   pauseOrigin: string | null;
   rackFocusIndex: number | null;
@@ -76,6 +77,8 @@ export const useHandCursorStore = create<HandCursorStoreState>((set) => ({
   setRackFocusIndex: (idx: number | null) => set({ rackFocusIndex: idx }),
   setBusy: (busy: boolean) => set({ isBusy: busy }),
 
+  // Pausa temporal de gestos tras toque/clic táctil en tiempo Unix (Date.now() + durationMs).
+  // Consumidores basados en performance.now() (useHandCursor -> tracker) deben proyectarlo a su propio reloj.
   pause: (durationMs = 2000, origin = 'touch') =>
     set({
       pausedUntilMs: Date.now() + durationMs,

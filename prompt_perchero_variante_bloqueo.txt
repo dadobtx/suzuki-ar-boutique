@@ -1,0 +1,63 @@
+PROMPT PARA ANTIGRAVITY — CRÍTICO: cualquier toque o clic deja los gestos de mano pausados para siempre
+Guardar en la raíz del repo como: prompt_perchero_variante_bloqueo.txt
+Rama: fix/pausa-reloj desde main (787b574 o posterior). NO mergear.
+
+====================================================================
+1. SÍNTOMA (pruebas de Dario)
+====================================================================
+Al tocar el color "Negra" de TEAM BLACK REVERSIBLE JACKET (VariantControls en el espejo), los pasos de
+mano dejan de funcionar para siempre; volver a "Roja" no lo arregla; solo recargar. La guía sigue
+mostrando "MUEVE TU MANO DERECHA ▶". Sin errores en consola. Parecía exclusivo de esa prenda porque es
+la única que obliga a TOCAR la pantalla (elegir color), pero pasa con CUALQUIER prenda si se toca la
+pantalla: VERME EN VIVO o DISPARAR FOTO con el dedo, talla, perchero, REINICIAR, etc.
+
+====================================================================
+2. CAUSA (verificada en el código de main)
+====================================================================
+Se comparan dos relojes distintos:
+- src/store/handCursor.ts: pause() guarda `pausedUntilMs: Date.now() + durationMs`
+  (época Unix, ≈ 1.76e12 ms).
+- src/hooks/useHandCursor.ts (línea ~276): `const nowMs = performance.now()` (ms desde que cargó la
+  página, ≈ 1e5–1e7) y lo pasa al tracker junto con pausedUntilMs (líneas ~450, ~631, ~663).
+- src/lib/hand-cursor.ts: `isPaused = busy || pausedUntilMs > nowMs || ...` (líneas ~689 y ~1376) y
+  stepBlockedReason (~1958).
+Resultado: tras el PRIMER pointerdown (toque o clic en cualquier parte: color, talla, foto, perchero…)
+`pausedUntilMs > nowMs` es verdadero para siempre → el tracker no vuelve a dar pasos hasta recargar.
+En el kiosco táctil, el primer toque de cualquier visitante deshabilitaría los gestos del resto del día.
+(También explica el "pausado (táctil)" eterno que vimos antes con el mouse.)
+
+====================================================================
+3. CORRECCIÓN
+====================================================================
+- Unificar el reloj: en useHandCursor convertir el pausedUntilMs del store (Date.now) al reloj del
+  tracker antes de pasarlo, en los 3 lugares donde se arma el HandFrameInput:
+      const pausedUntilPerf = pausedUntilMs > 0
+        ? nowMs + (pausedUntilMs - Date.now())
+        : 0;
+  (o, si se prefiere, que el tracker reciba también Date.now(); pero un solo criterio en todo el
+  código). RackPanel y DiagnosticOverlay ya comparan con Date.now(): dejarlos así.
+- Agregar un comentario en store/handCursor.ts aclarando que pausedUntilMs está en Date.now().
+- hand-guide: mientras la mano esté pausada (pausedUntilMs > Date.now()), no mostrar move-*: usar un
+  estado neutro (p. ej. mantener 'raise' o el texto general) para que la guía nunca prometa un paso que
+  no se va a dar. Que el overlay de debug siga mostrando "pausado (táctil: …, X s)".
+- Tests:
+  - Unit del hook/tracker: con nowMs = performance.now() pequeño (p. ej. 120000) y pause(2000) →
+    durante 2 s no hay pasos; a los 2,1 s un gesto da 1 paso. (Hoy este test fallaría.)
+  - Integración: BKQJ5 → selectVariant('negra') precedido de un pointerdown en el espejo → tras 2 s,
+    paso a la derecha cambia a la prenda siguiente; lo mismo con 'roja'.
+  - Integración con OTRA prenda (p. ej. la chompa verde de Jimny): pointerdown + clic en VERME EN VIVO
+    → al terminar la sesión en vivo (y su enfriamiento), un paso de mano cambia de prenda.
+    Lo mismo con DISPARAR FOTO, con un toque en el perchero, en talla +/- y en REINICIAR: en todos,
+    tras 2 s los pasos vuelven a funcionar.
+  - Activar VERME EN VIVO con el gesto del índice (sin tocar la pantalla) no debe pausar por toque.
+  - Buscar con grep otros lugares que mezclen Date.now() y performance.now() en la lógica de mano,
+    presencia, zona activa o en vivo, y reportarlos (corregir si comparan entre sí).
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo useHandCursor.ts, store/handCursor.ts (comentario), hand-guide.ts y tests (y cualquier otro
+  lugar que mezcle relojes, explicándolo).
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main,
+  y el resultado del grep de relojes.
+- Commit fix(hand): ... sin --no-verify. Push sin mergear. NO wrangler. Sin capturas de simulador.

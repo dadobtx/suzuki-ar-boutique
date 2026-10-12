@@ -413,6 +413,10 @@ export function useHandCursor(
       // Procesar frame
       const isBusy = useHandCursorStore.getState().isBusy;
       const pausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
+      // pausedUntilMs se guarda en tiempo Unix (Date.now()). El tracker compara contra nowMs (performance.now()).
+      // Proyectamos el remanente en ms al reloj de alta resolución para unificar el criterio temporal.
+      const pausedUntilPerf =
+        pausedUntilMs > Date.now() ? nowMs + (pausedUntilMs - Date.now()) : 0;
       const currentRackIndex = resolveCurrentRackIndex(itemCount);
       const isDwellEnabled = isHandDwellEnabled();
       const isAbsoluteMode = isHandAbsoluteModeEnabled();
@@ -447,7 +451,7 @@ export function useHandCursor(
           user: targetUser,
           itemCount,
           busy: isBusy,
-          pausedUntilMs,
+          pausedUntilMs: pausedUntilPerf,
           currentIndex: currentRackIndex,
           enableDwell: isDwellEnabled,
           useAbsoluteMapping: isAbsoluteMode,
@@ -628,7 +632,7 @@ export function useHandCursor(
             user: targetUser,
             itemCount,
             busy: isBusy,
-            pausedUntilMs,
+            pausedUntilMs: pausedUntilPerf,
             currentIndex: currentRackIndex,
             enableDwell: isDwellEnabled,
             useAbsoluteMapping: isAbsoluteMode,
@@ -660,7 +664,7 @@ export function useHandCursor(
           user: targetUser,
           itemCount,
           busy: isBusy,
-          pausedUntilMs,
+          pausedUntilMs: pausedUntilPerf,
           currentIndex: currentRackIndex,
           enableDwell: isDwellEnabled,
           useAbsoluteMapping: isAbsoluteMode,

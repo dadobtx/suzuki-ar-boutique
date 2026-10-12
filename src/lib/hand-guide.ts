@@ -36,13 +36,14 @@ export interface HandGuideRackInput {
   isInteractive?: boolean;
   currentIndex?: number | null;
   itemCount?: number;
+  isPaused?: boolean;
 }
 
 /**
  * Pure function that derives the single source of truth for the hand guide state.
  *
  * Strict Priority:
- * live-active > live-loading > hidden > index > recenter > edge > move-* > raise
+ * live-active > live-loading > hidden > touch-pause ('raise') > index > recenter > edge > move-* > raise
  */
 export function deriveHandGuide(
   cursor: HandGuideCursorInput,
@@ -64,17 +65,22 @@ export function deriveHandGuide(
     return 'hidden';
   }
 
-  // 4. index (índice levantado con confirmProgress > 0)
+  // 4. Pausa táctil activa: mantener estado neutro ('raise') para no prometer pasos que no se van a dar
+  if (rack.isPaused) {
+    return 'raise';
+  }
+
+  // 5. index (índice levantado con confirmProgress > 0)
   if (cursor.active && (cursor.confirmProgress ?? 0) > 0) {
     return 'index';
   }
 
-  // 5. recenter (acaba de dar un paso: disparador desarmado esperando volver al centro)
+  // 6. recenter (acaba de dar un paso: disparador desarmado esperando volver al centro)
   if (cursor.active && cursor.isStepDisarmed) {
     return 'recenter';
   }
 
-  // 6. edge (mano activa armada apuntando a un extremo del perchero)
+  // 7. edge (mano activa armada apuntando a un extremo del perchero)
   const idx = rack.currentIndex ?? 0;
   const count = rack.itemCount ?? 0;
 
@@ -86,7 +92,7 @@ export function deriveHandGuide(
       return 'edge';
     }
 
-    // 7. move-* (mano activa armada con prendas disponibles en esa dirección)
+    // 8. move-* (mano activa armada con prendas disponibles en esa dirección)
     if (cursor.activeHandSide === 'Right') {
       return 'move-right';
     }
@@ -95,7 +101,7 @@ export function deriveHandGuide(
     }
   }
 
-  // 8. raise (sin mano levantada o mano activa sin lado identificado)
+  // 9. raise (sin mano levantada o mano activa sin lado identificado)
   return 'raise';
 }
 
@@ -106,6 +112,9 @@ export function deriveHandGuideEdgeType(
   cursor: HandGuideCursorInput,
   rack: HandGuideRackInput,
 ): HandGuideEdgeType {
+  if (rack.isPaused) {
+    return null;
+  }
   const idx = rack.currentIndex ?? 0;
   const count = rack.itemCount ?? 0;
   if (cursor.active && cursor.activeHandSide === 'Left' && count > 0 && idx <= 0) {
@@ -140,6 +149,7 @@ export interface HandGuideResult {
 export function useHandGuide(options?: UseHandGuideOptions): HandGuideResult {
   const cursor = useHandCursorStore((s) => s.cursor);
   const rackFocusIndex = useHandCursorStore((s) => s.rackFocusIndex);
+  const pausedUntilMs = useHandCursorStore((s) => s.pausedUntilMs);
 
   const catalog = useGarmentStore((s) => s.catalog);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
@@ -155,6 +165,8 @@ export function useHandGuide(options?: UseHandGuideOptions): HandGuideResult {
     options?.isInteractive ??
     (effectiveSelectionUi === 'perchero' &&
       (kioskState === 'TRYON' || (kioskState === 'ATTRACT' && hasProfile)));
+
+  const isPaused = pausedUntilMs > Date.now();
 
   const currentIndex =
     rackFocusIndex !== null
@@ -175,12 +187,14 @@ export function useHandGuide(options?: UseHandGuideOptions): HandGuideResult {
       isInteractive,
       currentIndex,
       itemCount: catalog.length,
+      isPaused,
     },
   );
 
   const edgeType = deriveHandGuideEdgeType(cursor, {
     currentIndex,
     itemCount: catalog.length,
+    isPaused,
   });
 
   return {
