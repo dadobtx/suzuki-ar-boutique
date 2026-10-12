@@ -91,6 +91,7 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
   let mockStream: MediaStream;
 
   beforeEach(() => {
+    vi.stubEnv('VITE_LIVE_TRYON', 'on');
     vi.useFakeTimers();
     mockPcInstances = [];
     lastConnectConfig = null;
