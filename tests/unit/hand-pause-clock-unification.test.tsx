@@ -13,6 +13,7 @@ import path from 'node:path';
 import type { Garment } from '@/types/garment';
 import { RackPanel } from '@/components/rack/RackPanel';
 import { VariantControls } from '@/components/camera/VariantControls';
+import { SizingControls } from '@/components/camera/SizingControls';
 import { useGarmentStore } from '@/store/garment';
 import { useHandCursorStore } from '@/store/handCursor';
 import { useLayoutStore } from '@/store/layout';
@@ -22,45 +23,80 @@ import { useKioskStore } from '@/store/kiosk';
 import { useSizingStore } from '@/store/sizing';
 import { useHandCursor } from '@/hooks/useHandCursor';
 import { useHandGuide } from '@/lib/hand-guide';
-import {
-  HandCursorTracker,
-  type DetectedHandInput,
-  type HandFrameUser,
-} from '@/lib/hand-cursor';
+import { toTrackerPauseUntil } from '@/lib/hand-pause-clock';
 
 const catalogJson: Garment[] = JSON.parse(
   fs.readFileSync(path.resolve(process.cwd(), 'public/catalog.json'), 'utf-8'),
 );
 
-const makeUser = (sw = 0.2): HandFrameUser => ({
-  lockedWrists: {
-    left: { x: 0.65, y: 0.6 },
-    right: { x: 0.35, y: 0.6 },
-  },
-  sw,
-  cx: 0.5,
-});
-
-const makeRightHand = (palmX: number): DetectedHandInput => ({
-  wrist: { x: 0.35, y: 0.6 },
-  palmCenter: { x: palmX, y: 0.5 },
-  gesture: 'Open_Palm',
-  score: 0.9,
-  handedness: 'Right',
-});
-
-const wait = (ms: number) =>
-  act(async () => {
-    await new Promise((r) => setTimeout(r, ms));
-  });
+const START_EPOCH_MS = 1_760_000_000_000;
+const START_PERF_MS = 120_000;
 
 describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
   const originalLocation = window.location;
+  let nextVideoCb:
+    | ((now: DOMHighResTimeStamp, metadata: VideoFrameCallbackMetadata) => void)
+    | null = null;
+  let videoRef: { current: HTMLVideoElement };
+  const mockPose = { landmarks: null, activeZone: null, frameId: 1 } as never;
+
+  async function stepFrame(advanceMs = 50) {
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(advanceMs);
+      if (nextVideoCb) {
+        const cb = nextVideoCb;
+        nextVideoCb = null;
+        cb(performance.now(), {} as VideoFrameCallbackMetadata);
+      }
+    });
+  }
+
+  async function pumpFrames(count = 1, intervalMs = 50) {
+    for (let i = 0; i < count; i++) {
+      await stepFrame(intervalMs);
+    }
+  }
+
+  async function advanceWithFrames(totalMs: number, frameStepMs = 50) {
+    const steps = Math.floor(totalMs / frameStepMs);
+    for (let i = 0; i < steps; i++) {
+      await stepFrame(frameStepMs);
+    }
+    const remainder = totalMs % frameStepMs;
+    if (remainder > 0) {
+      await stepFrame(remainder);
+    }
+  }
 
   beforeEach(() => {
     vi.clearAllMocks();
     sessionStorage.clear();
     document.body.innerHTML = '';
+    nextVideoCb = null;
+
+    // Configurar dos relojes con orígenes distintos simulando el navegador:
+    // Date.now() en época Unix (~1.76e12) y performance.now() arrancando en ~120000 ms
+    vi.useFakeTimers({ now: START_EPOCH_MS });
+    vi.spyOn(performance, 'now').mockImplementation(
+      () => START_PERF_MS + (Date.now() - START_EPOCH_MS),
+    );
+
+    // Mock HTMLVideoElement callbacks
+    HTMLVideoElement.prototype.requestVideoFrameCallback = vi.fn((cb) => {
+      nextVideoCb = cb;
+      return 1;
+    });
+    HTMLVideoElement.prototype.cancelVideoFrameCallback = vi.fn(() => {
+      nextVideoCb = null;
+    });
+
+    if (!Element.prototype.animate) {
+      Element.prototype.animate = vi.fn().mockReturnValue({
+        finished: Promise.resolve(),
+        cancel: vi.fn(),
+      });
+    }
+
     Object.defineProperty(window, 'matchMedia', {
       writable: true,
       value: vi.fn().mockImplementation((query) => ({
@@ -75,6 +111,15 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
       })),
     });
 
+    sessionStorage.setItem('suzuki-hand-input', '1');
+    sessionStorage.setItem('suzuki-debug', '1');
+    sessionStorage.setItem('suzuki-selection-ui', 'perchero');
+
+    delete (window as unknown as { location?: unknown }).location;
+    window.location = new URL(
+      'http://localhost:5173/?ui=perchero&hand=1&debug=1&hand_sim=1',
+    ) as unknown as Location;
+
     useGarmentStore.setState({
       activeGarmentId: null,
       activeVariantId: null,
@@ -83,7 +128,7 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
     });
 
     useLayoutStore.setState({ mode: 'portrait' });
-    useSelectionUiStore.setState({ ui: 'perchero', source: 'session' });
+    useSelectionUiStore.setState({ ui: 'perchero', source: 'url' });
     useKioskStore.setState({ state: 'TRYON' });
     useSizingStore.setState({ hasProfile: true });
 
@@ -95,117 +140,49 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
     });
 
     useHandCursorStore.getState().reset();
+    videoRef = { current: document.createElement('video') };
   });
 
   afterEach(() => {
     cleanup();
     document.body.innerHTML = '';
     vi.restoreAllMocks();
+    vi.useRealTimers();
     Object.defineProperty(window, 'location', {
       writable: true,
       value: originalLocation,
     });
   });
 
-  describe('1. Unit del hook/tracker: nowMs pequeño (performance.now = 120000) y pause(2000)', () => {
-    it('durante 2 s no hay pasos y stepBlockedReason es "pausado (táctil)"; a los 2.1 s el gesto da 1 paso', () => {
-      const tracker = new HandCursorTracker();
-      const user = makeUser(0.2);
+  describe('2.1 Helper puro toTrackerPauseUntil', () => {
+    it('convierte remanente de época Unix al reloj performance.now: perfNow 120000, epochNow 1.76e12, pausa = epochNow + 2000 -> 122000', () => {
+      const epochNow = 1.76e12;
+      const perfNow = 120000;
+      const pausedUntilEpoch = epochNow + 2000;
+      expect(toTrackerPauseUntil(pausedUntilEpoch, perfNow, epochNow)).toBe(122000);
+    });
 
-      let currentPerfMs = 120000;
+    it('pausa vencida -> 0; pausa 0 -> 0', () => {
+      const epochNow = 1.76e12;
+      const perfNow = 120000;
+      expect(toTrackerPauseUntil(epochNow - 100, perfNow, epochNow)).toBe(0);
+      expect(toTrackerPauseUntil(epochNow, perfNow, epochNow)).toBe(0);
+      expect(toTrackerPauseUntil(0, perfNow, epochNow)).toBe(0);
+    });
 
-      // 1. Activar el cursor durante 400 ms (palma derecha en wrist x = 0.35)
-      let initOut = null;
-      for (let i = 0; i < 8; i++) {
-        currentPerfMs += 50;
-        initOut = tracker.update({
-          nowMs: currentPerfMs,
-          hands: [makeRightHand(0.35)],
-          user,
-          itemCount: 6,
-          currentIndex: 2,
-          busy: false,
-          pausedUntilMs: 0,
-        });
-      }
-      expect(initOut?.cursor.active).toBe(true);
-      const anchor = initOut!.cursor.anchorX!;
-      expect(anchor).toBeCloseTo(0.65, 1);
-
-      // 2. Ocurre una pausa táctil de 2000 ms en el store
-      useHandCursorStore.getState().pause(2000, 'touch');
-      const storePausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
-      expect(storePausedUntilMs).toBeGreaterThan(1e12);
-
-      const pauseStartDateMs = Date.now();
-      const pauseStartPerfMs = currentPerfMs;
-
-      const computePausedUntilPerf = (elapsedMs: number) => {
-        const simulatedDateMs = pauseStartDateMs + elapsedMs;
-        const simulatedPerfMs = pauseStartPerfMs + elapsedMs;
-        return storePausedUntilMs > simulatedDateMs
-          ? simulatedPerfMs + (storePausedUntilMs - simulatedDateMs)
-          : 0;
-      };
-
-      // 3. Durante los primeros 1800 ms de la pausa (elapsed < 2000 ms):
-      // Mano se desplaza a la derecha (d = +0.6). Cada frame debe estar bloqueado por pausa táctil.
-      const palmShifted = 1 - (anchor + 0.6 * 0.2);
-      let stepCountDuringPause = 0;
-      for (let elapsed = 100; elapsed <= 1800; elapsed += 100) {
-        const out = tracker.update({
-          nowMs: pauseStartPerfMs + elapsed,
-          hands: [makeRightHand(palmShifted)],
-          user,
-          itemCount: 6,
-          currentIndex: 2,
-          busy: false,
-          pausedUntilMs: computePausedUntilPerf(elapsed),
-        });
-        stepCountDuringPause += out.events.filter((e) => e.type === 'step').length;
-        expect(out.cursor.stepBlockedReason).toBe('pausado (táctil)');
-      }
-      expect(stepCountDuringPause).toBe(0);
-
-      // 4. A los 2100 ms tras la pausa (elapsed = 2100 ms > 2000 ms): la pausa expiró
-      const expiredPerf = computePausedUntilPerf(2100);
-      expect(expiredPerf).toBe(0);
-
-      // Tras expirar la pausa, el gesto desplazado dispara 1 paso (2 frames para cumplir filtro de ruido)
-      const eventsAfterPause: Array<{
-        type: string;
-        direction?: string;
-        index?: number;
-      }> = [];
-      for (let elapsed = 2100; elapsed <= 2200; elapsed += 50) {
-        const out = tracker.update({
-          nowMs: pauseStartPerfMs + elapsed,
-          hands: [makeRightHand(palmShifted)],
-          user,
-          itemCount: 6,
-          currentIndex: 2,
-          busy: false,
-          pausedUntilMs: computePausedUntilPerf(elapsed),
-        });
-        eventsAfterPause.push(
-          ...out.events.filter(
-            (e): e is { type: 'step'; direction: string; index: number } =>
-              e.type === 'step',
-          ),
-        );
-      }
-
-      expect(eventsAfterPause.length).toBe(1);
-      expect(eventsAfterPause[0]).toMatchObject({
-        type: 'step',
-        direction: 'right',
-        index: 3,
-      });
+    it('el resultado SIEMPRE es < perfNow + 2001 (nunca del orden de 1e12)', () => {
+      const epochNow = 1.76e12;
+      const perfNow = 120000;
+      const pausedUntilEpoch = epochNow + 2000;
+      const result = toTrackerPauseUntil(pausedUntilEpoch, perfNow, epochNow);
+      expect(result).toBeLessThan(perfNow + 2001);
+      expect(result).toBeLessThan(1e6);
+      expect(result).not.toBeGreaterThan(1e11);
     });
   });
 
-  describe('2. Integración: BKQJ5 -> selectVariant("negra" y "roja") con pointerdown', () => {
-    it('al tocar "negra" en BKQJ5, pausa 2 s (guía en "raise"); tras 2.1 s, un paso a la derecha cambia a la siguiente prenda', async () => {
+  describe('2.2 Integración y regresión a nivel de hook: BKQJ5 negra y roja', () => {
+    it('al tocar "negra" en BKQJ5: pausa 2 s (guía en "raise"); a 1 s el paso NO cambia prenda; tras 2.1 s el paso SÍ cambia prenda', async () => {
       const bkqj5Garment = catalogJson.find((g) => g.id === '990F0-BKQJ5')!;
       const bkqj5Idx = catalogJson.findIndex((g) => g.id === '990F0-BKQJ5');
       const nextGarment = catalogJson[bkqj5Idx + 1];
@@ -215,10 +192,13 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
         activeVariantId: 'roja',
       });
 
-      sessionStorage.setItem('suzuki-hand-input', '1');
-      const videoRef = { current: document.createElement('video') };
-      const mockPose = { landmarks: null, activeZone: null, frameId: 1 } as never;
-      renderHook(() => useHandCursor(videoRef, mockPose, { active: true }));
+      renderHook(() =>
+        useHandCursor(videoRef, mockPose, {
+          active: true,
+          isLiveAvailable: true,
+          isLiveActive: false,
+        }),
+      );
 
       render(
         <div>
@@ -227,58 +207,64 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
         </div>,
       );
 
+      // Activar cursor simulado centrado
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
+
       const [blackBtn] = screen.getAllByLabelText('Color Negra');
 
-      const now = Date.now();
+      // pointerdown real con touch sobre el botón
       act(() => {
         fireEvent.pointerDown(blackBtn, { pointerType: 'touch' });
         fireEvent.click(blackBtn);
       });
 
       expect(useGarmentStore.getState().activeVariantId).toBe('negra');
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
-      );
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
       expect(useHandCursorStore.getState().pauseOrigin).toBe('touch');
 
-      // useHandGuide durante la pausa: da 'raise' (no promete move-right)
-      useHandCursorStore.setState({
-        cursor: {
-          ...useHandCursorStore.getState().cursor,
-          active: true,
-          activeHandSide: 'Right',
-          isStepDisarmed: false,
-        },
-      });
+      // Durante la pausa: la guía muestra 'raise'
       const { result: guideRef } = renderHook(() =>
         useHandGuide({ isInteractive: true }),
       );
       expect(guideRef.current.state).toBe('raise');
 
-      // Expirar la pausa (2100 ms después)
-      act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
-      });
-
-      // Tras la pausa, la guía vuelve a 'move-right'
-      const { result: guideAfterPause } = renderHook(() =>
-        useHandGuide({ isInteractive: true }),
+      // Intentar dar paso desplazando la mano a la derecha (x: 0.7) durante la pausa
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
       );
-      expect(guideAfterPause.current.state).toBe('move-right');
 
-      // Paso de mano a la derecha cambia a la siguiente prenda
-      act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: bkqj5Idx + 1, direction: 'right' } as never,
-        });
-      });
-      await wait(700);
+      // Avanzar 1 s (dentro de los 2 s de pausa)
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(bkqj5Garment.id);
+      expect(useHandCursorStore.getState().cursor.stepBlockedReason).toBe(
+        'pausado (táctil)',
+      );
+
+      // Centrar mano y avanzar hasta que la pausa venza (2050 ms en total)
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
+
+      // Al vencer la pausa con mano activa y centrada: la guía vuelve a 'move-right' sin tocar el store
+      expect(guideRef.current.state).toBe('move-right');
+
+      // El mismo gesto de paso a la derecha ahora SÍ dispara el paso
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+
+      // Avanzar tiempo para que termine la animación / crossfade de la prenda
+      await advanceWithFrames(700, 50);
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
 
-    it('al tocar "roja" en BKQJ5, pausa 2 s; tras 2.1 s, un paso a la derecha cambia de prenda', async () => {
+    it('al tocar "roja" en BKQJ5: pausa 2 s; a 1 s el paso NO cambia prenda; tras 2.1 s el paso SÍ cambia prenda', async () => {
       const bkqj5Garment = catalogJson.find((g) => g.id === '990F0-BKQJ5')!;
       const bkqj5Idx = catalogJson.findIndex((g) => g.id === '990F0-BKQJ5');
       const nextGarment = catalogJson[bkqj5Idx + 1];
@@ -288,10 +274,13 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
         activeVariantId: 'negra',
       });
 
-      sessionStorage.setItem('suzuki-hand-input', '1');
-      const videoRef = { current: document.createElement('video') };
-      const mockPose = { landmarks: null, activeZone: null, frameId: 1 } as never;
-      renderHook(() => useHandCursor(videoRef, mockPose, { active: true }));
+      renderHook(() =>
+        useHandCursor(videoRef, mockPose, {
+          active: true,
+          isLiveAvailable: true,
+          isLiveActive: false,
+        }),
+      );
 
       render(
         <div>
@@ -300,39 +289,50 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
         </div>,
       );
 
-      const redBtns = screen.getAllByLabelText('Color Roja');
-      const redBtn = redBtns[0];
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
 
-      const now = Date.now();
+      const [redBtn] = screen.getAllByLabelText('Color Roja');
+
       act(() => {
         fireEvent.pointerDown(redBtn, { pointerType: 'touch' });
         fireEvent.click(redBtn);
       });
 
       expect(useGarmentStore.getState().activeVariantId).toBe('roja');
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
+
+      // Intentar dar paso a la derecha durante la pausa
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(bkqj5Garment.id);
+      expect(useHandCursorStore.getState().cursor.stepBlockedReason).toBe(
+        'pausado (táctil)',
       );
 
-      // Expirar la pausa
-      act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
-      });
+      // Avanzar hasta superar los 2 s de pausa
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
 
-      // Paso de mano a la derecha
-      act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: bkqj5Idx + 1, direction: 'right' } as never,
-        });
-      });
-      await wait(700);
+      // Ahora dar el paso a la derecha
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+      await advanceWithFrames(700, 50);
+
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
   });
 
-  describe('3. Integración con Jimny Fleece Jacket (990F0-JYFJ1): interacción táctil variada', () => {
+  describe('2.3 Integración con Jimny (990F0-JYFJ1): interacción táctil variada', () => {
     const jimnyGarment = catalogJson.find((g) => g.id === '990F0-JYFJ1')!;
     const jimnyIdx = catalogJson.findIndex((g) => g.id === '990F0-JYFJ1');
     const nextGarment = catalogJson[jimnyIdx + 1];
@@ -342,182 +342,242 @@ describe('Unificación de reloj: Pausa táctil y gestos de mano', () => {
         activeGarmentId: jimnyGarment.id,
         activeVariantId: null,
       });
+
+      renderHook(() =>
+        useHandCursor(videoRef, mockPose, {
+          active: true,
+          isLiveAvailable: true,
+          isLiveActive: false,
+        }),
+      );
     });
 
-    it('pointerdown en VERME EN VIVO -> al terminar sesión en vivo y expirar pausa, paso de mano cambia prenda', async () => {
-      render(<RackPanel mode="interactive" active={true} />);
-
-      // Simular pointerdown táctil sobre botón VERME EN VIVO
-      const now = Date.now();
-      act(() => {
-        useHandCursorStore.getState().pause(2000, 'touch');
-      });
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
+    it('pointerdown en VERME EN VIVO -> a 1 s paso bloqueado; tras 2.1 s el paso cambia prenda', async () => {
+      render(
+        <div>
+          <button type="button" aria-label="VERME EN VIVO">
+            VERME EN VIVO
+          </button>
+          <RackPanel mode="interactive" active={true} />
+        </div>,
       );
 
-      // Tracker no dispara pasos mientras dura la pausa
-      const tracker = new HandCursorTracker();
-      const user = makeUser(0.2);
-      const perfNow = 120000;
-      const pausedOutput = tracker.update({
-        nowMs: perfNow,
-        hands: [makeRightHand(0.25)],
-        user,
-        itemCount: 6,
-        currentIndex: jimnyIdx,
-        busy: false,
-        pausedUntilMs: perfNow + 1500, // remanente proyectado
-      });
-      expect(pausedOutput.events.length).toBe(0);
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
 
-      // Expirar la pausa (reloj unificado -> pausedUntilPerf = 0)
+      const liveBtn = screen.getByRole('button', { name: /verme en vivo/i });
       act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
+        fireEvent.pointerDown(liveBtn, { pointerType: 'touch' });
       });
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
 
-      // El paso de mano ahora cambia prenda exitosamente
-      act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: jimnyIdx + 1, direction: 'right' } as never,
-        });
-      });
-      await wait(700);
+      // A 1 s el paso está bloqueado
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(jimnyGarment.id);
+      expect(useHandCursorStore.getState().cursor.stepBlockedReason).toBe(
+        'pausado (táctil)',
+      );
+
+      // Avanzar a 2.1 s y ejecutar paso
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+      await advanceWithFrames(700, 50);
+
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
 
-    it('pointerdown en DISPARAR FOTO -> tras 2 s los pasos vuelven a funcionar', async () => {
-      render(<RackPanel mode="interactive" active={true} />);
-
-      const now = Date.now();
-      act(() => {
-        useHandCursorStore.getState().pause(2000, 'touch');
-      });
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
+    it('pointerdown en DISPARAR FOTO -> a 1 s paso bloqueado; tras 2.1 s el paso cambia prenda', async () => {
+      render(
+        <div>
+          <button type="button" aria-label="DISPARAR FOTO">
+            DISPARAR FOTO
+          </button>
+          <RackPanel mode="interactive" active={true} />
+        </div>,
       );
 
-      act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
-      });
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
 
+      const photoBtn = screen.getByRole('button', { name: /disparar foto/i });
       act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: jimnyIdx + 1, direction: 'right' } as never,
-        });
+        fireEvent.pointerDown(photoBtn, { pointerType: 'touch' });
       });
-      await wait(700);
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(jimnyGarment.id);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+      await advanceWithFrames(700, 50);
+
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
 
-    it('toque en el perchero -> tras 2 s los pasos vuelven a funcionar', async () => {
+    it('toque en el perchero -> a 1 s paso bloqueado; tras 2.1 s el paso cambia prenda', async () => {
       render(<RackPanel mode="interactive" active={true} />);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
+
       const rackPanel = screen.getByTestId('rack-panel');
-
-      const now = Date.now();
       act(() => {
         fireEvent.pointerDown(rackPanel, { pointerType: 'touch' });
       });
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
       );
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(jimnyGarment.id);
 
-      act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
-      });
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
 
-      act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: jimnyIdx + 1, direction: 'right' } as never,
-        });
-      });
-      await wait(700);
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+      await advanceWithFrames(700, 50);
+
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
 
-    it('toque en talla +/- -> tras 2 s los pasos vuelven a funcionar', async () => {
-      render(<RackPanel mode="interactive" active={true} />);
-
-      const now = Date.now();
-      act(() => {
-        useHandCursorStore.getState().pause(2000, 'touch');
-      });
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
+    it('toque en talla +/- -> a 1 s paso bloqueado; tras 2.1 s el paso cambia prenda', async () => {
+      render(
+        <div>
+          <SizingControls garment={jimnyGarment} />
+          <RackPanel mode="interactive" active={true} />
+        </div>,
       );
 
-      act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
-      });
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
 
+      const sizeBtn = screen.getByLabelText('Talla más grande');
       act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: jimnyIdx + 1, direction: 'right' } as never,
-        });
+        fireEvent.pointerDown(sizeBtn, { pointerType: 'touch' });
       });
-      await wait(700);
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(jimnyGarment.id);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+      await advanceWithFrames(700, 50);
+
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
 
-    it('toque en REINICIAR del perchero -> tras 2 s los pasos vuelven a funcionar', async () => {
+    it('toque en REINICIAR del perchero -> a 1 s paso bloqueado; tras 2.1 s el paso cambia prenda', async () => {
       render(<RackPanel mode="interactive" active={true} />);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
 
       const restartBtn = screen.getByRole('button', { name: /reiniciar/i });
-      const now = Date.now();
       act(() => {
         fireEvent.pointerDown(restartBtn, { pointerType: 'touch' });
       });
-      expect(useHandCursorStore.getState().pausedUntilMs).toBeGreaterThanOrEqual(
-        now + 1900,
+      expect(useHandCursorStore.getState().pausedUntilMs).toBe(Date.now() + 2000);
+
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
       );
+      await advanceWithFrames(1000, 50);
+      expect(useGarmentStore.getState().activeGarmentId).toBe(jimnyGarment.id);
 
-      act(() => {
-        useHandCursorStore.setState({
-          pausedUntilMs: Date.now() - 100,
-        });
-      });
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await advanceWithFrames(1050, 50);
 
-      act(() => {
-        useHandCursorStore.setState({
-          lastEvent: { type: 'step', index: jimnyIdx + 1, direction: 'right' } as never,
-        });
-      });
-      await wait(700);
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.7, y: 0.5 } }),
+      );
+      await pumpFrames(4, 50);
+      await advanceWithFrames(700, 50);
+
       expect(useGarmentStore.getState().activeGarmentId).toBe(nextGarment.id);
     });
   });
 
-  describe('4. Activar VERME EN VIVO con gesto del índice (sin tocar pantalla)', () => {
-    it('el gesto del índice no genera pointerdown y no pausa por toque', () => {
-      sessionStorage.setItem('suzuki-hand-input', '1');
-      const videoRef = { current: document.createElement('video') };
-      const mockPose = { landmarks: null, activeZone: null, frameId: 1 } as never;
-      renderHook(() => useHandCursor(videoRef, mockPose, { active: true }));
+  describe('2.4 Gesto del índice sin pointerdown', () => {
+    it('el gesto del índice no genera pointerdown y no pausa por toque (pausedUntilMs = 0)', async () => {
+      renderHook(() =>
+        useHandCursor(videoRef, mockPose, {
+          active: true,
+          isLiveAvailable: true,
+          isLiveActive: false,
+        }),
+      );
 
-      // Activar gesto del índice vía evento de handCursor (sin tocar la pantalla)
-      act(() => {
-        useHandCursorStore.setState({
-          cursor: {
-            ...useHandCursorStore.getState().cursor,
-            active: true,
-            gesture: 'Pointing_Up',
-            confirmProgress: 1,
-          },
-          lastEvent: { type: 'confirm' } as never,
-        });
-      });
+      // Iniciar simulación con mano abierta
+      window.dispatchEvent(
+        new CustomEvent('kiosk-hand-sim-move', { detail: { x: 0.5, y: 0.5 } }),
+      );
+      await pumpFrames(8, 50);
+      expect(useHandCursorStore.getState().cursor.active).toBe(true);
 
-      // pausedUntilMs permanece en 0 y pauseOrigin en null (no hay pausa táctil)
+      // Activar tecla 'I' (gesto de índice) sin ningún pointerdown
+      window.dispatchEvent(new KeyboardEvent('keydown', { key: 'i' }));
+      await pumpFrames(4, 50);
+
+      expect(useHandCursorStore.getState().cursor.gesture).toBe('Pointing_Up');
       expect(useHandCursorStore.getState().pausedUntilMs).toBe(0);
       expect(useHandCursorStore.getState().pauseOrigin).toBeNull();
+
+      window.dispatchEvent(new KeyboardEvent('keyup', { key: 'i' }));
     });
   });
 });

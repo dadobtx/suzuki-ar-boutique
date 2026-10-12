@@ -1,6 +1,7 @@
 import { OneEuroFilter } from './one-euro-filter';
 import type { CandidateBoundingBox } from './active-zone';
 import { isHandLeverModeEnabled } from './hand-input-flag';
+export { toTrackerPauseUntil } from './hand-pause-clock';
 
 export const OWNER_DIST = 0.08;
 export const ACTIVATION_WINDOW_MS = 250;

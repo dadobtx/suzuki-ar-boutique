@@ -23,6 +23,7 @@ import {
 import { useHandCursorStore } from '@/store/handCursor';
 import { selectActiveGarmentIndex } from '@/store/garment';
 import { toVisibleCoordinates } from '@/lib/active-zone';
+import { toTrackerPauseUntil } from '@/lib/hand-pause-clock';
 
 export interface UseHandCursorOptions {
   active: boolean; // isCatalogVisible
@@ -415,8 +416,8 @@ export function useHandCursor(
       const pausedUntilMs = useHandCursorStore.getState().pausedUntilMs;
       // pausedUntilMs se guarda en tiempo Unix (Date.now()). El tracker compara contra nowMs (performance.now()).
       // Proyectamos el remanente en ms al reloj de alta resolución para unificar el criterio temporal.
-      const pausedUntilPerf =
-        pausedUntilMs > Date.now() ? nowMs + (pausedUntilMs - Date.now()) : 0;
+      const epochNow = Date.now();
+      const pausedUntilPerf = toTrackerPauseUntil(pausedUntilMs, nowMs, epochNow);
       const currentRackIndex = resolveCurrentRackIndex(itemCount);
       const isDwellEnabled = isHandDwellEnabled();
       const isAbsoluteMode = isHandAbsoluteModeEnabled();

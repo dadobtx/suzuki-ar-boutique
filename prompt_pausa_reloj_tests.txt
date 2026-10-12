@@ -1,0 +1,68 @@
+PROMPT PARA ANTIGRAVITY — Tests de regresión reales para la pausa táctil (reloj)
+Guardar en la raíz del repo como: prompt_pausa_reloj_tests.txt
+Rama: test/pausa-reloj-regresion desde main DESPUÉS de mergear fix/pausa-reloj (d15e0d4). NO mergear.
+
+====================================================================
+1. PROBLEMA CON LOS TESTS DE d15e0d4
+====================================================================
+La corrección de d15e0d4 está bien, pero los tests no la protegen: se corrió
+tests/unit/hand-pause-clock-unification.test.tsx contra el src/ de main ANTERIOR (con el bug) y
+8 de 9 tests PASAN igual. Solo falla "negra", y por la aserción de la guía, no por el reloj.
+Motivos:
+- Para simular que pasaron 2 s, los tests sobrescriben el store con
+  `pausedUntilMs: Date.now() - 100`. Eso hace que la pausa ya esté vencida en cualquier reloj, así
+  que el bug (pausa eterna) nunca se reproduce.
+- El test unitario (sección 1) recalcula la conversión con una copia propia (computePausedUntilPerf)
+  y llama al tracker directamente; no pasa por useHandCursor, que es donde estaba el bug.
+
+====================================================================
+2. CAMBIOS
+====================================================================
+2.1 Helper puro (sin cambiar el comportamiento)
+- Extraer la conversión de useHandCursor a una función exportada, p. ej. en src/lib/hand-cursor.ts o
+  src/lib/hand-pause-clock.ts:
+      export function toTrackerPauseUntil(pausedUntilEpochMs: number, perfNowMs: number,
+                                          epochNowMs: number): number
+        → pausedUntilEpochMs > epochNowMs ? perfNowMs + (pausedUntilEpochMs - epochNowMs) : 0
+- useHandCursor usa ese helper en los 3 lugares (un solo Date.now() por cuadro).
+- Tests unitarios del helper:
+  - perfNow 120000, epochNow 1.76e12, pausa = epochNow + 2000 → 122000.
+  - pausa vencida → 0; pausa 0 → 0.
+  - Caso del bug: el resultado SIEMPRE es < perfNow + 2001 (nunca del orden de 1e12).
+
+2.2 Test de regresión a nivel de hook (el importante)
+- Reescribir hand-pause-clock-unification.test.tsx para que el tiempo CORRA de verdad:
+  - vi.useFakeTimers() con Date en ~1.76e12 y performance.now() arrancando en ~120000 (dos relojes
+    con orígenes distintos, como en el navegador). Si fake timers no mueve performance.now, mockearlo
+    con vi.spyOn(performance, 'now') atado al mismo avance.
+  - Pasar cuadros por useHandCursor (mockPose / simulador existente), no llamar al tracker a mano.
+  - pointerdown real (fireEvent / dispatchEvent en window o en el botón) → avanzar 1 s → un gesto de
+    paso NO cambia la prenda → avanzar hasta 2,1 s → el mismo gesto SÍ cambia la prenda.
+  - PROHIBIDO escribir pausedUntilMs en el store desde el test para "vencer" la pausa, y prohibido
+    copiar la fórmula de conversión dentro del test.
+- Mantener los escenarios ya pedidos, todos con este mecanismo: BKQJ5 negra y roja; Jimny
+  (990F0-JYFJ1) con VERME EN VIVO, DISPARAR FOTO, perchero, talla +/- y REINICIAR; gesto del índice
+  sin pointerdown → pausedUntilMs sigue en 0.
+- La guía: durante la pausa 'raise'; al vencer (sin tocar el store) vuelve a move-* con la mano activa.
+  Si useHandGuide no se re-renderiza al vencer la pausa sin cuadros nuevos, reportarlo (con mano
+  visible llegan cuadros constantemente, así que puede bastar; explicarlo).
+
+====================================================================
+3. PRUEBA DE QUE LOS TESTS SIRVEN (obligatoria)
+====================================================================
+- Revertir TEMPORALMENTE solo src/hooks/useHandCursor.ts al de 787b574
+  (git checkout 787b574 -- src/hooks/useHandCursor.ts), correr el archivo de tests y pegar la salida:
+  los tests de "tras 2,1 s el paso funciona" deben FALLAR (al menos BKQJ5 negra, Jimny VERME EN VIVO
+  y DISPARAR FOTO). Si el helper nuevo no existe en ese archivo, adaptar solo lo mínimo para que
+  compile (o revertir solo las líneas de la conversión) y explicarlo.
+- Restaurar (git checkout HEAD -- src/hooks/useHandCursor.ts) y mostrar que vuelven a pasar.
+- No commitear el estado revertido.
+
+====================================================================
+4. REGLAS Y EVIDENCIA
+====================================================================
+- Solo useHandCursor.ts (usar el helper), el archivo del helper, y tests. Sin cambios de comportamiento.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main,
+  y la salida de la sección 3 (con bug revertido: fallan; restaurado: pasan).
+- Si un test no pasa en 3 intentos: detenerse, commit WIP, reportar el error exacto.
+- Commit test(hand): ... sin --no-verify. Push sin mergear. NO wrangler. Sin capturas de simulador.
