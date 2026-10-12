@@ -129,9 +129,18 @@
       "confirm": "TOCA OTRA VEZ PARA REINICIAR"
     },
     "hand": {
+      "raise": "✋ LEVANTA UNA MANO ABIERTA",
+      "moveRight": "MUEVE TU MANO DERECHA ▶ PARA LA SIGUIENTE",
+      "moveLeft": "◀ MUEVE TU MANO IZQUIERDA PARA LA ANTERIOR",
+      "liveSuffix": " · ☝ ÍNDICE: VERTE EN VIVO",
+      "recenter": "VUELVE LA MANO AL CENTRO",
+      "edgeLast": "ES LA ÚLTIMA PRENDA · USA LA OTRA MANO",
+      "edgeFirst": "ES LA PRIMERA PRENDA · USA LA OTRA MANO",
+      "index": "MANTÉN EL ÍNDICE ☝ … VERME EN VIVO",
+      "liveLoading": "PREPARANDO TU PRUEBA EN VIVO…",
       "stepWithLive": "MANO IZQUIERDA ◀ · MANO DERECHA ▶ · ÍNDICE ☝ PARA VERTE EN VIVO",
       "step": "MANO IZQUIERDA ◀ · MANO DERECHA ▶",
-      "raiseHand": "LEVANTA LA MANO ABIERTA",
+      "raiseHand": "✋ LEVANTA UNA MANO ABIERTA",
       "moveHand": "MUEVE LA MANO A UN LADO PARA RECORRER · LEVANTA EL ÍNDICE PARA PROBÁRTELA",
       "holdToTry": "MUEVE LA MANO A UN LADO PARA RECORRER · LEVANTA EL ÍNDICE PARA PROBÁRTELA",
       "holdToReturn": "LEVANTA EL ÍNDICE PARA DEVOLVERLA"
@@ -247,7 +256,8 @@
     "fallbackToast": "Modo estático activo",
     "readyToast": "¡Probador en vivo activo!",
     "error": "No pudimos iniciar la prueba en vivo. Intenta otra vez.",
-    "busy": "La prueba en vivo está ocupada. Intenta en unos segundos."
+    "busy": "La prueba en vivo está ocupada. Intenta en unos segundos.",
+    "connectTimeout": "No pudimos conectar con Lucy. Intenta de nuevo en unos segundos."
   },
   "variant": {
     "title": "COLOR"

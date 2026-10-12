@@ -7,6 +7,11 @@ export interface LiveTryonTelemetry {
   activeCount: number;
   cooldownRemainingSec: number;
   lastError: string | null;
+  isLiveActive: boolean;
+  isLiveLoading: boolean;
+  isLiveAvailable: boolean;
+  firstFrameRendered: boolean;
+  failed: boolean;
 }
 
 export const useLiveTryonStore = create<LiveTryonTelemetry>(() => ({
@@ -15,4 +20,9 @@ export const useLiveTryonStore = create<LiveTryonTelemetry>(() => ({
   activeCount: 0,
   cooldownRemainingSec: 0,
   lastError: null,
+  isLiveActive: false,
+  isLiveLoading: false,
+  isLiveAvailable: false,
+  firstFrameRendered: false,
+  failed: false,
 }));

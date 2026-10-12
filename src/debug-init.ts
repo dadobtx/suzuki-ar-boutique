@@ -4,6 +4,9 @@ import { useSizingStore } from './store/sizing';
 import { useGarmentStore } from './store/garment';
 import { useCameraStore } from './store/camera';
 import { useHandCursorStore } from './store/handCursor';
+import { useLiveTryonStore } from './store/liveTryon';
+import { useLayoutStore } from './store/layout';
+import { useSelectionUiStore } from './store/selectionUi';
 
 initDebugLogger();
 
@@ -14,5 +17,8 @@ if (typeof window !== 'undefined') {
     useGarmentStore,
     useCameraStore,
     useHandCursorStore,
+    useLiveTryonStore,
+    useLayoutStore,
+    useSelectionUiStore,
   };
 }

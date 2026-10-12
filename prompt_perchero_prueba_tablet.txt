@@ -1,0 +1,117 @@
+PROMPT PARA ANTIGRAVITY — Perchero: correcciones de la prueba en tablet + guía de gestos sincronizada
+Guardar en la raíz del repo como: prompt_perchero_prueba_tablet.txt
+Rama: fix/perchero-tablet desde main DESPUÉS de mergear fix/perchero-pendientes. NO mergear.
+(prompt_perchero_pendientes.txt ya cubre: ?pose_n/?pose_masks solo en debug, tope al vuelo gigante y
+parpadeo de la vitrina. Este prompt NO repite esos puntos; los complementa.)
+
+Prueba de Dario: ?ui=perchero&hand=1&layout=portrait, sin debug, cámara real.
+
+====================================================================
+1. EL VUELO DE LA PRENDA TODAVÍA DEBE SER MÁS SUAVE Y DEL TAMAÑO DEL TORSO
+====================================================================
+Video: al ponerse la Parka/Rain Jacket/Softshell, la prenda que vuela al espejo crece hasta tapar a la
+persona. Causa (RackPanel.tsx, getMirrorTargetRect): ancho fijo `mRect.width * 0.45` y alto
+`targetW / aspect` con la proporción de la miniatura colgada (prendas largas, aspect ≈ 0.35 → el alto
+supera al espejo).
+- Revisar lo que hizo fix/perchero-pendientes y dejar el destino como "contain" dentro de una caja de
+  máximo 34 % del ancho y 42 % del alto del espejo (escala = min(maxW/from.width, maxH/from.height)),
+  centrado horizontalmente, centro a ~45 % del alto (torso). Extraerlo a un helper puro con test
+  (from 60×170 y 120×120, espejo 1080×1150 → dentro de la caja).
+- Animación: 640 ms, arco menor (−90 al ir, −50 al volver) y en el último 25 % la prenda que vuela se
+  desvanece mientras aparece la prenda AR (sin "golpe" de tamaño). sx, sy ≤ 3.
+
+====================================================================
+2. GUÍA DE GESTOS SINCRONIZADA (cursor + flecha + mensaje) — NUEVO DISEÑO
+====================================================================
+Problema: la persona no sabe hacia dónde mover la mano. El cursor de mano aparece sobre la palma
+pero sin dirección, el mensaje de arriba es genérico ("MANO IZQUIERDA ◀ · MANO DERECHA ▶ · ÍNDICE…") y
+sigue apareciendo durante la prueba en vivo. Cursor y mensaje pueden decir cosas distintas.
+
+2.1 Una sola fuente de verdad
+- Crear src/lib/hand-guide.ts con una función pura deriveHandGuide(cursor, live, rack) → estado único:
+    'raise'        sin mano levantada
+    'move-right'   mano DERECHA activa, armada, puede avanzar a la derecha
+    'move-left'    mano IZQUIERDA activa, armada, puede avanzar a la izquierda
+    'recenter'     acaba de dar un paso: disparador desarmado, esperando volver al centro
+    'edge'         la mano activa apunta a un extremo del perchero (no hay más prendas en ese sentido)
+    'index'        índice levantado y avanzando la confirmación de VERME EN VIVO (con progreso 0–1)
+    'live-loading' sesión en vivo conectando
+    'live-active'  sesión en vivo en curso
+    'hidden'       perchero no interactivo / cuerpo mal encuadrado (manda el aviso de cuerpo)
+  Prioridad: live-active > live-loading > hidden > index > recenter > edge > move-* > raise.
+  Entradas: cursor.active, cursor.activeHandSide (lado calculado por el POSE, no la etiqueta del
+  clasificador; verificar que es el campo correcto), cursor.isStepDisarmed, cursor.confirmProgress,
+  índice del tracker vs itemCount, isLiveAvailable, isLiveLoading, isLiveActive.
+- KioskGuide y HandCursor leen ESTE estado (selector del store o hook useHandGuide). Ninguno decide
+  por su cuenta: así el mensaje, la flecha y el anillo siempre dicen lo mismo en el mismo cuadro.
+- Tests de deriveHandGuide para cada estado y para la prioridad.
+
+2.2 Flecha de dirección junto al cursor (HandCursor.tsx)
+- 'move-right': flecha ▶ a la DERECHA del cursor; 'move-left': flecha ◀ a la IZQUIERDA (en pantalla
+  espejo: la mano derecha de la persona se ve a la derecha). Tamaño ~44 px, color fg con borde/sombra
+  para leerse sobre la cámara, separada ~16 px del anillo.
+- Animación de invitación: la flecha se desliza 18 px hacia afuera y se desvanece, en bucle cada
+  1,2 s (ease-out). Con prefers-reduced-motion: flecha fija, sin bucle.
+- Al dar el paso: el pulso actual (pulseArrow, 250 ms) y luego pasa a 'recenter'.
+- 'recenter': sin flecha; punto tenue en el centro del cursor (ya existe con isStepDisarmed).
+- 'edge': flecha atenuada al 30 % y sin animación.
+- 'index': sin flecha; el anillo rojo se llena con confirmProgress (ya existe).
+- 'live-loading' / 'live-active' / 'hidden': el cursor NO se muestra.
+
+2.3 Mensaje de arriba (KioskGuide.tsx), siempre igual al estado
+    raise        ✋ LEVANTA UNA MANO ABIERTA
+    move-right   MUEVE TU MANO DERECHA ▶ PARA LA SIGUIENTE   (+ "· ☝ ÍNDICE: VERTE EN VIVO" solo si
+                 isLiveAvailable)
+    move-left    ◀ MUEVE TU MANO IZQUIERDA PARA LA ANTERIOR  (+ el mismo sufijo condicional)
+    recenter     VUELVE LA MANO AL CENTRO
+    edge         ES LA ÚLTIMA PRENDA · USA LA OTRA MANO   (o "LA PRIMERA" según el extremo)
+    index        MANTÉN EL ÍNDICE ☝ … VERME EN VIVO
+    live-loading PREPARANDO TU PRUEBA EN VIVO…
+    live-active  (sin mensaje de gestos; los avisos de distancia/encuadre pueden seguir)
+  Textos en es.json/en.json (claves kiosk.hand.*). Transición de texto con el fade actual; no cambiar
+  el estilo del banner. El banner no debe parpadear entre estados: mantener cada estado al menos 300 ms
+  antes de mostrar otro (excepto live-loading/live-active, que entran de inmediato).
+- Tests de KioskGuide para cada estado.
+
+====================================================================
+3. LA PRUEBA EN VIVO SE QUEDÓ EN "CONECTANDO" Y NUNCA APARECIÓ
+====================================================================
+Dario: con el botón en "CONECTANDO…" levantó la mano y la desplazó a la derecha; la sesión nunca se
+mostró. Cambió de prenda, la pidió de nuevo y funcionó. En el video "CONECTANDO…" dura ~18–20 s, la
+prenda AR desaparece mientras tanto y el primer cuadro de la sesión es negro.
+Del código (useLiveTryon.ts): durante isLiveLoading los pasos ya están pausados, así que el gesto en sí
+no debería cancelar nada; pero NO hay tiempo máximo de conexión.
+- Logs "[live] t+XXXms <fase>" (token, connect, iceservers, offer, answer, track, primer cuadro) desde
+  el clic/gesto. Incluir una sesión real en el reporte.
+- LIVE_CONNECT_TIMEOUT_MS = 25000: sin video → stop() con failed: true, toast "No pudimos conectar la
+  prueba en vivo. Intenta otra vez." (live.connectTimeout), estado limpio. El reintento por límite
+  concurrente cuenta dentro de ese tiempo.
+- Mantener la prenda AR hasta el primer cuadro de Lucy (hoy se apaga con isLiveLoading).
+- Mostrar el video en vivo recién en 'playing' (o requestVideoFrameCallback): sin cuadro negro; la
+  cuenta regresiva empieza ahí.
+- Si cambia la prenda activa durante isLiveLoading → cancelar el inicio (stop + failed: true).
+- Revisar y reportar si algo de la mano (pendingStepIndexRef, cambio de foco, evento 'live' repetido)
+  puede llamar a stop() o cambiar la prenda durante isLiveLoading.
+- Tests: gesto de paso durante loading → 0 cambios y la sesión sigue; sin video en 25 s → toast,
+  failed: true, loading false; cambio de prenda durante loading → inicio cancelado.
+
+====================================================================
+4. BOTÓN REINICIAR EN EL PERCHERO
+====================================================================
+- Reusar el MISMO RestartButton (src/components/catalog/RestartButton.tsx) en RackPanel modo
+  'interactive', arriba a la derecha del panel, sobre el riel, sin tapar ganchos ni la ficha.
+- Mismo doble toque de confirmación; no se activa con gestos. Test: visible en interactive, no en attract.
+
+====================================================================
+5. REGLAS Y EVIDENCIA
+====================================================================
+- Archivos: RackPanel.tsx (+ helper del vuelo), src/lib/hand-guide.ts (nuevo), HandCursor.tsx,
+  KioskGuide.tsx, CameraStage.tsx, useLiveTryon.ts, liveTryon.ts (solo logs/tiempos), RestartButton
+  (solo si necesita una prop de estilo), i18n, tests y scripts. NO cambiar la lógica de detección de
+  gestos de hand-cursor.ts (solo leer sus salidas).
+- Capturas 1080×1920 con ?ui=perchero&hand=1&layout=portrait&hand_sim=1&debug=1 (simulador de mano):
+  estados raise, move-right, move-left, recenter, edge, index (anillo a ~50 %), live-loading; 3 cuadros
+  del vuelo de la Parka; perchero con REINICIAR.
+- Reportar `npx tsc -b`, npm run lint, npm test (raíz y backend/), npm run build, git diff --stat main.
+- Si un test nuevo no pasa en 3 intentos: detenerse, commit WIP, reportar el error exacto.
+- Commit feat(rack): ... sin --no-verify. Push sin mergear. NO ejecutar wrangler.

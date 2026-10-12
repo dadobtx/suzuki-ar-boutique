@@ -129,9 +129,18 @@
       "confirm": "TAP AGAIN TO RESTART"
     },
     "hand": {
+      "raise": "✋ RAISE AN OPEN HAND",
+      "moveRight": "MOVE YOUR RIGHT HAND ▶ FOR NEXT",
+      "moveLeft": "◀ MOVE YOUR LEFT HAND FOR PREVIOUS",
+      "liveSuffix": " · ☝ INDEX: SEE LIVE",
+      "recenter": "RETURN HAND TO CENTER",
+      "edgeLast": "THIS IS THE LAST ITEM · USE OTHER HAND",
+      "edgeFirst": "THIS IS THE FIRST ITEM · USE OTHER HAND",
+      "index": "HOLD INDEX ☝ … SEE LIVE",
+      "liveLoading": "PREPARING LIVE TRY-ON…",
       "stepWithLive": "LEFT HAND ◀ · RIGHT HAND ▶ · INDEX FINGER ☝ TO SEE YOURSELF LIVE",
       "step": "LEFT HAND ◀ · RIGHT HAND ▶",
-      "raiseHand": "RAISE OPEN HAND",
+      "raiseHand": "✋ RAISE AN OPEN HAND",
       "moveHand": "MOVE HAND TO SIDE TO BROWSE · RAISE INDEX FINGER TO TRY ON",
       "holdToTry": "MOVE HAND TO SIDE TO BROWSE · RAISE INDEX FINGER TO TRY ON",
       "holdToReturn": "RAISE INDEX FINGER TO RETURN"
@@ -247,7 +256,8 @@
     "fallbackToast": "Static mode active",
     "readyToast": "Live try-on active!",
     "error": "Could not start live try-on. Please try again.",
-    "busy": "Live try-on is busy. Please try again in a few seconds."
+    "busy": "Live try-on is busy. Please try again in a few seconds.",
+    "connectTimeout": "Could not connect to Lucy. Please try again in a few seconds."
   },
   "variant": {
     "title": "COLOR"

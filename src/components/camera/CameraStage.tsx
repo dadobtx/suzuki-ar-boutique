@@ -271,11 +271,13 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
     isLiveLoading,
     isLiveAvailable,
     isLiveCoolingDown,
+    firstFrameRendered,
     liveCountdown,
     liveToast,
     liveVideoRef,
     handleStartLiveTryon,
     handleStopLiveTryon,
+    notifyFirstFrame,
   } = useLiveTryon({
     activeGarment: activeGarment ?? null,
     activeVariantId,
@@ -343,31 +345,51 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
         {kioskState === 'AWAKENING' && <AwakeningSplash />}
         {kioskState === 'CALIBRATING' && <CalibrationGuide />}
 
-        {/* Garment Overlay (z-index 10) */}
+        {/* Garment Overlay (z-index 10) - stays active during loading until first live frame renders */}
         <GarmentOverlay
           videoRef={camera.videoRef}
           containerRef={overlayContainerRef}
           landmarks={effectiveLandmarks}
           mask={pose.mask}
           layout={layout}
-          active={garmentActiveWithProfile && !isLiveActive && !isLiveLoading}
+          active={garmentActiveWithProfile && !firstFrameRendered}
           presence={presence}
         />
 
-        {/* Live Try-On Video Overlay (z-index 15) */}
+        {/* Floating Connecting Overlay over camera + AR (z-index 35) */}
+        {isLiveLoading && (
+          <div
+            data-testid="live-loading-indicator"
+            className="absolute top-20 left-1/2 -translate-x-1/2 z-35 flex items-center gap-3 px-6 py-2.5 bg-surface/90 backdrop-blur-md rounded-full border border-line shadow-lg pointer-events-none"
+          >
+            <Sparkles className="w-5 h-5 text-brand-red animate-spin" />
+            <span className="font-display text-lg tracking-wider text-fg uppercase">
+              {t('live.connecting', 'CONECTANDO…')}
+            </span>
+          </div>
+        )}
+
+        {/* Live Try-On Video Overlay (z-index 15) - visible only once first frame is decoded */}
         {isLiveActive && (
-          <div className="absolute inset-0 z-15 bg-black" style={{ zIndex: 15 }}>
+          <div
+            className={`absolute inset-0 z-15 bg-black transition-opacity duration-300 ${
+              firstFrameRendered ? 'opacity-100' : 'opacity-0 pointer-events-none'
+            }`}
+            style={{ zIndex: 15 }}
+          >
             <video
               ref={liveVideoRef}
               autoPlay
               playsInline
               muted
+              onPlaying={notifyFirstFrame}
+              onLoadedData={notifyFirstFrame}
               className="w-full h-full object-cover"
               style={{ transform: 'scaleX(-1)' }}
             />
             <button
               onClick={handleStopLiveTryon}
-              className="absolute bottom-8 right-8 px-8 py-4 min-h-[64px] bg-brand-red hover:bg-brand-red/90 text-white rounded-full font-bold shadow-lg flex items-center gap-2 text-xl"
+              className="absolute bottom-8 right-8 px-8 py-4 min-h-[64px] bg-brand-red hover:bg-brand-red/90 text-white rounded-full font-bold shadow-lg flex items-center gap-2 text-xl pointer-events-auto"
             >
               <XIcon size={24} /> Salir
             </button>
@@ -658,7 +680,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           kioskState={kioskState}
           hasProfile={hasProfile}
           presence={presence}
-          isLiveActive={isLiveActive || isLiveLoading}
+          isLiveActive={isLiveActive}
+          isLiveLoading={isLiveLoading}
+          onCancelLive={handleStopLiveTryon}
         />
       </div>
     </div>

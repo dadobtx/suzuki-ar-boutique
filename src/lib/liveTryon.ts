@@ -13,6 +13,7 @@ export interface LiveTryOnConfig {
   liveId: number;
   stream: MediaStream; // Stream reused from CameraView
   referenceImageUrl: string;
+  triggerTime?: number;
   onUpdate: (stream: MediaStream) => void;
   onError: (error: Error) => void;
   onClose: () => void;
@@ -30,6 +31,7 @@ export class LiveTryOnManager {
   public closedAt: number | null = null;
   private lastError: string | null = null;
   private hasReceivedRemoteTrack = false;
+  private startTime = Date.now();
 
   constructor(config: LiveTryOnConfig) {
     this.config = config;
@@ -66,17 +68,22 @@ export class LiveTryOnManager {
   }
 
   private log(transition: string, details?: unknown): void {
+    const elapsed =
+      this.config.triggerTime !== undefined
+        ? Math.max(0, Math.round(performance.now() - this.config.triggerTime))
+        : Math.max(0, Math.round(Date.now() - this.startTime));
+    const prefix = `[live] t+${elapsed}ms ${transition}`;
     if (details !== undefined) {
-      console.log(`[live] ${transition}`, details);
+      console.log(prefix, details);
     } else {
-      console.log(`[live] ${transition}`);
+      console.log(prefix);
     }
   }
 
   public async start(): Promise<void> {
     if (this.state !== 'idle') return;
     this.state = 'connecting';
-    this.log('connect', { connectionKey: this.connectionKey });
+    this.log('connect() called', { connectionKey: this.connectionKey });
 
     try {
       this.connection = await fal.realtime.connect('decart/lucy2-vton/realtime', {
@@ -96,10 +103,10 @@ export class LiveTryOnManager {
           }
           if (result.type === 'iceservers' || result.type === 'iceServers') {
             const servers = result.iceservers || result.iceServers || result.ice_servers;
-            this.log('iceservers', { count: servers?.length ?? 0 });
+            this.log('ice servers ready', { count: servers?.length ?? 0 });
             await this.setupWebRTC(servers);
           } else if (result.type === 'answer' && this.pc) {
-            this.log('answer');
+            this.log('answer received');
             await this.pc.setRemoteDescription({
               type: 'answer',
               sdp: result.sdp as string,
@@ -171,7 +178,7 @@ export class LiveTryOnManager {
         if (event.streams && event.streams[0]) {
           this.hasReceivedRemoteTrack = true;
           this.state = 'active';
-          this.log('track');
+          this.log('track received');
           this.config.onUpdate(event.streams[0]);
         }
       };
@@ -198,7 +205,7 @@ export class LiveTryOnManager {
     await this.pc.setLocalDescription(offer);
 
     if (this.connection && !this.isClosedOrClosing()) {
-      this.log('offer');
+      this.log('offer sent');
       this.connection.send({
         type: 'offer',
         sdp: offer.sdp,

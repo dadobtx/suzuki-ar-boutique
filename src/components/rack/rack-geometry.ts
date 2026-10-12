@@ -8,40 +8,25 @@ export interface Rect {
 /**
  * Calculates the destination rectangle for a garment flying to or from the mirror cell.
  *
- * Requirements:
- * - Centered at chest level: horizontally centered (50%) and 38% from the top of the mirror.
- * - Standard width is 45% of the mirror width.
- * - Protects against huge destination sizes by clamping width to at most 70% and height to at most 60%
- *   of the mirror cell, centered on the target point.
- * - Normalizes aspect ratio if source is distorted by 3D rack perspective (rotateY 76deg) or closed slots.
+ * Requirements (Tablet Polish):
+ * - Contained inside a bounding box of at most 34% width and 42% height of the mirror cell.
+ * - Aspect ratio preserved from source: scale = min(maxW / from.width, maxH / from.height).
+ * - Horizontally centered (50% of mirror width).
+ * - Vertical center placed at ~45% from the top of the mirror (torso level).
  */
 export function computeMirrorTargetRect(mirrorRect: Rect, sourceRect: Rect): Rect {
-  let targetW = mirrorRect.width * 0.45;
+  const maxW = mirrorRect.width * 0.34;
+  const maxH = mirrorRect.height * 0.42;
 
-  let aspect =
-    sourceRect.width > 0 && sourceRect.height > 0
-      ? sourceRect.width / sourceRect.height
-      : 1;
+  const fromW = sourceRect.width > 0 ? sourceRect.width : 1;
+  const fromH = sourceRect.height > 0 ? sourceRect.height : 1;
 
-  // Suzuki cutout illustrations are square 1:1. If 3D rotation foreshortened the width, reset to 1.
-  if (aspect < 0.6 || aspect > 1.8) {
-    aspect = 1.0;
-  }
-
-  let targetH = targetW / aspect;
+  const scale = Math.min(maxW / fromW, maxH / fromH);
+  const targetW = fromW * scale;
+  const targetH = fromH * scale;
 
   const targetCenterX = mirrorRect.left + mirrorRect.width * 0.5;
-  const targetCenterY = mirrorRect.top + mirrorRect.height * 0.38;
-
-  // Protection: clamp to at most 70% width and 60% height of the mirror cell
-  const maxW = mirrorRect.width * 0.7;
-  const maxH = mirrorRect.height * 0.6;
-
-  if (targetW > maxW || targetH > maxH) {
-    const scale = Math.min(maxW / targetW, maxH / targetH);
-    targetW = targetW * scale;
-    targetH = targetH * scale;
-  }
+  const targetCenterY = mirrorRect.top + mirrorRect.height * 0.45;
 
   return {
     left: targetCenterX - targetW * 0.5,
@@ -52,17 +37,15 @@ export function computeMirrorTargetRect(mirrorRect: Rect, sourceRect: Rect): Rec
 }
 
 /**
- * Sanitizes a slot rect measured from the DOM to ensure unrotated square proportions
- * if the slot element was measured during a 3D rotation (rotateY 76deg) or in closed state.
+ * Sanitizes a slot rect measured from the DOM to ensure non-collapsed dimensions.
  */
 export function sanitizeSlotRect(slotRect: Rect): Rect {
-  if (slotRect.height > 0 && slotRect.width < slotRect.height * 0.6) {
-    const centerX = slotRect.left + slotRect.width * 0.5;
+  if (slotRect.width <= 0 || slotRect.height <= 0) {
     return {
-      left: centerX - slotRect.height * 0.5,
-      top: slotRect.top,
-      width: slotRect.height,
-      height: slotRect.height,
+      left: slotRect.left || 0,
+      top: slotRect.top || 0,
+      width: 120,
+      height: 120,
     };
   }
   return slotRect;

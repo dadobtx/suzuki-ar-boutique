@@ -5,35 +5,68 @@ import {
   type Rect,
 } from '@/components/rack/rack-geometry';
 
-describe('computeMirrorTargetRect - destination rect calculation and safety limits', () => {
-  const standardMirror: Rect = {
+describe('computeMirrorTargetRect - contain destination inside torso box (34% x 42% at y=45%)', () => {
+  const tabletMirror: Rect = {
     left: 0,
     top: 0,
     width: 1080,
-    height: 1248,
+    height: 1150,
   };
 
-  it('calculates expected chest-centered square destination for standard garment', () => {
-    const source: Rect = {
+  const maxBoxW = tabletMirror.width * 0.34; // 367.2
+  const maxBoxH = tabletMirror.height * 0.42; // 483
+  const expectedCenterX = tabletMirror.left + tabletMirror.width * 0.5; // 540
+  const expectedCenterY = tabletMirror.top + tabletMirror.height * 0.45; // 517.5
+
+  it('contains tall garment (from 60x170) strictly within the 34% x 42% box centered at torso', () => {
+    const fromTall: Rect = {
       left: 100,
-      top: 1350,
-      width: 352,
-      height: 352,
+      top: 1300,
+      width: 60,
+      height: 170,
     };
 
-    const target = computeMirrorTargetRect(standardMirror, source);
+    const target = computeMirrorTargetRect(tabletMirror, fromTall);
 
-    // 45% of 1080 = 486
-    expect(target.width).toBeCloseTo(486, 1);
-    expect(target.height).toBeCloseTo(486, 1);
+    // Height is the limiting factor: 483 / 170 = 2.841176...
+    // target.height = 483, target.width = 60 * 2.841176... = 170.47
+    expect(target.width).toBeLessThanOrEqual(maxBoxW + 0.001);
+    expect(target.height).toBeLessThanOrEqual(maxBoxH + 0.001);
+    expect(target.height).toBeCloseTo(483, 1);
+    expect(target.width).toBeCloseTo(170.47, 1);
 
-    // Centered at x = 540, y = 1248 * 0.38 = 474.24
-    expect(target.left).toBeCloseTo(540 - 243, 1); // 297
-    expect(target.top).toBeCloseTo(474.24 - 243, 1); // 231.24
+    // Centered at torso (x = 540, y = 517.5)
+    const targetCenterX = target.left + target.width * 0.5;
+    const targetCenterY = target.top + target.height * 0.5;
+    expect(targetCenterX).toBeCloseTo(expectedCenterX, 1);
+    expect(targetCenterY).toBeCloseTo(expectedCenterY, 1);
   });
 
-  it('limits destination rect to at most 70% width and 60% height when given an enormous or distorted rect', () => {
-    // Simulating an extreme distorted rect from collapsed/rotated element (e.g., width 10, height 5000)
+  it('contains square garment (from 120x120) strictly within the 34% x 42% box centered at torso', () => {
+    const fromSquare: Rect = {
+      left: 200,
+      top: 1300,
+      width: 120,
+      height: 120,
+    };
+
+    const target = computeMirrorTargetRect(tabletMirror, fromSquare);
+
+    // Width is the limiting factor: 367.2 / 120 = 3.06
+    // target.width = 367.2, target.height = 367.2
+    expect(target.width).toBeLessThanOrEqual(maxBoxW + 0.001);
+    expect(target.height).toBeLessThanOrEqual(maxBoxH + 0.001);
+    expect(target.width).toBeCloseTo(367.2, 1);
+    expect(target.height).toBeCloseTo(367.2, 1);
+
+    // Centered at torso (x = 540, y = 517.5)
+    const targetCenterX = target.left + target.width * 0.5;
+    const targetCenterY = target.top + target.height * 0.5;
+    expect(targetCenterX).toBeCloseTo(expectedCenterX, 1);
+    expect(targetCenterY).toBeCloseTo(expectedCenterY, 1);
+  });
+
+  it('limits destination rect to at most 34% width and 42% height when given an enormous rect', () => {
     const enormousSource: Rect = {
       left: 100,
       top: 1350,
@@ -41,72 +74,43 @@ describe('computeMirrorTargetRect - destination rect calculation and safety limi
       height: 5000,
     };
 
-    const target = computeMirrorTargetRect(standardMirror, enormousSource);
+    const target = computeMirrorTargetRect(tabletMirror, enormousSource);
 
-    const maxAllowedWidth = standardMirror.width * 0.7; // 756
-    const maxAllowedHeight = standardMirror.height * 0.6; // 748.8
+    expect(target.width).toBeLessThanOrEqual(maxBoxW + 0.001);
+    expect(target.height).toBeLessThanOrEqual(maxBoxH + 0.001);
 
-    // Must be bounded within limits
-    expect(target.width).toBeLessThanOrEqual(maxAllowedWidth + 0.001);
-    expect(target.height).toBeLessThanOrEqual(maxAllowedHeight + 0.001);
-
-    // Must remain centered on the target chest position
     const targetCenterX = target.left + target.width * 0.5;
     const targetCenterY = target.top + target.height * 0.5;
-
-    const expectedCenterX = standardMirror.left + standardMirror.width * 0.5; // 540
-    const expectedCenterY = standardMirror.top + standardMirror.height * 0.38; // 474.24
-
     expect(targetCenterX).toBeCloseTo(expectedCenterX, 1);
     expect(targetCenterY).toBeCloseTo(expectedCenterY, 1);
   });
-
-  it('clamps huge dimensions for arbitrary large aspect inputs', () => {
-    const mirror: Rect = { left: 50, top: 100, width: 800, height: 1000 };
-    // Extremely wide source
-    const hugeWideSource: Rect = { left: 0, top: 0, width: 10000, height: 100 };
-    const targetWide = computeMirrorTargetRect(mirror, hugeWideSource);
-
-    expect(targetWide.width).toBeLessThanOrEqual(mirror.width * 0.7);
-    expect(targetWide.height).toBeLessThanOrEqual(mirror.height * 0.6);
-
-    // Extremely tall source
-    const hugeTallSource: Rect = { left: 0, top: 0, width: 100, height: 10000 };
-    const targetTall = computeMirrorTargetRect(mirror, hugeTallSource);
-
-    expect(targetTall.width).toBeLessThanOrEqual(mirror.width * 0.7);
-    expect(targetTall.height).toBeLessThanOrEqual(mirror.height * 0.6);
-  });
 });
 
-describe('sanitizeSlotRect - 3D foreshortened slot normalization', () => {
-  it('normalizes a foreshortened slot (rotateY 76deg: width 85, height 352) to square 352x352 centered on hanger', () => {
-    const rotatedSlot: Rect = {
+describe('sanitizeSlotRect - collapsed dimensions protection', () => {
+  it('provides safe fallback dimensions if slot width or height is <= 0', () => {
+    const collapsedSlot: Rect = {
       left: 200,
       top: 1350,
-      width: 85,
-      height: 352,
+      width: 0,
+      height: 0,
     };
 
-    const sanitized = sanitizeSlotRect(rotatedSlot);
-    expect(sanitized.width).toBe(352);
-    expect(sanitized.height).toBe(352);
-
-    // Center should be preserved
-    const originalCenter = 200 + 85 * 0.5; // 242.5
-    const sanitizedCenter = sanitized.left + sanitized.width * 0.5;
-    expect(sanitizedCenter).toBeCloseTo(originalCenter, 1);
+    const sanitized = sanitizeSlotRect(collapsedSlot);
+    expect(sanitized.width).toBe(120);
+    expect(sanitized.height).toBe(120);
+    expect(sanitized.left).toBe(200);
+    expect(sanitized.top).toBe(1350);
   });
 
-  it('leaves already open or square slots untouched', () => {
-    const squareSlot: Rect = {
+  it('preserves valid slot rects intact without distortion', () => {
+    const validTallSlot: Rect = {
       left: 100,
       top: 1350,
-      width: 352,
-      height: 352,
+      width: 60,
+      height: 170,
     };
 
-    const sanitized = sanitizeSlotRect(squareSlot);
-    expect(sanitized).toEqual(squareSlot);
+    const sanitized = sanitizeSlotRect(validTallSlot);
+    expect(sanitized).toEqual(validTallSlot);
   });
 });

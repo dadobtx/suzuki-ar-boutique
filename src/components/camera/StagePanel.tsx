@@ -16,6 +16,8 @@ interface StagePanelProps {
   hasProfile: boolean;
   presence: PresenceState;
   isLiveActive?: boolean;
+  isLiveLoading?: boolean;
+  onCancelLive?: () => void;
 }
 
 export function StagePanel({
@@ -23,6 +25,8 @@ export function StagePanel({
   hasProfile,
   presence,
   isLiveActive = false,
+  isLiveLoading = false,
+  onCancelLive,
 }: StagePanelProps) {
   const { t } = useTranslation();
   const { effectiveSelectionUi } = useSelectionUi();
@@ -160,6 +164,8 @@ export function StagePanel({
             mode="interactive"
             active={isCatalogVisible}
             isLiveActive={isLiveActive}
+            isLiveLoading={isLiveLoading}
+            onCancelLive={onCancelLive}
           />
         ) : (
           <CatalogPanel />

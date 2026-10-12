@@ -200,7 +200,7 @@ describe('RackPanel - Hand Interaction Integration (tests/unit/rack-hand.test.ts
 
     render(<KioskGuide presence="present" layout="portrait" />);
 
-    expect(screen.getByText(/LEVANTA LA MANO ABIERTA/i)).toBeDefined();
+    expect(screen.getByText(/LEVANTA (UNA|LA) MANO ABIERTA/i)).toBeDefined();
     expect(screen.queryByText(/MANTÉN LA MANO QUIETA PARA DEVOLVERLA/i)).toBeNull();
   });
 });

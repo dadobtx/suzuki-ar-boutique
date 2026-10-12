@@ -8,17 +8,26 @@ import { useHandCursorStore } from '@/store/handCursor';
 import { useAnalyticsStore } from '@/store/analytics';
 import { isDebugMode } from '@/lib/debug-mode';
 import { computeMirrorTargetRect, sanitizeSlotRect } from './rack-geometry';
+import { RestartButton } from '@/components/catalog/RestartButton';
 import './rack.css';
 
-interface RackPanelProps {
+export interface RackPanelProps {
   mode: 'attract' | 'interactive';
   active?: boolean;
   isLiveActive?: boolean;
+  isLiveLoading?: boolean;
+  onCancelLive?: () => void;
 }
 
 type TakeMethod = 'hand_dwell' | 'hand_point' | 'hand_step' | 'touch' | 'keyboard';
 
-export function RackPanel({ mode, active = true, isLiveActive = false }: RackPanelProps) {
+export function RackPanel({
+  mode,
+  active = true,
+  isLiveActive = false,
+  isLiveLoading = false,
+  onCancelLive,
+}: RackPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const slotRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -273,12 +282,24 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
       src: string,
       from: { left: number; top: number; width: number; height: number },
       to: { left: number; top: number; width: number; height: number },
-      { arc = -140, tilt = -6 }: { arc?: number; tilt?: number } = {},
+      {
+        arc = -90,
+        tilt = -6,
+        onCrossfade,
+      }: { arc?: number; tilt?: number; onCrossfade?: () => void } = {},
     ): Promise<void> => {
       if (typeof window === 'undefined' || typeof document === 'undefined') return;
       const isReduced =
         typeof window.matchMedia === 'function' &&
         window.matchMedia('(prefers-reduced-motion: reduce)')?.matches;
+
+      let crossfadeTriggered = false;
+      const triggerCrossfade = () => {
+        if (!crossfadeTriggered) {
+          crossfadeTriggered = true;
+          onCrossfade?.();
+        }
+      };
 
       const img = document.createElement('img');
       img.className = 'rack-flyer';
@@ -296,6 +317,7 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
       activeFlyersRef.current.add(flyerRecord);
 
       if (isReduced || typeof img.animate !== 'function') {
+        triggerCrossfade();
         activeFlyersRef.current.delete(flyerRecord);
         img.remove();
         return;
@@ -305,28 +327,35 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
       const dy = to.top - from.top;
       const rawSx = from.width > 0 ? to.width / from.width : 1;
       const rawSy = from.height > 0 ? to.height / from.height : 1;
-      const sx = Math.min(Math.max(rawSx, 0.05), 4);
-      const sy = Math.min(Math.max(rawSy, 0.05), 4);
+      const sx = Math.min(Math.max(rawSx, 0.05), 3);
+      const sy = Math.min(Math.max(rawSy, 0.05), 3);
 
       if (isDebugMode()) {
         console.log('[flyElement]', { from, to, sx, sy });
       }
 
-      const mid = `translate(${dx * 0.38}px, ${dy * 0.38 + arc}px) scale(${1 + (sx - 1) * 0.5}, ${1 + (sy - 1) * 0.5}) rotate(${tilt}deg)`;
+      const mid = `translate(${dx * 0.4}px, ${dy * 0.4 + arc}px) scale(${1 + (sx - 1) * 0.45}, ${1 + (sy - 1) * 0.45}) rotate(${tilt}deg)`;
+      const p75 = `translate(${dx * 0.78}px, ${dy * 0.78 + arc * 0.25}px) scale(${1 + (sx - 1) * 0.8}, ${1 + (sy - 1) * 0.8}) rotate(${tilt * 0.3}deg)`;
+      const end = `translate(${dx}px, ${dy}px) scale(${sx}, ${sy}) rotate(0deg)`;
 
+      let crossfadeTimer: ReturnType<typeof setTimeout> | null = null;
       try {
+        crossfadeTimer = setTimeout(triggerCrossfade, 480); // 75% de 640ms
+
         const anim = img.animate(
           [
-            { transform: 'translate(0,0) scale(1,1) rotate(0deg)', opacity: '1' },
-            { transform: mid, offset: 0.42 },
             {
-              transform: `translate(${dx}px, ${dy}px) scale(${sx}, ${sy}) rotate(0deg)`,
+              transform: 'translate(0,0) scale(1,1) rotate(0deg)',
               opacity: '1',
+              offset: 0,
             },
+            { transform: mid, opacity: '1', offset: 0.42 },
+            { transform: p75, opacity: '1', offset: 0.75 },
+            { transform: end, opacity: '0', offset: 1 },
           ],
           {
-            duration: 760,
-            easing: 'cubic-bezier(0.35, 0.7, 0.2, 1)',
+            duration: 640,
+            easing: 'cubic-bezier(0.25, 0.8, 0.25, 1)',
             fill: 'forwards',
           },
         );
@@ -335,20 +364,11 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
         if (anim?.finished) {
           await anim.finished;
         }
-
-        const fade = img.animate([{ opacity: 1 }, { opacity: 0 }], {
-          duration: 250,
-          easing: 'ease-out',
-          fill: 'forwards',
-        });
-        flyerRecord.anims.push(fade);
-
-        if (fade?.finished) {
-          await fade.finished;
-        }
       } catch {
         // En caso de interrupción
       } finally {
+        if (crossfadeTimer) clearTimeout(crossfadeTimer);
+        triggerCrossfade();
         activeFlyersRef.current.delete(flyerRecord);
         img.remove();
       }
@@ -379,6 +399,26 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
   const handleTakeOrReturn = useCallback(
     async (index: number, method: TakeMethod = 'touch') => {
       if (mode !== 'interactive' || !active || isLiveActive) return;
+
+      if (isLiveLoading) {
+        // Gestos de mano se ignoran durante la carga
+        if (
+          method === 'hand_step' ||
+          method === 'hand_dwell' ||
+          method === 'hand_point'
+        ) {
+          return;
+        }
+        // Toque directo en tablet:
+        const targetItem = items[index];
+        const currentActiveId = useGarmentStore.getState().activeGarmentId;
+        if (targetItem && targetItem.id !== currentActiveId) {
+          onCancelLive?.();
+        } else {
+          return;
+        }
+      }
+
       if (isBusyRef.current) {
         if (method === 'hand_step') {
           pendingStepIndexRef.current = index;
@@ -417,7 +457,7 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
           if (slotImg && flySrc) {
             const slotRect = sanitizeSlotRect(slotImg.getBoundingClientRect());
             const mirrorRect = getMirrorTargetRect(slotRect);
-            await flyElement(flySrc, mirrorRect, slotRect, { arc: -60, tilt: 5 });
+            await flyElement(flySrc, mirrorRect, slotRect, { arc: -50, tilt: 5 });
           }
 
           setReturningId(null);
@@ -426,7 +466,6 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
           // Tocar otra prenda con una puesta: la anterior vuelve a su gancho y la nueva sale
           setFocus(index);
           kick(index);
-          selectGarment(item.id);
 
           const prevIdx = items.findIndex((it) => it.id === currentActiveId);
           const prevItem = prevIdx !== -1 ? items[prevIdx] : null;
@@ -448,7 +487,7 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
                 );
                 const mirrorRect = getMirrorTargetRect(prevSlotRect);
                 await flyElement(prevFlySrc, mirrorRect, prevSlotRect, {
-                  arc: -60,
+                  arc: -50,
                   tilt: 5,
                 });
               }
@@ -457,27 +496,42 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
             }
           })();
 
-          // 120 ms después, vuelo de la nueva
+          // 120 ms después, vuelo de la nueva hacia el espejo con crossfade al 75%
           const takePromise = (async () => {
             await new Promise((resolve) => registerTimeout(() => resolve(true), 120));
             if (slotImg && flySrc) {
               const slotRect = sanitizeSlotRect(slotImg.getBoundingClientRect());
               const mirrorRect = getMirrorTargetRect(slotRect);
-              await flyElement(flySrc, slotRect, mirrorRect, { arc: -140, tilt: -6 });
+              await flyElement(flySrc, slotRect, mirrorRect, {
+                arc: -90,
+                tilt: -6,
+                onCrossfade: () => {
+                  selectGarment(item.id);
+                },
+              });
+            } else {
+              selectGarment(item.id);
             }
           })();
 
           await Promise.all([returnPromise, takePromise]);
         } else {
-          // Ninguna puesta: la nueva vuela hacia el espejo
+          // Ninguna puesta: la nueva vuela hacia el espejo con crossfade al 75%
           setFocus(index);
           kick(index);
-          selectGarment(item.id);
 
           if (slotImg && flySrc) {
             const slotRect = sanitizeSlotRect(slotImg.getBoundingClientRect());
             const mirrorRect = getMirrorTargetRect(slotRect);
-            await flyElement(flySrc, slotRect, mirrorRect, { arc: -140, tilt: -6 });
+            await flyElement(flySrc, slotRect, mirrorRect, {
+              arc: -90,
+              tilt: -6,
+              onCrossfade: () => {
+                selectGarment(item.id);
+              },
+            });
+          } else {
+            selectGarment(item.id);
           }
         }
       } finally {
@@ -497,6 +551,8 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
       mode,
       active,
       isLiveActive,
+      isLiveLoading,
+      onCancelLive,
       items,
       selectGarment,
       kick,
@@ -560,19 +616,19 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
     if (handLastEvent && handLastEvent.type === 'step') {
       const stepIndex = handLastEvent.index;
       useHandCursorStore.getState().clearLastEvent();
-      if (mode !== 'interactive' || !active || isLiveActive) return;
+      if (mode !== 'interactive' || !active || isLiveActive || isLiveLoading) return;
       void handleTakeOrReturn(stepIndex, 'hand_step');
     }
-  }, [handLastEvent, handleTakeOrReturn, mode, active, isLiveActive]);
+  }, [handLastEvent, handleTakeOrReturn, mode, active, isLiveActive, isLiveLoading]);
 
   // Evento take por mano
   useEffect(() => {
-    if (mode !== 'interactive' || !active || isBusyRef.current) return;
+    if (mode !== 'interactive' || !active || isBusyRef.current || isLiveLoading) return;
     if (handLastEvent && handLastEvent.type === 'take') {
       handleTakeOrReturn(handLastEvent.index, handLastEvent.method ?? 'hand_dwell');
       useHandCursorStore.getState().clearLastEvent();
     }
-  }, [handLastEvent, mode, active, handleTakeOrReturn]);
+  }, [handLastEvent, mode, active, isLiveLoading, handleTakeOrReturn]);
 
   // Interacción táctil / puntero con histéresis
   const handlePointerMove = (e: React.PointerEvent) => {
@@ -720,6 +776,13 @@ export function RackPanel({ mode, active = true, isLiveActive = false }: RackPan
     >
       {/* ── Riel metálico con soportes en los extremos ── */}
       <div className="rack-rail" aria-hidden="true" />
+
+      {/* ── Botón REINICIAR sobre el riel a la derecha (solo interactivo) ── */}
+      {mode === 'interactive' && (
+        <div className="absolute top-2 right-4 z-30 pointer-events-auto">
+          <RestartButton />
+        </div>
+      )}
 
       {/* ── Perchero con ganchos y recortables ── */}
       <div role="listbox" aria-label="Prendas del perchero" className="rack-container">

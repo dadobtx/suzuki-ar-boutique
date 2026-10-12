@@ -1,3 +1,4 @@
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { motion, AnimatePresence, useReducedMotion } from 'framer-motion';
 import { ArrowRight, ArrowDown, UserRound, Hand } from 'lucide-react';
@@ -6,7 +7,7 @@ import { useGarmentStore } from '@/store/garment';
 import { useSizingStore } from '@/store/sizing';
 import { useSelectionUi } from '@/hooks/useSelectionUi';
 import { isHandInputEnabled } from '@/lib/hand-input-flag';
-import { useHandCursorStore } from '@/store/handCursor';
+import { useHandGuide, type HandGuideState } from '@/lib/hand-guide';
 import type { PresenceState } from '@/hooks/usePresence';
 import type { FramingState } from '@/lib/body-framing';
 import { resolveGuide } from '@/lib/kiosk-guide';
@@ -38,7 +39,6 @@ export function KioskGuide({
   const { effectiveSelectionUi } = useSelectionUi();
   const isPerchero = effectiveSelectionUi === 'perchero';
   const isHandEnabled = isHandInputEnabled();
-  const handCursor = useHandCursorStore((s) => s.cursor);
 
   const guide = resolveGuide({
     kioskState,
@@ -52,10 +52,6 @@ export function KioskGuide({
     t: (key, fallback) => t(key, fallback ?? key),
   });
 
-  if (!guide) return null;
-
-  const isBodyNotice = guide.kind === 'body';
-
   // Modo indicaciones de mano (perchero + hand ON + catálogo visible, sin aviso de cuerpo)
   const isHandActiveMode =
     isHandEnabled &&
@@ -63,17 +59,85 @@ export function KioskGuide({
     layout === 'portrait' &&
     (kioskState === 'TRYON' || (kioskState === 'ATTRACT' && hasProfile));
 
+  const isBodyNotice = guide?.kind === 'body';
+
+  const { state: handState, edgeType } = useHandGuide({
+    isInteractive: isHandActiveMode && !isBodyNotice,
+    showLiveButton,
+  });
+
+  // Retención mínima de 300 ms entre estados para evitar parpadeos
+  const [displayedState, setDisplayedState] = useState<HandGuideState>(handState);
+  const lastStateChangeRef = useRef<number>(Date.now());
+  const pendingStateRef = useRef<HandGuideState>(handState);
+
+  useEffect(() => {
+    pendingStateRef.current = handState;
+
+    // live-loading y live-active entran de inmediato
+    if (handState === 'live-loading' || handState === 'live-active') {
+      setDisplayedState(handState);
+      lastStateChangeRef.current = Date.now();
+      return;
+    }
+
+    const elapsed = Date.now() - lastStateChangeRef.current;
+    if (elapsed >= 300) {
+      setDisplayedState(handState);
+      lastStateChangeRef.current = Date.now();
+    } else {
+      const remaining = 300 - elapsed;
+      const target = handState;
+      const timer = setTimeout(() => {
+        setDisplayedState(target);
+        lastStateChangeRef.current = Date.now();
+      }, remaining);
+      return () => clearTimeout(timer);
+    }
+  }, [handState]);
+
+  if (!guide) return null;
+
+  // Si estamos en live-active y no hay aviso de cuerpo, no mostrar mensaje de gestos
+  if (isHandActiveMode && displayedState === 'live-active' && !isBodyNotice) {
+    return null;
+  }
+
   let handTitle: string | null = null;
   if (isHandActiveMode && !isBodyNotice) {
-    if (!handCursor.active) {
-      handTitle = t('kiosk.hand.raiseHand', 'LEVANTA LA MANO ABIERTA');
-    } else if (showLiveButton) {
-      handTitle = t(
-        'kiosk.hand.stepWithLive',
-        'MANO IZQUIERDA ◀ · MANO DERECHA ▶ · ÍNDICE ☝ PARA VERTE EN VIVO',
-      );
-    } else {
-      handTitle = t('kiosk.hand.step', 'MANO IZQUIERDA ◀ · MANO DERECHA ▶');
+    const liveSuffix = showLiveButton
+      ? t('kiosk.hand.liveSuffix', ' · ☝ ÍNDICE: VERTE EN VIVO')
+      : '';
+
+    switch (displayedState) {
+      case 'raise':
+        handTitle = t('kiosk.hand.raise', '✋ LEVANTA UNA MANO ABIERTA');
+        break;
+      case 'move-right':
+        handTitle = `${t('kiosk.hand.moveRight', 'MUEVE TU MANO DERECHA ▶ PARA LA SIGUIENTE')}${liveSuffix}`;
+        break;
+      case 'move-left':
+        handTitle = `${t('kiosk.hand.moveLeft', '◀ MUEVE TU MANO IZQUIERDA PARA LA ANTERIOR')}${liveSuffix}`;
+        break;
+      case 'recenter':
+        handTitle = t('kiosk.hand.recenter', 'VUELVE LA MANO AL CENTRO');
+        break;
+      case 'edge':
+        handTitle =
+          edgeType === 'first'
+            ? t('kiosk.hand.edgeFirst', 'ES LA PRIMERA PRENDA · USA LA OTRA MANO')
+            : t('kiosk.hand.edgeLast', 'ES LA ÚLTIMA PRENDA · USA LA OTRA MANO');
+        break;
+      case 'index':
+        handTitle = t('kiosk.hand.index', 'MANTÉN EL ÍNDICE ☝ … VERME EN VIVO');
+        break;
+      case 'live-loading':
+        handTitle = t('kiosk.hand.liveLoading', 'PREPARANDO TU PRUEBA EN VIVO…');
+        break;
+      case 'live-active':
+      case 'hidden':
+        handTitle = null;
+        break;
     }
   }
 
