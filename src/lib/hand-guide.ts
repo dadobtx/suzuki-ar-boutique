@@ -140,7 +140,6 @@ export interface HandGuideResult {
 export function useHandGuide(options?: UseHandGuideOptions): HandGuideResult {
   const cursor = useHandCursorStore((s) => s.cursor);
   const rackFocusIndex = useHandCursorStore((s) => s.rackFocusIndex);
-  const isBusy = useHandCursorStore((s) => s.isBusy);
 
   const catalog = useGarmentStore((s) => s.catalog);
   const activeGarmentId = useGarmentStore((s) => s.activeGarmentId);
@@ -155,8 +154,7 @@ export function useHandGuide(options?: UseHandGuideOptions): HandGuideResult {
   const isInteractive =
     options?.isInteractive ??
     (effectiveSelectionUi === 'perchero' &&
-      (kioskState === 'TRYON' || (kioskState === 'ATTRACT' && hasProfile)) &&
-      !isBusy);
+      (kioskState === 'TRYON' || (kioskState === 'ATTRACT' && hasProfile)));
 
   const currentIndex =
     rackFocusIndex !== null

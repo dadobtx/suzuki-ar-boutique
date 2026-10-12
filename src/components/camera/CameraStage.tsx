@@ -356,19 +356,6 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           presence={presence}
         />
 
-        {/* Floating Connecting Overlay over camera + AR (z-index 35) */}
-        {isLiveLoading && (
-          <div
-            data-testid="live-loading-indicator"
-            className="absolute top-20 left-1/2 -translate-x-1/2 z-35 flex items-center gap-3 px-6 py-2.5 bg-surface/90 backdrop-blur-md rounded-full border border-line shadow-lg pointer-events-none"
-          >
-            <Sparkles className="w-5 h-5 text-brand-red animate-spin" />
-            <span className="font-display text-lg tracking-wider text-fg uppercase">
-              {t('live.connecting', 'CONECTANDO…')}
-            </span>
-          </div>
-        )}
-
         {/* Live Try-On Video Overlay (z-index 15) - visible only once first frame is decoded */}
         {isLiveActive && (
           <div

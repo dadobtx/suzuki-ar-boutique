@@ -234,4 +234,22 @@ describe('KioskGuide component - synchronized hand states', () => {
     // Now it updates to recenter!
     expect(screen.getByText(/VUELVE LA MANO AL CENTRO/i)).toBeTruthy();
   });
+
+  it('keeps "VUELVE LA MANO AL CENTRO" on recenter during flight when isBusy is true', () => {
+    useHandCursorStore.setState({
+      isBusy: true,
+      rackFocusIndex: 1,
+      cursor: {
+        ...useHandCursorStore.getState().cursor,
+        active: true,
+        activeHandSide: 'Right',
+        isStepDisarmed: true,
+        confirmProgress: 0,
+      },
+    });
+
+    render(<KioskGuide presence="present" layout="portrait" showLiveButton={true} />);
+    expect(screen.getByText(/VUELVE LA MANO AL CENTRO/i)).toBeTruthy();
+    expect(screen.queryByText(/PRUÉBALA EN VIVO/i)).toBeNull();
+  });
 });

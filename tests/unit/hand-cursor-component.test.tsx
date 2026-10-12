@@ -146,4 +146,22 @@ describe('HandCursor component - synchronized guide and directional arrows', () 
     expect(screen.queryByTestId('cursor-arrow-right')).toBeNull();
     expect(screen.queryByTestId('cursor-arrow-left')).toBeNull();
   });
+
+  it('keeps HandCursor mounted in "recenter" state even when isBusy is true during flight', () => {
+    useHandCursorStore.setState({
+      isBusy: true,
+      rackFocusIndex: 1,
+      cursor: {
+        ...useHandCursorStore.getState().cursor,
+        active: true,
+        activeHandSide: 'Right',
+        isStepDisarmed: true,
+        confirmProgress: 0,
+      },
+    });
+
+    render(<HandCursor />);
+    expect(screen.getByTestId('hand-cursor')).toBeTruthy();
+    expect(screen.getByTestId('cursor-rearm-dot')).toBeTruthy();
+  });
 });

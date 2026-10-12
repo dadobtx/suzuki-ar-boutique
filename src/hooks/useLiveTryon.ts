@@ -76,6 +76,7 @@ export function useLiveTryon({
   const lastErrorRef = useRef<string | null>(null);
   const firstFrameRenderedRef = useRef<boolean>(false);
   const liveTriggerTimeRef = useRef<number>(0);
+  const connectStartTimeRef = useRef<number>(0);
   const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const maxSecondsRef = useRef<number>(30);
   const connectingGarmentIdRef = useRef<string | null>(null);
@@ -135,6 +136,7 @@ export function useLiveTryon({
       clearTimeout(connectTimeoutRef.current);
       connectTimeoutRef.current = null;
     }
+    connectStartTimeRef.current = 0;
 
     const elapsed = Math.max(
       0,
@@ -152,9 +154,12 @@ export function useLiveTryon({
   // Detener la sesión de manera segura
   const stopInternal = useCallback(
     (isRetryPending = false, failed = false) => {
-      if (connectTimeoutRef.current) {
-        clearTimeout(connectTimeoutRef.current);
-        connectTimeoutRef.current = null;
+      if (!isRetryPending) {
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
+        connectStartTimeRef.current = 0;
       }
 
       if (managerRef.current) {
@@ -170,7 +175,7 @@ export function useLiveTryon({
       firstFrameRenderedRef.current = false;
       connectingGarmentIdRef.current = null;
       liveStartingRef.current = false;
-      lastStopMsRef.current = failed ? 0 : Date.now();
+      lastStopMsRef.current = Date.now();
 
       if (!isRetryPending) {
         setIsLiveLoading(false);
@@ -224,26 +229,31 @@ export function useLiveTryon({
     failedRef.current = false;
     connectingGarmentIdRef.current = activeGarment.id;
 
-    if (connectTimeoutRef.current) {
-      clearTimeout(connectTimeoutRef.current);
+    if (connectStartTimeRef.current === 0) {
+      connectStartTimeRef.current = Date.now();
     }
-    connectTimeoutRef.current = setTimeout(() => {
-      if (isMountedRef.current && !firstFrameRenderedRef.current) {
-        console.warn('[live] Connection timeout after 25s without video');
-        stopInternal(false, true);
-        setLiveToast(
-          t(
-            'live.connectTimeout',
-            'No pudimos conectar con Lucy. Intenta de nuevo en unos segundos.',
-          ),
-        );
-        setTimeout(() => {
-          if (isMountedRef.current) {
-            setLiveToast(null);
-          }
-        }, 4000);
-      }
-    }, LIVE_CONNECT_TIMEOUT_MS);
+
+    if (!connectTimeoutRef.current) {
+      const elapsed = Date.now() - connectStartTimeRef.current;
+      const remainingTimeout = Math.max(0, LIVE_CONNECT_TIMEOUT_MS - elapsed);
+      connectTimeoutRef.current = setTimeout(() => {
+        if (isMountedRef.current && !firstFrameRenderedRef.current) {
+          console.warn('[live] Connection timeout after 25s without video');
+          stopInternal(false, true);
+          setLiveToast(
+            t(
+              'live.connectTimeout',
+              'No pudimos conectar con Lucy. Intenta de nuevo en unos segundos.',
+            ),
+          );
+          setTimeout(() => {
+            if (isMountedRef.current) {
+              setLiveToast(null);
+            }
+          }, 4000);
+        }
+      }, remainingTimeout);
+    }
 
     const elapsedToken = Math.max(
       0,
@@ -383,10 +393,6 @@ export function useLiveTryon({
       syncTelemetry();
       await manager.start();
     } catch (err) {
-      if (connectTimeoutRef.current) {
-        clearTimeout(connectTimeoutRef.current);
-        connectTimeoutRef.current = null;
-      }
       console.error('[live] startSession error:', err);
       const errMsg = err instanceof Error ? err.message : String(err);
       lastErrorRef.current = errMsg;
@@ -406,10 +412,17 @@ export function useLiveTryon({
         } else {
           cleanupAfterFailure('live.busy');
         }
-      } else if (isConcurrentError && retryCountRef.current > 0) {
-        cleanupAfterFailure('live.busy');
       } else {
-        cleanupAfterFailure('live.error');
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
+        connectStartTimeRef.current = 0;
+        if (isConcurrentError && retryCountRef.current > 0) {
+          cleanupAfterFailure('live.busy');
+        } else {
+          cleanupAfterFailure('live.error');
+        }
       }
     }
   }, [
@@ -436,6 +449,7 @@ export function useLiveTryon({
     }
 
     liveTriggerTimeRef.current = performance.now();
+    connectStartTimeRef.current = Date.now();
     console.log('[live] t+0ms click/gesture trigger');
     failedRef.current = false;
 

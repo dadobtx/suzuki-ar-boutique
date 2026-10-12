@@ -337,4 +337,99 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
     });
     expect(result.current.liveCountdown).toBe(29);
   });
+
+  it('5. Tras un timeout, isLiveAvailable es false durante 4 s de enfriamiento', async () => {
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: garment1,
+        cameraStream: mockStream,
+        sessionId: 'session-timeout-cooldown',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    // Timeout a los 25 s
+    act(() => {
+      vi.advanceTimersByTime(25100);
+    });
+
+    expect(result.current.isLiveLoading).toBe(false);
+    expect(useLiveTryonStore.getState().failed).toBe(true);
+    // Inmediatamente después del timeout: en enfriamiento de 4 s, isLiveAvailable es false
+    expect(useLiveTryonStore.getState().isLiveAvailable).toBe(false);
+
+    // Avanzar 2 segundos: aún dentro de los 4 s de enfriamiento
+    act(() => {
+      vi.advanceTimersByTime(2000);
+    });
+    expect(useLiveTryonStore.getState().isLiveAvailable).toBe(false);
+
+    // Avanzar 2.1 segundos más (supera los 4 s de enfriamiento): vuelve a estar disponible
+    act(() => {
+      vi.advanceTimersByTime(2100);
+    });
+    expect(useLiveTryonStore.getState().isLiveAvailable).toBe(true);
+  });
+
+  it('6. Con un reintento por límite concurrente a los 10 s, el timeout ocurre a los 25 s del inicio, no a los 35 s', async () => {
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: garment1,
+        cameraStream: mockStream,
+        sessionId: 'session-retry-timeout',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    expect(result.current.isLiveLoading).toBe(true);
+
+    // Avanzar 10 segundos
+    act(() => {
+      vi.advanceTimersByTime(10000);
+    });
+
+    // Simular error de límite concurrente a los 10 s disparando el callback onError
+    await act(async () => {
+      lastConnectConfig.onError(new Error('Concurrent session limit reached'));
+    });
+
+    // En retry, stopInternal(true) mantiene isLiveLoading: true
+    expect(result.current.isLiveLoading).toBe(true);
+
+    // Esperar los 5s de retraso antes del reintento (t = 15 s desde el inicio)
+    await act(async () => {
+      vi.advanceTimersByTime(5000);
+    });
+
+    expect(result.current.isLiveLoading).toBe(true);
+
+    // Avanzar 9.9 segundos más (t = 24.9 s desde el inicio): aún no se cumple el plazo global de 25 s
+    act(() => {
+      vi.advanceTimersByTime(9900);
+    });
+    expect(result.current.isLiveLoading).toBe(true);
+    expect(result.current.liveToast).toBeNull();
+
+    // Avanzar 200 ms más (t = 25.1 s desde el inicio): el timeout global de 25 s se dispara!
+    act(() => {
+      vi.advanceTimersByTime(200);
+    });
+
+    // Debe haberse detenido por timeout a los 25 s originales (no a los 35 s o 40 s)
+    expect(result.current.isLiveLoading).toBe(false);
+    expect(result.current.liveToast).toMatch(/No pudimos conectar con Lucy/i);
+    expect(useLiveTryonStore.getState().failed).toBe(true);
+  });
 });

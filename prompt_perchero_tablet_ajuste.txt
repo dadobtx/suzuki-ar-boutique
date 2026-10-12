@@ -1,0 +1,34 @@
+PROMPT PARA ANTIGRAVITY — Perchero tablet: ajustes de revisión
+Guardar en la raíz del repo como: prompt_perchero_tablet_ajuste.txt
+Rama: la MISMA fix/perchero-tablet, sobre b49351b. NO mergear.
+
+Revisión de b49351b: tsc -b, lint, 477 tests raíz, 22 backend y build confirmados. Vuelo, guía,
+timeout de 25 s, AR durante la conexión, primer cuadro y REINICIAR están bien encaminados. Tres ajustes:
+
+1. EL CURSOR Y EL MENSAJE PARPADEAN EN CADA PASO (bug)
+   src/lib/hand-guide.ts, useHandGuide: `isInteractive` incluye `!isBusy`. Cada paso dispara el vuelo
+   (~640 ms, isBusy = true) → el estado pasa a 'hidden' → HandCursor se desmonta y KioskGuide cae al
+   texto general ("PRUÉBALA EN VIVO / o tómate la foto") durante el vuelo, y luego vuelve. Es decir,
+   en cada paso desaparece el cursor y cambia el banner: justo lo contrario de "sincronizado".
+   - Quitar `!isBusy` de isInteractive. Durante el vuelo el estado debe seguir siendo el que
+     corresponde (normalmente 'recenter', porque el disparador queda desarmado tras el paso).
+   - Test: con isBusy = true y cursor activo desarmado → 'recenter' (no 'hidden'); el HandCursor
+     sigue montado.
+
+2. TRES INDICADORES DE "CONECTANDO" A LA VEZ
+   Mientras conecta se ven: el banner superior "PREPARANDO TU PRUEBA EN VIVO…", la píldora flotante
+   nueva "CONECTANDO…" (CameraStage, data-testid="live-loading-indicator", top-20) y el botón
+   "CONECTANDO…". Quitar la píldora flotante (dejar banner + botón). Ajustar su test.
+
+3. ENFRIAMIENTO TAMBIÉN DESPUÉS DE UN FALLO
+   useLiveTryon.stopInternal: `lastStopMsRef.current = failed ? 0 : Date.now()` elimina los 4 s de
+   enfriamiento cuando falla (timeout, cancelación). Justo después de un timeout es cuando Decart puede
+   tener la sesión anterior todavía abierta, y reintentar de inmediato provoca "Concurrent session
+   limit". Volver a `lastStopMsRef.current = Date.now()` siempre. Además, el reintento por límite
+   concurrente no debe reiniciar el plazo de 25 s (que cuente desde el clic/gesto original).
+   Tests: tras un timeout, isLiveAvailable es false durante 4 s; con un reintento a los 10 s, el
+   timeout ocurre a los 25 s del inicio, no a los 35 s.
+
+Reglas: solo hand-guide.ts, CameraStage.tsx, useLiveTryon.ts y tests. Reportar `npx tsc -b`, npm run
+lint, npm test (raíz y backend/), npm run build. Commit fix(rack): ... sin --no-verify. Push sin
+mergear. NO wrangler. NO capturas con el simulador.
