@@ -95,9 +95,28 @@ class MockRTCPeerConnection {
 // @ts-expect-error Mocking global RTCPeerConnection for tests
 globalThis.RTCPeerConnection = MockRTCPeerConnection;
 
+class MockMediaStreamTrack {
+  kind = 'video';
+  readyState: 'live' | 'ended' = 'live';
+  stop = vi.fn().mockImplementation(() => {
+    this.readyState = 'ended';
+  });
+  clone = vi.fn().mockImplementation(() => {
+    const cloned = new MockMediaStreamTrack();
+    return cloned;
+  });
+}
+
 // Mock MediaStream
 class MockMediaStream {
-  getTracks = vi.fn().mockReturnValue([{ stop: vi.fn(), kind: 'video' }]);
+  tracks: MockMediaStreamTrack[];
+  constructor(tracks?: MockMediaStreamTrack[]) {
+    this.tracks = tracks ? [...tracks] : [new MockMediaStreamTrack()];
+  }
+  getTracks = vi.fn().mockImplementation(() => this.tracks);
+  getVideoTracks = vi
+    .fn()
+    .mockImplementation(() => this.tracks.filter((t) => t.kind === 'video'));
 }
 // @ts-expect-error Mocking global MediaStream for tests
 globalThis.MediaStream = MockMediaStream;
@@ -845,5 +864,117 @@ describe('useLiveTryon hook integration', () => {
       result.current.handleStopLiveTryon();
     });
     sendGarmentSpy.mockRestore();
+  });
+
+  it('tras una sesión live completa con Decart (stop/countdown), la pista de la cámara principal sigue con readyState === "live"', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'success',
+            apiKey: 'decart-test-token',
+            max_seconds: 15,
+            live_id: 301,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+    const cameraTrack = stream.getVideoTracks()[0];
+    expect(cameraTrack.readyState).toBe('live');
+
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    // Simular recepción de video remoto
+    const mockRemote = new MediaStream() as any;
+    act(() => {
+      lastDecartConnectOptions.onRemoteStream(mockRemote);
+    });
+    expect(result.current.isLiveActive).toBe(true);
+
+    // Finalizar sesión (fin de countdown o parada explícita)
+    act(() => {
+      result.current.handleStopLiveTryon();
+    });
+
+    // La pista principal de la cámara NO debe haber sido detenida por el teardown de Decart
+    expect(cameraTrack.stop).not.toHaveBeenCalled();
+    expect(cameraTrack.readyState).toBe('live');
+  });
+
+  it('tras una sesión live con error de Decart, la pista de la cámara principal sigue con readyState === "live"', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'success',
+            apiKey: 'decart-test-token',
+            max_seconds: 15,
+            live_id: 302,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+    const cameraTrack = stream.getVideoTracks()[0];
+    expect(cameraTrack.readyState).toBe('live');
+
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    // Simular error de Decart durante la sesión
+    await act(async () => {
+      mockDecartRealtimeClient._emit('error', {
+        code: '1013',
+        message: 'Decart: Concurrent session limit reached',
+      });
+    });
+
+    // La pista principal de la cámara NO debe haber sido detenida por el error
+    expect(cameraTrack.stop).not.toHaveBeenCalled();
+    expect(cameraTrack.readyState).toBe('live');
   });
 });

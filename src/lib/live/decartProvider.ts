@@ -18,6 +18,7 @@ export const DECART_TRYON_PROMPT =
 export class DecartLiveProvider implements LiveTryOnProvider {
   private config: LiveTryOnConfig;
   private realtimeClient: RealTimeClient | null = null;
+  private liveStream: MediaStream | null = null;
   private state: LiveTryOnManagerState = 'idle';
   private connectionKey: string;
   public closedAt: number | null = null;
@@ -143,7 +144,15 @@ export class DecartLiveProvider implements LiveTryOnProvider {
 
       const model = models.realtime('lucy-vton-latest');
 
-      const realtimeClient = await client.realtime.connect(this.config.stream, {
+      // NUNCA pasar al SDK el MediaStream de la cámara ni una pista compartida:
+      // LiveKit / Decart SDK detiene las pistas locales al desconectar.
+      // Clonamos las pistas de video para crear un MediaStream exclusivo para esta sesión.
+      const liveStream = new MediaStream(
+        this.config.stream.getVideoTracks().map((t) => t.clone()),
+      );
+      this.liveStream = liveStream;
+
+      const realtimeClient = await client.realtime.connect(liveStream, {
         model,
         mirror: false, // El stream enviado NO debe ir espejado para no invertir logos Suzuki
         retries: 0, // Deshabilitar reconexión automática del SDK para control estricto de cuota
@@ -178,6 +187,16 @@ export class DecartLiveProvider implements LiveTryOnProvider {
 
       if (this.isClosedOrClosing()) {
         realtimeClient.disconnect();
+        if (this.liveStream) {
+          this.liveStream.getTracks().forEach((t) => {
+            try {
+              t.stop();
+            } catch {
+              // ignore
+            }
+          });
+          this.liveStream = null;
+        }
         return;
       }
 
@@ -247,6 +266,16 @@ export class DecartLiveProvider implements LiveTryOnProvider {
         this.stop();
       });
     } catch (err) {
+      if (this.liveStream) {
+        this.liveStream.getTracks().forEach((t) => {
+          try {
+            t.stop();
+          } catch {
+            // ignore
+          }
+        });
+        this.liveStream = null;
+      }
       if (!this.isClosedOrClosing()) {
         const error = err instanceof Error ? err : new Error(String(err));
         const classified = this.classifyError(error);
@@ -289,6 +318,22 @@ export class DecartLiveProvider implements LiveTryOnProvider {
         console.warn('[live-decart] error disconnecting realtime client:', err);
       }
       this.realtimeClient = null;
+    }
+
+    // Detener ÚNICAMENTE las pistas de liveStream clonadas (nunca las de la cámara)
+    if (this.liveStream) {
+      try {
+        this.liveStream.getTracks().forEach((track) => {
+          try {
+            track.stop();
+          } catch {
+            // ignore track stop error
+          }
+        });
+      } catch (err) {
+        console.warn('[live-decart] error stopping liveStream tracks:', err);
+      }
+      this.liveStream = null;
     }
 
     this.state = 'closed';

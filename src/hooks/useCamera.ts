@@ -17,6 +17,9 @@ import { selectCamera } from '@/lib/camera-selector';
 export function useCamera(preferredDeviceId?: string) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const isStoppingIntentionalRef = useRef(false);
+  const lastConstraintsRef = useRef<MediaStreamConstraints | null>(null);
+  const reacquireCameraRef = useRef<() => Promise<void>>(() => Promise.resolve());
 
   const {
     status,
@@ -39,8 +42,12 @@ export function useCamera(preferredDeviceId?: string) {
   } = useCameraStore();
 
   const stopTracks = useCallback(() => {
+    isStoppingIntentionalRef.current = true;
     if (streamRef.current) {
-      streamRef.current.getTracks().forEach((t) => t.stop());
+      streamRef.current.getTracks().forEach((t) => {
+        t.onended = null;
+        t.stop();
+      });
       streamRef.current = null;
     }
   }, []);
@@ -67,6 +74,7 @@ export function useCamera(preferredDeviceId?: string) {
   );
 
   const start = useCallback(async () => {
+    isStoppingIntentionalRef.current = false;
     // Check API availability
     if (!navigator.mediaDevices?.getUserMedia) {
       setStatus('unsupported');
@@ -151,39 +159,43 @@ export function useCamera(preferredDeviceId?: string) {
           : { ideal: selectedId }
         : undefined;
 
+      let chosenConstraints: MediaStreamConstraints = {
+        video: {
+          deviceId: deviceIdConstraint,
+          facingMode: 'user',
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          frameRate: { ideal: 30 },
+        },
+        audio: false,
+      };
+
       // Attempt 1: Full ideal constraints
       try {
-        finalStream = await navigator.mediaDevices.getUserMedia({
-          video: {
-            deviceId: deviceIdConstraint,
-            facingMode: 'user',
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 },
-          },
-          audio: false,
-        });
+        finalStream = await navigator.mediaDevices.getUserMedia(chosenConstraints);
       } catch (e1) {
         console.warn('[useCamera] Attempt 1 failed (full constraints):', e1);
 
         // Attempt 2: Drop resolution constraints
+        chosenConstraints = {
+          video: {
+            deviceId: deviceIdConstraint,
+            facingMode: 'user',
+          },
+          audio: false,
+        };
         try {
-          finalStream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              deviceId: deviceIdConstraint,
-              facingMode: 'user',
-            },
-            audio: false,
-          });
+          finalStream = await navigator.mediaDevices.getUserMedia(chosenConstraints);
         } catch (e2) {
           console.warn('[useCamera] Attempt 2 failed (no resolution):', e2);
 
           // Attempt 3: Bare minimum
+          chosenConstraints = {
+            video: true,
+            audio: false,
+          };
           try {
-            finalStream = await navigator.mediaDevices.getUserMedia({
-              video: true,
-              audio: false,
-            });
+            finalStream = await navigator.mediaDevices.getUserMedia(chosenConstraints);
           } catch (e3) {
             console.error('[useCamera] Attempt 3 failed (bare minimum):', e3);
             throw e3;
@@ -192,6 +204,7 @@ export function useCamera(preferredDeviceId?: string) {
       }
 
       if (finalStream) {
+        lastConstraintsRef.current = chosenConstraints;
         assignStream(finalStream);
         setPhase('playing');
 
@@ -202,6 +215,14 @@ export function useCamera(preferredDeviceId?: string) {
         }
         if (finalTrack && typeof finalTrack.getCapabilities === 'function') {
           setCapabilities(finalTrack.getCapabilities());
+        }
+        if (finalTrack) {
+          finalTrack.addEventListener('ended', () => {
+            if (!isStoppingIntentionalRef.current) {
+              console.warn('[camera] track ended, reacquiring');
+              void reacquireCameraRef.current();
+            }
+          });
         }
 
         setStatus('granted');
@@ -236,6 +257,48 @@ export function useCamera(preferredDeviceId?: string) {
     assignStream,
     preferredDeviceId,
   ]);
+
+  const reacquireCamera = useCallback(async () => {
+    if (isStoppingIntentionalRef.current) return;
+    try {
+      const constraints = lastConstraintsRef.current || {
+        video: {
+          deviceId: deviceId ? { ideal: deviceId } : undefined,
+          facingMode: 'user',
+        },
+        audio: false,
+      };
+
+      const newStream = await navigator.mediaDevices.getUserMedia(constraints);
+      if (isStoppingIntentionalRef.current) {
+        newStream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      assignStream(newStream);
+      setPhase('playing');
+      const newTrack = newStream.getVideoTracks()[0];
+      if (newTrack) {
+        if (typeof newTrack.getSettings === 'function') {
+          setSettings(newTrack.getSettings());
+        }
+        if (typeof newTrack.getCapabilities === 'function') {
+          setCapabilities(newTrack.getCapabilities());
+        }
+        newTrack.addEventListener('ended', () => {
+          if (!isStoppingIntentionalRef.current) {
+            console.warn('[camera] track ended, reacquiring');
+            void reacquireCameraRef.current();
+          }
+        });
+      }
+      setStatus('granted');
+    } catch (err) {
+      console.warn('[useCamera] reacquire failed, attempting full start():', err);
+      void start();
+    }
+  }, [assignStream, deviceId, setCapabilities, setPhase, setSettings, setStatus, start]);
+
+  reacquireCameraRef.current = reacquireCamera;
 
   const retry = useCallback(() => {
     stopTracks();
