@@ -256,8 +256,14 @@
     "fallbackToast": "Modo estático activo",
     "readyToast": "¡Probador en vivo activo!",
     "error": "No pudimos iniciar la prueba en vivo. Intenta otra vez.",
-    "busy": "La prueba en vivo está ocupada. Intenta en unos segundos.",
-    "connectTimeout": "No pudimos conectar con Lucy. Intenta de nuevo en unos segundos."
+    "busy": "La prueba en vivo está ocupada, intenta en un momento",
+    "busyMessage": "La prueba en vivo está ocupada, intenta en un momento",
+    "kioskKey": "Clave de kiosko no autorizada",
+    "occupied": "OCUPADO",
+    "connectTimeout": "No pudimos conectar con Lucy. Intenta de nuevo en unos segundos.",
+    "planBTitle": "TÓMATE LA FOTO CON LA PRENDA",
+    "planBText": "La prueba en vivo no está disponible ahora. Tómate una foto con la prenda y te la enviamos.",
+    "planBButton": "TÓMATE LA FOTO"
   },
   "variant": {
     "title": "COLOR"

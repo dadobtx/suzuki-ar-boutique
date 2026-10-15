@@ -262,15 +262,16 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
   // Only allow garment interaction if they have a profile
   const garmentActiveWithProfile = garmentActive && hasProfile;
 
-  const isLiveTryOnEnabled = import.meta.env.VITE_LIVE_TRYON === 'on';
-  const showLiveButton =
-    isLiveTryOnEnabled && activeGarment?.category === 'top' && garmentActiveWithProfile;
-
   const {
     isLiveActive,
     isLiveLoading,
     isLiveAvailable,
     isLiveCoolingDown,
+    isQuotaExhausted,
+    isBusyCooldown,
+    showLiveButton,
+    showPlanB,
+    dismissPlanB,
     firstFrameRendered,
     liveCountdown,
     liveToast,
@@ -555,6 +556,42 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
           </div>
         )}
 
+        {/* Plan B con FASHN: sugerencia directa para tomarse la foto con la prenda */}
+        {showPlanB && !isLiveActive && kioskState === 'TRYON' && (
+          <div className="absolute bottom-56 left-1/2 -translate-x-1/2 z-45 bg-surface/95 border-2 border-brand-red text-fg px-6 py-4 rounded-2xl shadow-2xl flex items-center gap-4 max-w-[90%] md:max-w-md animate-in fade-in zoom-in-95">
+            <div className="flex flex-col flex-1 min-w-0">
+              <span className="font-bold text-base md:text-lg text-white">
+                {t('live.planBTitle', 'TÓMATE LA FOTO CON LA PRENDA')}
+              </span>
+              <span className="text-xs md:text-sm text-zinc-300">
+                {t(
+                  'live.planBText',
+                  'La prueba en vivo no está disponible ahora. Tómate una foto con la prenda y te la enviamos.',
+                )}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                dismissPlanB();
+                transition('PHOTO_COUNTDOWN');
+              }}
+              className="px-4 py-3 bg-brand-red hover:bg-brand-red/90 text-white rounded-xl font-bold flex items-center gap-2 text-sm md:text-base shrink-0 shadow-md transition-transform hover:scale-105 active:scale-95"
+            >
+              <CameraIcon size={20} />
+              <span>{t('live.planBButton', 'TÓMATE LA FOTO')}</span>
+            </button>
+            <button
+              type="button"
+              onClick={dismissPlanB}
+              className="p-1 text-zinc-400 hover:text-white shrink-0"
+              aria-label="Cerrar sugerencia"
+            >
+              <XIcon size={18} />
+            </button>
+          </div>
+        )}
+
         {/* Shoot Photo & Live Tryon Buttons (z-index 40) */}
         {garmentActiveWithProfile && activeGarment && kioskState === 'TRYON' && (
           <div className="absolute bottom-12 left-1/2 -translate-x-1/2 flex items-center justify-center gap-8 z-40">
@@ -562,10 +599,12 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
               <button
                 type="button"
                 onClick={handleStartLiveTryon}
-                disabled={isLiveLoading || isLiveActive || isLiveCoolingDown}
+                disabled={
+                  isLiveLoading || isLiveActive || isLiveCoolingDown || isQuotaExhausted
+                }
                 aria-label={t('live.seeLive', 'VERME EN VIVO')}
                 className={`relative w-[160px] h-[160px] rounded-full bg-fg text-bg border-4 border-fg/30 flex flex-col items-center justify-center shadow-2xl transition-transform ${
-                  isLiveLoading || isLiveCoolingDown
+                  isLiveLoading || isLiveCoolingDown || isQuotaExhausted
                     ? 'opacity-50 cursor-not-allowed'
                     : isLiveActive
                       ? 'cursor-default scale-100'
@@ -603,7 +642,9 @@ export function CameraStage({ isActive = true }: { isActive?: boolean }) {
                     <span className="font-display tracking-widest text-lg mt-1 uppercase text-center leading-tight max-w-[130px] text-bg">
                       {isLiveLoading
                         ? t('live.connecting', 'CONECTANDO…')
-                        : t('live.seeLive', 'VERME EN VIVO')}
+                        : isQuotaExhausted || isBusyCooldown
+                          ? t('live.occupied', 'OCUPADO')
+                          : t('live.seeLive', 'VERME EN VIVO')}
                     </span>
                   </>
                 )}

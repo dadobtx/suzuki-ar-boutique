@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { LiveTryOnManager } from '@/lib/liveTryon';
 import { useLiveTryonStore } from '@/store/liveTryon';
 import { resolveGarmentAssets } from '@/lib/garment-assets';
+import { getKioskKey } from '@/lib/kioskKey';
+import type { LiveErrorReason } from '@/lib/live/types';
 import type { Garment } from '@/types/garment';
 import type { PresenceState } from '@/hooks/usePresence';
 import type { KioskState } from '@/store/kiosk';
@@ -12,8 +14,9 @@ const PUBLIC_ASSETS_BASE =
   'https://dadobtx.github.io/suzuki-ar-boutique/';
 
 export const LIVE_COOLDOWN_MS = 4000;
-export const CONCURRENT_RETRY_DELAY_MS = 5000;
-export const LIVE_CONNECT_TIMEOUT_MS = 25000;
+export const LIVE_BUSY_COOLDOWN_MS = 30000;
+export const CONCURRENT_RETRY_DELAY_MS = 10000;
+export const LIVE_CONNECT_TIMEOUT_MS = 30000;
 
 export interface UseLiveTryOnProps {
   activeGarment: Garment | null;
@@ -31,6 +34,11 @@ export interface UseLiveTryOnResult {
   isLiveLoading: boolean;
   isLiveAvailable: boolean;
   isLiveCoolingDown: boolean;
+  isQuotaExhausted: boolean;
+  isBusyCooldown: boolean;
+  showLiveButton: boolean;
+  showPlanB: boolean;
+  dismissPlanB: () => void;
   firstFrameRendered: boolean;
   liveStream: MediaStream | null;
   liveCountdown: number | null;
@@ -54,8 +62,12 @@ export function useLiveTryon({
   const { t } = useTranslation();
 
   const isLiveTryOnEnabled = import.meta.env.VITE_LIVE_TRYON === 'on';
+  const kioskKey = getKioskKey();
   const showLiveButton =
-    isLiveTryOnEnabled && activeGarment?.category === 'top' && garmentActiveWithProfile;
+    isLiveTryOnEnabled &&
+    Boolean(kioskKey) &&
+    activeGarment?.category === 'top' &&
+    garmentActiveWithProfile;
 
   const [isLiveActive, setIsLiveActive] = useState(false);
   const [isLiveLoading, setIsLiveLoading] = useState(false);
@@ -64,16 +76,21 @@ export function useLiveTryon({
   const [liveCountdown, setLiveCountdown] = useState<number | null>(null);
   const [liveToast, setLiveToast] = useState<string | null>(null);
   const [cooldownRemainingSec, setCooldownRemainingSec] = useState<number>(0);
+  const [busyRemainingSec, setBusyRemainingSec] = useState<number>(0);
+  const [isQuotaExhausted, setIsQuotaExhausted] = useState<boolean>(false);
+  const [showPlanB, setShowPlanB] = useState<boolean>(false);
 
   const liveVideoRef = useRef<HTMLVideoElement>(null);
   const managerRef = useRef<LiveTryOnManager | null>(null);
   const liveStartingRef = useRef<boolean>(false);
   const lastStopMsRef = useRef<number>(0);
+  const busyCooldownUntilRef = useRef<number>(0);
   const sessionStartTimeRef = useRef<number>(0);
   const hadVideoRef = useRef<boolean>(false);
   const retryCountRef = useRef<number>(0);
   const isMountedRef = useRef<boolean>(true);
   const lastErrorRef = useRef<string | null>(null);
+  const lastErrorReasonRef = useRef<LiveErrorReason | null>(null);
   const firstFrameRenderedRef = useRef<boolean>(false);
   const liveTriggerTimeRef = useRef<number>(0);
   const connectStartTimeRef = useRef<number>(0);
@@ -81,6 +98,43 @@ export function useLiveTryon({
   const maxSecondsRef = useRef<number>(30);
   const connectingGarmentIdRef = useRef<string | null>(null);
   const failedRef = useRef<boolean>(false);
+  const activeLiveIdRef = useRef<number | null>(null);
+  const generationSecondsRef = useRef<number>(0);
+
+  const dismissPlanB = useCallback(() => {
+    setShowPlanB(false);
+  }, []);
+
+  // Consultar cuota de Decart (/live/quota)
+  const checkQuota = useCallback(async () => {
+    if (!showLiveButton) return;
+    try {
+      const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
+      const res = await fetch(`${BACKEND_URL}/live/quota`);
+      if (!res.ok) {
+        setIsQuotaExhausted(false);
+        return;
+      }
+      const data = await res.json();
+      if (data && !data.unknown && typeof data.remaining === 'number') {
+        setIsQuotaExhausted(data.remaining === 0);
+      } else {
+        setIsQuotaExhausted(false);
+      }
+    } catch {
+      setIsQuotaExhausted(false);
+    }
+  }, [showLiveButton]);
+
+  // Sondeo de cuota cuando el botón está visible
+  useEffect(() => {
+    if (!showLiveButton) return;
+    void checkQuota();
+    const timer = setInterval(() => {
+      void checkQuota();
+    }, 5000);
+    return () => clearInterval(timer);
+  }, [showLiveButton, checkQuota]);
 
   // Sincronizar telemetría para DiagnosticOverlay
   const syncTelemetry = useCallback(() => {
@@ -88,7 +142,14 @@ export function useLiveTryon({
     const remainingMs = Math.max(0, LIVE_COOLDOWN_MS - elapsed);
     const remainingSec = Math.ceil(remainingMs / 1000);
 
+    const busyElapsed = Math.max(0, busyCooldownUntilRef.current - Date.now());
+    const busySec = Math.ceil(busyElapsed / 1000);
+
     setCooldownRemainingSec(remainingSec);
+    setBusyRemainingSec(busySec);
+
+    const isCoolingDown = remainingSec > 0 || busySec > 0;
+
     useLiveTryonStore.setState({
       managerState: managerRef.current?.getState() ?? 'idle',
       connectionKey: managerRef.current?.getConnectionKey() ?? null,
@@ -101,7 +162,8 @@ export function useLiveTryon({
         showLiveButton &&
         !isLiveLoading &&
         !isLiveActive &&
-        remainingSec <= 0 &&
+        !isCoolingDown &&
+        !isQuotaExhausted &&
         kioskState === 'TRYON' &&
         Boolean(activeGarment),
       firstFrameRendered,
@@ -112,6 +174,7 @@ export function useLiveTryon({
     firstFrameRendered,
     isLiveActive,
     isLiveLoading,
+    isQuotaExhausted,
     kioskState,
     showLiveButton,
   ]);
@@ -150,6 +213,44 @@ export function useLiveTryon({
     }
     syncTelemetry();
   }, [syncTelemetry]);
+
+  // Enviar beacon de cierre estricto ante unmount o visibilitychange
+  const sendTeardownBeacon = useCallback(() => {
+    const liveId = activeLiveIdRef.current;
+    if (!liveId) return;
+
+    const hadVideo = hadVideoRef.current;
+    const failed = !hadVideo || failedRef.current;
+    const reason = lastErrorReasonRef.current || (failed ? 'interrupted' : undefined);
+    const seconds = hadVideo ? generationSecondsRef.current : 0;
+    const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
+
+    try {
+      const payload = JSON.stringify({
+        live_id: liveId,
+        seconds,
+        failed,
+        reason,
+      });
+
+      if (typeof navigator !== 'undefined' && navigator.sendBeacon) {
+        navigator.sendBeacon(
+          `${BACKEND_URL}/live/complete`,
+          new Blob([payload], { type: 'text/plain;charset=UTF-8' }),
+        );
+      } else {
+        fetch(`${BACKEND_URL}/live/complete`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: payload,
+          keepalive: true,
+        }).catch(() => {});
+      }
+    } catch (err) {
+      console.warn('[live] error sending teardown beacon:', err);
+    }
+    activeLiveIdRef.current = null;
+  }, []);
 
   // Detener la sesión de manera segura
   const stopInternal = useCallback(
@@ -192,18 +293,31 @@ export function useLiveTryon({
 
   // Limpieza ante fallo
   const cleanupAfterFailure = useCallback(
-    (toastKey: 'live.busy' | 'live.error') => {
+    (
+      toastKey: 'live.busy' | 'live.error' | 'live.connectTimeout' | 'live.kioskKey',
+      reason?: LiveErrorReason,
+    ) => {
+      if (reason) {
+        lastErrorReasonRef.current = reason;
+      }
       stopInternal(false, true);
+      setShowPlanB(true);
+
       const defaultMsg =
         toastKey === 'live.busy'
-          ? 'La prueba en vivo está ocupada. Intenta en unos segundos.'
-          : 'No pudimos iniciar la prueba en vivo. Intenta otra vez.';
+          ? 'La prueba en vivo está ocupada, intenta en un momento'
+          : toastKey === 'live.kioskKey'
+            ? 'Clave de kiosko no autorizada'
+            : toastKey === 'live.connectTimeout'
+              ? 'No pudimos conectar con Lucy. Intenta de nuevo en unos segundos.'
+              : 'No pudimos iniciar la prueba en vivo. Intenta otra vez.';
+
       setLiveToast(t(toastKey, defaultMsg));
       setTimeout(() => {
         if (isMountedRef.current) {
           setLiveToast(null);
         }
-      }, 3000);
+      }, 4000);
     },
     [stopInternal, t],
   );
@@ -216,41 +330,41 @@ export function useLiveTryon({
       return;
     }
 
+    const currentKioskKey = getKioskKey();
+    if (!currentKioskKey) {
+      liveStartingRef.current = false;
+      cleanupAfterFailure('live.kioskKey', 'kiosk_key');
+      return;
+    }
+
     const stream = getCameraStream ? getCameraStream() : (cameraStream ?? null);
     if (!stream) {
       liveStartingRef.current = false;
-      cleanupAfterFailure('live.error');
+      cleanupAfterFailure('live.error', 'token_error');
       return;
     }
 
     setIsLiveLoading(true);
     hadVideoRef.current = false;
     lastErrorRef.current = null;
+    lastErrorReasonRef.current = null;
     failedRef.current = false;
+    generationSecondsRef.current = 0;
     connectingGarmentIdRef.current = activeGarment.id;
 
     if (connectStartTimeRef.current === 0) {
       connectStartTimeRef.current = Date.now();
     }
 
+    // Timeout sin video: 30 segundos
     if (!connectTimeoutRef.current) {
       const elapsed = Date.now() - connectStartTimeRef.current;
       const remainingTimeout = Math.max(0, LIVE_CONNECT_TIMEOUT_MS - elapsed);
       connectTimeoutRef.current = setTimeout(() => {
         if (isMountedRef.current && !firstFrameRenderedRef.current) {
-          console.warn('[live] Connection timeout after 25s without video');
-          stopInternal(false, true);
-          setLiveToast(
-            t(
-              'live.connectTimeout',
-              'No pudimos conectar con Lucy. Intenta de nuevo en unos segundos.',
-            ),
-          );
-          setTimeout(() => {
-            if (isMountedRef.current) {
-              setLiveToast(null);
-            }
-          }, 4000);
+          console.warn('[live] Connection timeout after 30s without video');
+          lastErrorReasonRef.current = 'no_video_timeout';
+          cleanupAfterFailure('live.connectTimeout', 'no_video_timeout');
         }
       }, remainingTimeout);
     }
@@ -262,14 +376,18 @@ export function useLiveTryon({
     console.log(`[live] t+${elapsedToken}ms token requested`);
     syncTelemetry();
 
+    const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
+
     try {
-      const BACKEND_URL = import.meta.env.VITE_AI_BACKEND_URL || 'http://localhost:8787';
       const event =
         new URLSearchParams(window.location.search).get('event') || 'default-event';
 
       const res = await fetch(`${BACKEND_URL}/live/token`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          'X-Kiosk-Key': currentKioskKey,
+        },
         body: JSON.stringify({
           session_id: sessionId,
           sku: activeGarment.sku,
@@ -278,11 +396,33 @@ export function useLiveTryon({
       });
 
       const data = await res.json();
+
+      // Manejo 403 kiosk_key
+      if (res.status === 403) {
+        if (connectTimeoutRef.current) {
+          clearTimeout(connectTimeoutRef.current);
+          connectTimeoutRef.current = null;
+        }
+        lastErrorReasonRef.current = 'kiosk_key';
+        cleanupAfterFailure('live.kioskKey', 'kiosk_key');
+        return;
+      }
+
+      // Manejo 429
       if (res.status === 429) {
         if (connectTimeoutRef.current) {
           clearTimeout(connectTimeoutRef.current);
           connectTimeoutRef.current = null;
         }
+
+        if (data.reason === 'busy') {
+          // Candado busy: deshabilitar 30 s sin reintento
+          lastErrorReasonRef.current = 'busy';
+          busyCooldownUntilRef.current = Date.now() + LIVE_BUSY_COOLDOWN_MS;
+          cleanupAfterFailure('live.busy', 'busy');
+          return;
+        }
+
         const msg =
           data.limit === 'user'
             ? t('live.userLimit', 'Ya usaste tus 3 pruebas en vivo')
@@ -292,6 +432,7 @@ export function useLiveTryon({
         setIsLiveLoading(false);
         liveStartingRef.current = false;
         lastStopMsRef.current = Date.now();
+        setShowPlanB(true);
         syncTelemetry();
         return;
       }
@@ -299,6 +440,10 @@ export function useLiveTryon({
       if (data.status !== 'success') {
         throw new Error(data.error || 'Token error');
       }
+
+      const token = data.apiKey || data.token;
+      const liveId = data.live_session_id || data.live_id;
+      activeLiveIdRef.current = liveId;
 
       const assets = resolveGarmentAssets(activeGarment, activeVariantId);
       const referenceImageUrl = new URL(
@@ -308,9 +453,9 @@ export function useLiveTryon({
 
       maxSecondsRef.current = data.max_seconds;
       const manager = new LiveTryOnManager({
-        token: data.token,
+        token,
         maxSeconds: data.max_seconds,
-        liveId: data.live_id,
+        liveId,
         stream,
         referenceImageUrl,
         triggerTime: liveTriggerTimeRef.current,
@@ -321,6 +466,7 @@ export function useLiveTryon({
           setIsLiveLoading(false);
           liveStartingRef.current = false;
           retryCountRef.current = 0;
+          setShowPlanB(false);
           syncTelemetry();
 
           fetch(`${BACKEND_URL}/kiosk/interactions`, {
@@ -334,22 +480,30 @@ export function useLiveTryon({
             }),
           }).catch(() => {});
         },
-        onError: async (err) => {
-          console.error('[live] onError handler:', err);
+        onError: async (err, reason) => {
+          console.error('[live] onError handler:', err, 'reason:', reason);
           lastErrorRef.current = err.message;
+          const classifiedReason =
+            reason ||
+            (err.message.toLowerCase().includes('concurrent session limit')
+              ? 'limit'
+              : 'token_error');
+          lastErrorReasonRef.current = classifiedReason;
           syncTelemetry();
 
-          const isConcurrentError = err.message
-            .toLowerCase()
-            .includes('concurrent session limit');
+          // busy o limit: NO reintentar. Botón deshabilitado 30 s.
+          if (classifiedReason === 'busy' || classifiedReason === 'limit') {
+            busyCooldownUntilRef.current = Date.now() + LIVE_BUSY_COOLDOWN_MS;
+            cleanupAfterFailure('live.busy', classifiedReason);
+            return;
+          }
 
-          if (isConcurrentError && retryCountRef.current === 0) {
+          // Errores transitorios (ws_error, webrtc_error, token_error): 1 reintento tras >= 10 s
+          if (retryCountRef.current === 0) {
             retryCountRef.current = 1;
-            // Detener la sesión fallida (onClose envía failed: true)
             stopInternal(true);
             setIsLiveLoading(true);
 
-            // Esperar 5 s antes de reintentar una sola vez con token nuevo
             await new Promise((resolve) =>
               setTimeout(resolve, CONCURRENT_RETRY_DELAY_MS),
             );
@@ -362,30 +516,44 @@ export function useLiveTryon({
               liveStartingRef.current = true;
               void startSession();
             } else {
-              cleanupAfterFailure('live.busy');
+              cleanupAfterFailure('live.error', classifiedReason);
             }
-          } else if (isConcurrentError && retryCountRef.current > 0) {
-            cleanupAfterFailure('live.busy');
           } else {
-            cleanupAfterFailure('live.error');
+            cleanupAfterFailure('live.error', classifiedReason);
           }
         },
-        onClose: () => {
+        onClose: (finalSeconds?: number) => {
           const elapsedSeconds = Math.floor(
             (Date.now() - sessionStartTimeRef.current) / 1000,
           );
+          const secondsUsed =
+            typeof finalSeconds === 'number' && finalSeconds > 0
+              ? finalSeconds
+              : elapsedSeconds;
+          generationSecondsRef.current = Math.max(
+            0,
+            Math.min(secondsUsed, data.max_seconds),
+          );
+
           const hadVideo = hadVideoRef.current;
+          const isFailed = !hadVideo || failedRef.current;
+          const reason =
+            lastErrorReasonRef.current || (isFailed ? 'token_error' : undefined);
+
           fetch(`${BACKEND_URL}/live/complete`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              live_id: data.live_id,
-              seconds: hadVideo
-                ? Math.max(0, Math.min(elapsedSeconds, data.max_seconds))
-                : 0,
-              failed: !hadVideo || failedRef.current,
+              live_id: liveId,
+              seconds: hadVideo ? generationSecondsRef.current : 0,
+              failed: isFailed,
+              reason,
             }),
-          }).catch(() => {});
+          })
+            .catch(() => {})
+            .finally(() => {
+              activeLiveIdRef.current = null;
+            });
         },
       });
 
@@ -398,8 +566,20 @@ export function useLiveTryon({
       lastErrorRef.current = errMsg;
       syncTelemetry();
 
-      const isConcurrentError = errMsg.toLowerCase().includes('concurrent session limit');
-      if (isConcurrentError && retryCountRef.current === 0) {
+      const isConcurrent =
+        errMsg.toLowerCase().includes('concurrent session limit') ||
+        errMsg.toLowerCase().includes('limit');
+      const isBusy = errMsg.toLowerCase().includes('busy');
+
+      if (isConcurrent || isBusy) {
+        const classified = isBusy ? 'busy' : 'limit';
+        lastErrorReasonRef.current = classified;
+        busyCooldownUntilRef.current = Date.now() + LIVE_BUSY_COOLDOWN_MS;
+        cleanupAfterFailure('live.busy', classified);
+        return;
+      }
+
+      if (retryCountRef.current === 0) {
         retryCountRef.current = 1;
         stopInternal(true);
         setIsLiveLoading(true);
@@ -410,7 +590,7 @@ export function useLiveTryon({
           liveStartingRef.current = true;
           void startSession();
         } else {
-          cleanupAfterFailure('live.busy');
+          cleanupAfterFailure('live.error', 'token_error');
         }
       } else {
         if (connectTimeoutRef.current) {
@@ -418,11 +598,7 @@ export function useLiveTryon({
           connectTimeoutRef.current = null;
         }
         connectStartTimeRef.current = 0;
-        if (isConcurrentError && retryCountRef.current > 0) {
-          cleanupAfterFailure('live.busy');
-        } else {
-          cleanupAfterFailure('live.error');
-        }
+        cleanupAfterFailure('live.error', 'token_error');
       }
     }
   }, [
@@ -447,16 +623,23 @@ export function useLiveTryon({
     if (timeSinceStop < LIVE_COOLDOWN_MS) {
       return;
     }
+    if (Date.now() < busyCooldownUntilRef.current) {
+      return;
+    }
+    if (isQuotaExhausted) {
+      return;
+    }
 
     liveTriggerTimeRef.current = performance.now();
     connectStartTimeRef.current = Date.now();
     console.log('[live] t+0ms click/gesture trigger');
     failedRef.current = false;
+    setShowPlanB(false);
 
     liveStartingRef.current = true;
     retryCountRef.current = 0;
     await startSession();
-  }, [isLiveActive, isLiveLoading, startSession]);
+  }, [isLiveActive, isLiveLoading, isQuotaExhausted, startSession]);
 
   // Cancelar la conexión en curso si la prenda activa cambia durante la carga
   useEffect(() => {
@@ -471,6 +654,11 @@ export function useLiveTryon({
     }
   }, [activeGarment?.id, isLiveLoading, stopInternal]);
 
+  // Ocultar Plan B al cambiar de prenda
+  useEffect(() => {
+    setShowPlanB(false);
+  }, [activeGarment?.id]);
+
   // Ausencia del usuario
   useEffect(() => {
     if (isLiveActive && presence === 'absent') {
@@ -478,18 +666,19 @@ export function useLiveTryon({
     }
   }, [presence, isLiveActive, handleStopLiveTryon]);
 
-  // Cambio de visibilidad del documento
+  // Cambio de visibilidad del documento: desconexión y beacon
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.hidden && isLiveActive) {
+      if (document.hidden && (isLiveActive || isLiveLoading)) {
         handleStopLiveTryon();
+        sendTeardownBeacon();
       }
     };
     document.addEventListener('visibilitychange', handleVisibilityChange);
     return () => document.removeEventListener('visibilitychange', handleVisibilityChange);
-  }, [isLiveActive, handleStopLiveTryon]);
+  }, [isLiveActive, isLiveLoading, handleStopLiveTryon, sendTeardownBeacon]);
 
-  // Desmontaje real del componente (limpieza con [])
+  // Desmontaje real del componente: desconexión estricta y beacon
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -502,8 +691,9 @@ export function useLiveTryon({
         managerRef.current.stop();
         managerRef.current = null;
       }
+      sendTeardownBeacon();
     };
-  }, []);
+  }, [sendTeardownBeacon]);
 
   // Reenviar prenda solo si el manager está 'active'
   useEffect(() => {
@@ -554,7 +744,7 @@ export function useLiveTryon({
     };
   }, [isLiveActive, firstFrameRendered, notifyFirstFrame]);
 
-  // Cuenta regresiva de sesión en vivo (solo corre cuando el primer cuadro ya se renderizó)
+  // Cuenta regresiva de sesión en vivo
   useEffect(() => {
     if (
       !isLiveActive ||
@@ -573,14 +763,16 @@ export function useLiveTryon({
     return () => clearTimeout(timer);
   }, [isLiveActive, firstFrameRendered, liveCountdown, handleStopLiveTryon]);
 
-  // Disponibilidad de Live (incluyendo enfriamiento de 4 s)
+  // Disponibilidad de Live (incluyendo enfriamientos normal y busy, y cuota)
   const isCooldownActive = cooldownRemainingSec > 0;
-  const isLiveCoolingDown = isCooldownActive;
+  const isBusyActive = busyRemainingSec > 0;
+  const isLiveCoolingDown = isCooldownActive || isBusyActive;
   const isLiveAvailable =
     showLiveButton &&
     !isLiveLoading &&
     !isLiveActive &&
-    !isCooldownActive &&
+    !isLiveCoolingDown &&
+    !isQuotaExhausted &&
     kioskState === 'TRYON' &&
     Boolean(activeGarment);
 
@@ -589,6 +781,11 @@ export function useLiveTryon({
     isLiveLoading,
     isLiveAvailable,
     isLiveCoolingDown,
+    isQuotaExhausted,
+    isBusyCooldown: isBusyActive,
+    showLiveButton,
+    showPlanB,
+    dismissPlanB,
     firstFrameRendered,
     liveStream,
     liveCountdown,

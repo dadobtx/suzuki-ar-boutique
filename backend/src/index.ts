@@ -7,7 +7,10 @@ import { STYLE_CATALOG } from './styles';
 type Bindings = {
   FASHN_API_KEY: string;
   REPLICATE_API_TOKEN: string;
-  FAL_API_KEY: string;
+  FAL_API_KEY?: string;
+  DECART_API_KEY?: string;
+  LIVE_PROVIDER?: 'decart' | 'fal' | string;
+  KIOSK_KEY?: string;
   ALLOWED_ORIGIN: string;
   RATE_LIMITER: KVNamespace;
   DB: D1Database;
@@ -20,16 +23,32 @@ type Bindings = {
 
 const app = new Hono<{ Bindings: Bindings }>();
 
+// Quota cache in-memory (max 1 req/s, cache for 2s)
+let quotaCache: {
+  data: { limit: number; active: number; remaining: number };
+  timestamp: number;
+} | null = null;
+
+export function _resetQuotaCacheForTesting(): void {
+  quotaCache = null;
+}
+
 // Basic CORS
 app.use('*', async (c, next) => {
   const corsMiddleware = cors({
     origin: (origin) => {
       const allowed = c.env.ALLOWED_ORIGIN || 'https://dadobtx.github.io';
       const allowedOrigins = allowed.split(',').map((s) => s.trim());
+      if (
+        origin &&
+        (origin.startsWith('http://localhost:') || origin.startsWith('http://127.0.0.1:'))
+      ) {
+        return origin;
+      }
       return allowedOrigins.includes(origin) ? origin : null;
     },
-    allowMethods: ['POST', 'OPTIONS'],
-    allowHeaders: ['Content-Type'],
+    allowMethods: ['POST', 'GET', 'OPTIONS'],
+    allowHeaders: ['Content-Type', 'X-Kiosk-Key'],
   });
   return await corsMiddleware(c, next);
 });
@@ -233,10 +252,99 @@ app.post('/stylize', async (c) => {
 
 // Live Try-On API Endpoints
 
+app.get('/live/quota', async (c) => {
+  try {
+    const now = Date.now();
+    if (quotaCache && now - quotaCache.timestamp < 2000) {
+      return c.json(quotaCache.data);
+    }
+
+    if (!c.env.DECART_API_KEY) {
+      return c.json({ unknown: true });
+    }
+
+    const res = await fetch('https://api.decart.ai/v1/realtime/quota', {
+      headers: {
+        'x-api-key': c.env.DECART_API_KEY,
+      },
+    });
+
+    if (!res.ok) {
+      return c.json({ unknown: true });
+    }
+
+    const data = (await res.json()) as {
+      limit: number;
+      active: number;
+      remaining: number;
+    };
+
+    if (
+      typeof data.limit !== 'number' ||
+      typeof data.active !== 'number' ||
+      typeof data.remaining !== 'number'
+    ) {
+      return c.json({ unknown: true });
+    }
+
+    quotaCache = { data, timestamp: now };
+    return c.json(data);
+  } catch (err) {
+    console.error('[live] Error fetching Decart quota:', err);
+    return c.json({ unknown: true });
+  }
+});
+
+app.post('/live/fail', async (c) => {
+  try {
+    const body = await c.req.json();
+    const live_session_id = body.live_session_id || body.live_id;
+    const { session_id, sku, provider, reason, detail } = body;
+
+    if (!session_id || !sku || !reason) {
+      return c.json({ status: 'error', error: 'Missing parameters' }, 400);
+    }
+
+    const currentProvider = provider || c.env.LIVE_PROVIDER || 'decart';
+
+    if (live_session_id) {
+      await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+        .bind(live_session_id)
+        .run();
+    }
+
+    await c.env.DB.prepare(
+      `INSERT INTO live_intentos (live_session_id, session_id, sku, provider, reason, detail)
+       VALUES (?, ?, ?, ?, ?, ?)`,
+    )
+      .bind(
+        live_session_id || null,
+        session_id,
+        sku,
+        currentProvider,
+        reason,
+        detail || null,
+      )
+      .run();
+
+    return c.json({ status: 'success' });
+  } catch (err) {
+    console.error('[live] Error recording failure:', err);
+    return c.json(
+      { status: 'error', error: err instanceof Error ? err.message : String(err) },
+      500,
+    );
+  }
+});
+
 app.post('/live/token', async (c) => {
   try {
-    if (!c.env.FAL_API_KEY) {
-      return c.json({ status: 'error', error: 'FAL_API_KEY is not configured.' }, 500);
+    // 0. Kiosk Key Check
+    if (c.env.KIOSK_KEY) {
+      const kioskKey = c.req.header('X-Kiosk-Key');
+      if (kioskKey !== c.env.KIOSK_KEY) {
+        return c.json({ status: 'error', error: 'Forbidden', reason: 'kiosk_key' }, 403);
+      }
     }
 
     const { session_id, sku, event } = await c.req.json();
@@ -244,12 +352,33 @@ app.post('/live/token', async (c) => {
       return c.json({ status: 'error', error: 'Missing parameters' }, 400);
     }
 
+    const provider = (c.env.LIVE_PROVIDER || 'decart').toLowerCase();
     const maxSeconds = Number(c.env.LIVE_SESSION_SECONDS || 15);
     const maxUserSessions = Number(c.env.LIVE_MAX_SESSIONS_PER_USER || 3);
     const maxDaySessions = Number(c.env.LIVE_MAX_SESSIONS_PER_DAY || 400);
     const budgetCents = Number(c.env.LIVE_BUDGET_CENTS_PER_EVENT || 10000);
 
-    // 1. Check User Limit
+    // 1. Candado: busy check
+    // Rechazar con 429 {reason:"busy"} si existe en live_sesiones una sesión sin /live/complete iniciada hace menos de (max_seconds + 30) s.
+    const lockWindowSeconds = maxSeconds + 30;
+    const busyRes = await c.env.DB.prepare(
+      `SELECT id FROM live_sesiones 
+       WHERE completed_at IS NULL 
+         AND (strftime('%s', 'now') - strftime('%s', started_at)) < ?
+       LIMIT 1`,
+    )
+      .bind(lockWindowSeconds)
+      .all();
+    const busyRows = busyRes?.results || [];
+
+    if (busyRows && busyRows.length > 0) {
+      return c.json(
+        { status: 'error', error: 'La prueba en vivo está ocupada', reason: 'busy' },
+        429,
+      );
+    }
+
+    // 2. Check User Limit
     const { results: userRes } = await c.env.DB.prepare(
       `SELECT COUNT(id) as count FROM live_sesiones WHERE session_id = ? AND date(started_at) = date('now')`,
     )
@@ -262,7 +391,7 @@ app.post('/live/token', async (c) => {
       );
     }
 
-    // 2. Check Daily Limit
+    // 3. Check Daily Limit
     const { results: dayRes } = await c.env.DB.prepare(
       `SELECT COUNT(id) as count FROM live_sesiones WHERE date(started_at) = date('now')`,
     ).all();
@@ -273,7 +402,7 @@ app.post('/live/token', async (c) => {
       );
     }
 
-    // 3. Check Budget Limit
+    // 4. Check Budget Limit
     const { results: secRes } = await c.env.DB.prepare(
       `SELECT SUM(seconds) as total FROM live_sesiones WHERE date(started_at) = date('now')`,
     ).all();
@@ -288,55 +417,150 @@ app.post('/live/token', async (c) => {
 
     // Insert with pessimistic billing
     const { meta } = await c.env.DB.prepare(
-      `INSERT INTO live_sesiones (session_id, sku, event, seconds) VALUES (?, ?, ?, ?)`,
+      `INSERT INTO live_sesiones (session_id, sku, event, seconds, provider) VALUES (?, ?, ?, ?, ?)`,
     )
-      .bind(session_id, sku, event, maxSeconds)
+      .bind(session_id, sku, event, maxSeconds, provider)
       .run();
 
     const live_id = meta.last_row_id;
 
-    // Fetch token from Fal
-    const tokenRes = await fetch('https://rest.alpha.fal.ai/tokens/', {
-      method: 'POST',
-      headers: {
-        Authorization: `Key ${c.env.FAL_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        allowed_apps: ['decart/lucy2-vton'],
-        token_expiration: 60,
-      }),
-    });
+    if (provider === 'decart') {
+      if (!c.env.DECART_API_KEY) {
+        await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+          .bind(live_id)
+          .run();
+        return c.json(
+          { status: 'error', error: 'DECART_API_KEY is not configured.' },
+          500,
+        );
+      }
 
-    if (!tokenRes.ok) {
-      const errorText = await tokenRes.text();
-      await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
-        .bind(live_id)
-        .run();
-      throw new Error(`Fal token error: ${errorText}`);
+      // Build allowed origins
+      const allowedOrigins = ['https://dadobtx.github.io'];
+      if (c.env.ALLOWED_ORIGIN) {
+        for (const o of c.env.ALLOWED_ORIGIN.split(',')) {
+          const trimmed = o.trim();
+          if (trimmed && !allowedOrigins.includes(trimmed)) {
+            allowedOrigins.push(trimmed);
+          }
+        }
+      }
+      if (!allowedOrigins.includes('http://localhost:5173')) {
+        allowedOrigins.push('http://localhost:5173');
+      }
+
+      const tokenPayload = {
+        expiresIn: 60,
+        allowedModels: ['lucy-vton-latest'],
+        allowedOrigins,
+        constraints: {
+          realtime: {
+            maxSessionDuration: maxSeconds + 5,
+          },
+        },
+      };
+
+      const tokenRes = await fetch('https://api.decart.ai/v1/client/tokens', {
+        method: 'POST',
+        headers: {
+          'x-api-key': c.env.DECART_API_KEY,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(tokenPayload),
+      });
+
+      if (!tokenRes.ok) {
+        const errorText = await tokenRes.text().catch(() => 'Unknown error');
+        await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+          .bind(live_id)
+          .run();
+        try {
+          await c.env.DB.prepare(
+            `INSERT INTO live_intentos (live_session_id, session_id, sku, provider, reason, detail) VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+            .bind(live_id, session_id, sku, 'decart', 'token_error', errorText)
+            .run();
+        } catch {
+          // ignore error in failure recording
+        }
+        throw new Error(`Decart token error: ${errorText}`);
+      }
+
+      const tokenData = (await tokenRes.json()) as {
+        apiKey: string;
+        expiresAt: string;
+        token?: string;
+      };
+
+      if (!tokenData.apiKey) {
+        await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+          .bind(live_id)
+          .run();
+        throw new Error('Decart token response missing apiKey');
+      }
+
+      return c.json({
+        status: 'success',
+        provider: 'decart',
+        apiKey: tokenData.apiKey,
+        token: tokenData.apiKey,
+        expiresAt: tokenData.expiresAt,
+        max_seconds: maxSeconds,
+        live_session_id: live_id,
+        live_id,
+      });
+    } else {
+      // FAL Provider
+      if (!c.env.FAL_API_KEY) {
+        await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+          .bind(live_id)
+          .run();
+        return c.json({ status: 'error', error: 'FAL_API_KEY is not configured.' }, 500);
+      }
+
+      const tokenRes = await fetch('https://rest.alpha.fal.ai/tokens/', {
+        method: 'POST',
+        headers: {
+          Authorization: `Key ${c.env.FAL_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          allowed_apps: ['decart/lucy2-vton'],
+          token_expiration: 60,
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        const errorText = await tokenRes.text();
+        await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+          .bind(live_id)
+          .run();
+        throw new Error(`Fal token error: ${errorText}`);
+      }
+
+      const tokenData = (await tokenRes.json()) as
+        | string
+        | { token?: string; secret?: string };
+      const falToken =
+        typeof tokenData === 'string' ? tokenData : tokenData.token || tokenData.secret;
+
+      if (!falToken) {
+        await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
+          .bind(live_id)
+          .run();
+        throw new Error('Fal token response missing token/secret');
+      }
+
+      return c.json({
+        status: 'success',
+        provider: 'fal',
+        token: falToken,
+        apiKey: falToken,
+        live_id,
+        live_session_id: live_id,
+        max_seconds: maxSeconds,
+      });
     }
-
-    // fal returns the JWT as a plain JSON string ("eyJ..."); older/other
-    // shapes may wrap it in an object. Accept both.
-    const tokenData = (await tokenRes.json()) as
-      | string
-      | { token?: string; secret?: string };
-    const falToken =
-      typeof tokenData === 'string' ? tokenData : tokenData.token || tokenData.secret;
-
-    if (!falToken) {
-      await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
-        .bind(live_id)
-        .run();
-      throw new Error('Fal token response missing token/secret');
-    }
-
-    return c.json({
-      status: 'success',
-      token: falToken,
-      live_id,
-      max_seconds: maxSeconds,
-    });
   } catch (err) {
     console.error('Live token error', err);
     return c.json(
@@ -348,25 +572,78 @@ app.post('/live/token', async (c) => {
 
 app.post('/live/complete', async (c) => {
   try {
-    const { live_id, seconds, failed } = await c.req.json();
-    if (!live_id || (seconds === undefined && !failed)) {
+    let body: {
+      live_id?: number;
+      live_session_id?: number;
+      seconds?: number;
+      failed?: boolean;
+      reason?: string;
+      detail?: string;
+    };
+    try {
+      body = await c.req.json();
+    } catch {
+      try {
+        body = JSON.parse(await c.req.text());
+      } catch {
+        return c.json({ status: 'error', error: 'Invalid JSON body' }, 400);
+      }
+    }
+
+    const { live_id, live_session_id, seconds, failed, reason, detail } = body || {};
+    const targetId = live_id || live_session_id;
+    if (!targetId || (seconds === undefined && !failed)) {
       return c.json({ status: 'error', error: 'Missing parameters' }, 400);
     }
 
     if (failed) {
+      const { results: rowRes } = await c.env.DB.prepare(
+        `SELECT session_id, sku, provider FROM live_sesiones WHERE id = ?`,
+      )
+        .bind(targetId)
+        .all();
+
+      if (rowRes && rowRes[0]) {
+        const row = rowRes[0] as { session_id: string; sku: string; provider: string };
+        try {
+          await c.env.DB.prepare(
+            `INSERT INTO live_intentos (live_session_id, session_id, sku, provider, reason, detail)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+          )
+            .bind(
+              targetId,
+              row.session_id,
+              row.sku,
+              row.provider || 'decart',
+              reason || 'unknown_failure',
+              detail || null,
+            )
+            .run();
+        } catch {
+          // ignore error in failure recording
+        }
+      }
+
       await c.env.DB.prepare(`DELETE FROM live_sesiones WHERE id = ?`)
-        .bind(live_id)
+        .bind(targetId)
         .run();
       return c.json({ status: 'success', deleted: true });
     }
 
     const maxSeconds = Number(c.env.LIVE_SESSION_SECONDS || 15);
-    const clampedSeconds = Math.max(0, Math.min(Number(seconds), maxSeconds));
+    const requestedSeconds = Number(seconds);
+    const clampedSeconds = Math.max(0, Math.min(requestedSeconds, maxSeconds));
 
+    // Si seconds llega en 0 pero hubo video remoto, no bajes seconds a 0: conserva el valor pesimista.
+    // Solo hace clamp-down si clampedSeconds > 0 y es menor que el valor actual.
+    // completed_at siempre se actualiza a CURRENT_TIMESTAMP para liberar el candado busy de inmediato.
     await c.env.DB.prepare(
-      `UPDATE live_sesiones SET seconds = ? WHERE id = ? AND seconds > ?`,
+      `UPDATE live_sesiones 
+       SET completed_at = CURRENT_TIMESTAMP,
+           seconds = CASE WHEN ? > 0 AND seconds > ? THEN ? ELSE seconds END
+       WHERE id = ?`,
     )
-      .bind(clampedSeconds, live_id, clampedSeconds)
+      .bind(clampedSeconds, clampedSeconds, clampedSeconds, targetId)
       .run();
 
     return c.json({ status: 'success' });
@@ -540,7 +817,7 @@ app.get('/kiosk/reports', async (c) => {
     `,
     ).all();
 
-    // Live Try-On Stats
+    // Live Try-On Stats (exitosas)
     const { results: liveStats } = await c.env.DB.prepare(
       `
       SELECT COUNT(id) as sesiones_hoy, SUM(seconds) as segundos_hoy
@@ -549,11 +826,25 @@ app.get('/kiosk/reports', async (c) => {
       `,
     ).all();
 
+    // Live Try-On Stats (fallidas por reason y proveedor)
+    const { results: failStats } = await c.env.DB.prepare(
+      `
+      SELECT reason, provider, COUNT(*) as count
+      FROM live_intentos
+      WHERE date(created_at) = date('now')
+      GROUP BY reason, provider
+      `,
+    )
+      .all()
+      .catch(() => ({ results: [] }));
+
     const live = {
       sesiones_hoy: liveStats[0] ? (liveStats[0].sesiones_hoy as number) || 0 : 0,
       segundos_hoy: liveStats[0] ? (liveStats[0].segundos_hoy as number) || 0 : 0,
       costo_estimado_usd:
         (liveStats[0] ? (liveStats[0].segundos_hoy as number) || 0 : 0) * 0.02,
+      fallidas_por_reason: failStats || [],
+      proveedor_actual: (c.env.LIVE_PROVIDER || 'decart').toLowerCase(),
     };
 
     return c.json({

@@ -92,6 +92,8 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
 
   beforeEach(() => {
     vi.stubEnv('VITE_LIVE_TRYON', 'on');
+    vi.stubEnv('VITE_LIVE_PROVIDER', 'fal');
+    localStorage.setItem('suzuki_kiosk_key', 'test-kiosk-key');
     vi.useFakeTimers();
     mockPcInstances = [];
     lastConnectConfig = null;
@@ -140,7 +142,7 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
     vi.clearAllMocks();
   });
 
-  it('1. Timeout de 25 s llama a stop() y emite el toast de connectTimeout', async () => {
+  it('1. Timeout de 30 s llama a stop() y emite el toast de connectTimeout', async () => {
     const { result } = renderHook(() =>
       useLiveTryon({
         activeGarment: garment1,
@@ -160,14 +162,14 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
     expect(result.current.isLiveLoading).toBe(true);
     expect(result.current.firstFrameRendered).toBe(false);
 
-    // Avanzar 24 segundos (aún no cumple el timeout)
+    // Avanzar 29 segundos (aún no cumple el timeout de 30 s)
     act(() => {
-      vi.advanceTimersByTime(24000);
+      vi.advanceTimersByTime(29000);
     });
     expect(result.current.isLiveLoading).toBe(true);
     expect(result.current.liveToast).toBeNull();
 
-    // Avanzar 1.1 segundos más (supera los 25 s sin recibir video)
+    // Avanzar 1.1 segundos más (supera los 30 s sin recibir video)
     act(() => {
       vi.advanceTimersByTime(1100);
     });
@@ -355,9 +357,9 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
       await result.current.handleStartLiveTryon();
     });
 
-    // Timeout a los 25 s
+    // Timeout a los 30 s
     act(() => {
-      vi.advanceTimersByTime(25100);
+      vi.advanceTimersByTime(30100);
     });
 
     expect(result.current.isLiveLoading).toBe(false);
@@ -378,7 +380,7 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
     expect(useLiveTryonStore.getState().isLiveAvailable).toBe(true);
   });
 
-  it('6. Con un reintento por límite concurrente a los 10 s, el timeout ocurre a los 25 s del inicio, no a los 35 s', async () => {
+  it('6. Con un reintento por error transitorio a los 10 s, el timeout global ocurre a los 30 s del inicio', async () => {
     const { result } = renderHook(() =>
       useLiveTryon({
         activeGarment: garment1,
@@ -401,34 +403,34 @@ describe('Live Try-On Stability (Prompt 3.4)', () => {
       vi.advanceTimersByTime(10000);
     });
 
-    // Simular error de límite concurrente a los 10 s disparando el callback onError
+    // Simular error transitorio (ej. caída transitoria de red) disparando el callback onError
     await act(async () => {
-      lastConnectConfig.onError(new Error('Concurrent session limit reached'));
+      lastConnectConfig.onError(new Error('Network drop error'));
     });
 
     // En retry, stopInternal(true) mantiene isLiveLoading: true
     expect(result.current.isLiveLoading).toBe(true);
 
-    // Esperar los 5s de retraso antes del reintento (t = 15 s desde el inicio)
+    // Esperar los 10s de retraso antes del reintento (t = 20 s desde el inicio)
     await act(async () => {
-      vi.advanceTimersByTime(5000);
+      vi.advanceTimersByTime(10000);
     });
 
     expect(result.current.isLiveLoading).toBe(true);
 
-    // Avanzar 9.9 segundos más (t = 24.9 s desde el inicio): aún no se cumple el plazo global de 25 s
+    // Avanzar 9.9 segundos más (t = 29.9 s desde el inicio): aún no se cumple el plazo global de 30 s
     act(() => {
       vi.advanceTimersByTime(9900);
     });
     expect(result.current.isLiveLoading).toBe(true);
     expect(result.current.liveToast).toBeNull();
 
-    // Avanzar 200 ms más (t = 25.1 s desde el inicio): el timeout global de 25 s se dispara!
+    // Avanzar 200 ms más (t = 30.1 s desde el inicio): el timeout global de 30 s se dispara!
     act(() => {
       vi.advanceTimersByTime(200);
     });
 
-    // Debe haberse detenido por timeout a los 25 s originales (no a los 35 s o 40 s)
+    // Debe haberse detenido por timeout a los 30 s originales
     expect(result.current.isLiveLoading).toBe(false);
     expect(result.current.liveToast).toMatch(/No pudimos conectar con Lucy/i);
     expect(useLiveTryonStore.getState().failed).toBe(true);

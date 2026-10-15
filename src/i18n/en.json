@@ -256,8 +256,14 @@
     "fallbackToast": "Static mode active",
     "readyToast": "Live try-on active!",
     "error": "Could not start live try-on. Please try again.",
-    "busy": "Live try-on is busy. Please try again in a few seconds.",
-    "connectTimeout": "Could not connect to Lucy. Please try again in a few seconds."
+    "busy": "Live try-on is busy, please try again in a moment",
+    "busyMessage": "Live try-on is busy, please try again in a moment",
+    "kioskKey": "Unauthorized kiosk key",
+    "occupied": "BUSY",
+    "connectTimeout": "Could not connect to Lucy. Please try again in a few seconds.",
+    "planBTitle": "TAKE A PHOTO WITH THIS GARMENT",
+    "planBText": "Live try-on is currently unavailable. Take a photo with the garment instead.",
+    "planBButton": "TAKE PHOTO"
   },
   "variant": {
     "title": "COLOR"

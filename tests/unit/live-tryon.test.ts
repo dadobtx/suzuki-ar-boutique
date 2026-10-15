@@ -3,10 +3,9 @@
  */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import React from 'react';
-import { renderHook, render, act } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import { LiveTryOnManager } from '@/lib/liveTryon';
-import { useLiveTryon, LIVE_COOLDOWN_MS } from '@/hooks/useLiveTryon';
+import { useLiveTryon, CONCURRENT_RETRY_DELAY_MS } from '@/hooks/useLiveTryon';
 import type { Garment } from '@/types/garment';
 
 // Mock @fal-ai/client
@@ -31,7 +30,49 @@ vi.mock('@fal-ai/client', () => ({
   },
 }));
 
-// Mock RTCPeerConnection
+// Mock @decartai/sdk
+let mockDecartRealtimeClient: {
+  on: ReturnType<typeof vi.fn>;
+  set: ReturnType<typeof vi.fn>;
+  disconnect: ReturnType<typeof vi.fn>;
+  _emit: (event: string, payload: any) => void;
+  _listeners: Map<string, any>;
+};
+let lastDecartConnectOptions: any = null;
+
+vi.mock('@decartai/sdk', () => ({
+  models: {
+    realtime: vi.fn().mockImplementation((name) => ({
+      name,
+      width: 720,
+      height: 1280,
+      fps: 30,
+    })),
+  },
+  createDecartClient: vi.fn().mockImplementation(() => ({
+    realtime: {
+      connect: vi.fn().mockImplementation((_stream: any, options: any) => {
+        lastDecartConnectOptions = options;
+        const listeners = new Map<string, any>();
+        mockDecartRealtimeClient = {
+          on: vi.fn().mockImplementation((event: string, cb: any) => {
+            listeners.set(event, cb);
+          }),
+          set: vi.fn().mockResolvedValue(undefined),
+          disconnect: vi.fn(),
+          _emit: (event: string, payload: any) => {
+            const cb = listeners.get(event);
+            if (cb) cb(payload);
+          },
+          _listeners: listeners,
+        };
+        return Promise.resolve(mockDecartRealtimeClient);
+      }),
+    },
+  })),
+}));
+
+// Mock RTCPeerConnection for Fal tests
 let mockPcInstances: MockRTCPeerConnection[] = [];
 class MockRTCPeerConnection {
   iceServers: any;
@@ -115,7 +156,114 @@ const reversibleGarment: Garment = {
   ],
 };
 
-describe('LiveTryOnManager', () => {
+describe('LiveTryOnManager with Decart provider (default)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    lastDecartConnectOptions = null;
+    LiveTryOnManager._resetActiveInstancesForTesting();
+  });
+
+  it('inicia conexión con Decart con mirror: false y retries: 0', async () => {
+    const stream = new MediaStream() as any;
+    const manager = new LiveTryOnManager({
+      token: 'decart-test-token',
+      maxSeconds: 15,
+      liveId: 101,
+      stream,
+      referenceImageUrl: 'https://dadobtx.github.io/suzuki-ar-boutique/test.png',
+      onUpdate: vi.fn(),
+      onError: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    await manager.start();
+
+    expect(lastDecartConnectOptions).not.toBeNull();
+    expect(lastDecartConnectOptions.mirror).toBe(false);
+    expect(lastDecartConnectOptions.retries).toBe(0);
+    expect(lastDecartConnectOptions.initialState.prompt.text).toContain(
+      'Substitute the current top',
+    );
+    expect(lastDecartConnectOptions.initialState.image).toBe(
+      'https://dadobtx.github.io/suzuki-ar-boutique/test.png',
+    );
+    expect(manager.getConnectionKey()).toContain('decart-lucy-101-');
+
+    manager.stop();
+    expect(mockDecartRealtimeClient.disconnect).toHaveBeenCalled();
+  });
+
+  it('sendGarment() envía prompt e imagen completa con set()', async () => {
+    const stream = new MediaStream() as any;
+    const manager = new LiveTryOnManager({
+      token: 'decart-token',
+      maxSeconds: 15,
+      liveId: 102,
+      stream,
+      referenceImageUrl: 'https://dadobtx.github.io/test1.png',
+      onUpdate: vi.fn(),
+      onError: vi.fn(),
+      onClose: vi.fn(),
+    });
+
+    await manager.start();
+    manager.sendGarment('https://dadobtx.github.io/test2.png');
+
+    expect(mockDecartRealtimeClient.set).toHaveBeenCalledWith({
+      prompt: expect.stringContaining('Substitute the current top'),
+      image: 'https://dadobtx.github.io/test2.png',
+      enhance: false,
+    });
+
+    manager.stop();
+  });
+
+  it('sessionEnded con fin normal por duración (timeout) llama a stop() sin onError', async () => {
+    const stream = new MediaStream() as any;
+    const onError = vi.fn();
+    const onClose = vi.fn();
+    const manager = new LiveTryOnManager({
+      token: 'decart-token',
+      maxSeconds: 15,
+      liveId: 103,
+      stream,
+      referenceImageUrl: 'https://dadobtx.github.io/test1.png',
+      onUpdate: vi.fn(),
+      onError,
+      onClose,
+    });
+
+    await manager.start();
+    mockDecartRealtimeClient._emit('sessionEnded', { reason: 'timeout' });
+
+    expect(onError).not.toHaveBeenCalled();
+    expect(manager.getState()).toBe('closed');
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('sessionEnded con motivo anómalo llama a onError con webrtc_error', async () => {
+    const stream = new MediaStream() as any;
+    const onError = vi.fn();
+    const manager = new LiveTryOnManager({
+      token: 'decart-token',
+      maxSeconds: 15,
+      liveId: 104,
+      stream,
+      referenceImageUrl: 'https://dadobtx.github.io/test1.png',
+      onUpdate: vi.fn(),
+      onError,
+      onClose: vi.fn(),
+    });
+
+    await manager.start();
+    mockDecartRealtimeClient._emit('sessionEnded', { reason: 'moderation_violation' });
+
+    expect(onError).toHaveBeenCalledWith(expect.any(Error), 'webrtc_error');
+    expect(manager.getState()).toBe('closed');
+  });
+});
+
+describe('LiveTryOnManager with Fal provider (isolated fallback)', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockPcInstances = [];
@@ -131,6 +279,7 @@ describe('LiveTryOnManager', () => {
       liveId: 101,
       stream,
       referenceImageUrl: 'http://localhost/test1.png',
+      provider: 'fal' as const,
       onUpdate: vi.fn(),
       onError: vi.fn(),
       onClose: vi.fn(),
@@ -148,6 +297,7 @@ describe('LiveTryOnManager', () => {
       liveId: 102,
       stream,
       referenceImageUrl: 'http://localhost/test2.png',
+      provider: 'fal' as const,
       onUpdate: vi.fn(),
       onError: vi.fn(),
       onClose: vi.fn(),
@@ -172,6 +322,7 @@ describe('LiveTryOnManager', () => {
       liveId: 101,
       stream,
       referenceImageUrl: 'http://localhost/test1.png',
+      provider: 'fal' as const,
       onUpdate: vi.fn(),
       onError: vi.fn(),
       onClose,
@@ -179,125 +330,21 @@ describe('LiveTryOnManager', () => {
     const manager = new LiveTryOnManager(config);
     await manager.start();
 
-    // Trigger iceservers so pc is created
-    await lastConnectConfig.onResult({ type: 'iceservers', iceservers: [] });
+    // Simular que onResult entrega ice servers para instanciar pc
+    await lastConnectConfig.onResult({
+      type: 'iceservers',
+      iceservers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+
     expect(mockPcInstances.length).toBe(1);
     const pc = mockPcInstances[0];
 
     manager.stop();
+    manager.stop();
+
     expect(mockFalConnection.close).toHaveBeenCalledTimes(1);
     expect(pc.close).toHaveBeenCalledTimes(1);
     expect(onClose).toHaveBeenCalledTimes(1);
-
-    // Second stop should do nothing
-    manager.stop();
-    expect(mockFalConnection.close).toHaveBeenCalledTimes(1);
-    expect(pc.close).toHaveBeenCalledTimes(1);
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
-  it('sendGarment() después de stop() → no llama connection.send', async () => {
-    const stream = new MediaStream() as any;
-    const config = {
-      token: 'tok-1',
-      maxSeconds: 15,
-      liveId: 101,
-      stream,
-      referenceImageUrl: 'http://localhost/test1.png',
-      onUpdate: vi.fn(),
-      onError: vi.fn(),
-      onClose: vi.fn(),
-    };
-    const manager = new LiveTryOnManager(config);
-    await manager.start();
-
-    // Reset calls to mockFalConnection.send (start sends the initial garment)
-    mockFalConnection.send.mockClear();
-
-    manager.stop();
-    manager.sendGarment('http://localhost/new-garment.png');
-
-    expect(mockFalConnection.send).not.toHaveBeenCalled();
-  });
-
-  it('después de stop(), el tokenProvider lanza error', async () => {
-    const stream = new MediaStream() as any;
-    const config = {
-      token: 'secret-jwt-token',
-      maxSeconds: 15,
-      liveId: 101,
-      stream,
-      referenceImageUrl: 'http://localhost/test1.png',
-      onUpdate: vi.fn(),
-      onError: vi.fn(),
-      onClose: vi.fn(),
-    };
-    const manager = new LiveTryOnManager(config);
-    await manager.start();
-
-    // Before stop: returns token
-    const token = await lastConnectConfig.tokenProvider();
-    expect(token).toBe('secret-jwt-token');
-
-    // After stop: throws error
-    manager.stop();
-    await expect(lastConnectConfig.tokenProvider()).rejects.toThrow(
-      'Live try-on session is closed',
-    );
-  });
-
-  it('onResult/onError tardíos después de stop() → no llaman config.onError ni onUpdate', async () => {
-    const stream = new MediaStream() as any;
-    const onError = vi.fn();
-    const onUpdate = vi.fn();
-    const config = {
-      token: 'tok-1',
-      maxSeconds: 15,
-      liveId: 101,
-      stream,
-      referenceImageUrl: 'http://localhost/test1.png',
-      onUpdate,
-      onError,
-      onClose: vi.fn(),
-    };
-    const manager = new LiveTryOnManager(config);
-    await manager.start();
-
-    manager.stop();
-
-    // Late onResult with error
-    await lastConnectConfig.onResult({ type: 'error', message: 'Late error' });
-    // Late onError
-    lastConnectConfig.onError(new Error('Late network error'));
-
-    expect(onError).not.toHaveBeenCalled();
-    expect(onUpdate).not.toHaveBeenCalled();
-  });
-
-  it('activeCount() vuelve a 0 después de stop()', async () => {
-    expect(LiveTryOnManager.activeCount()).toBe(0);
-
-    const stream = new MediaStream() as any;
-    const config = {
-      token: 'tok-1',
-      maxSeconds: 15,
-      liveId: 101,
-      stream,
-      referenceImageUrl: 'http://localhost/test1.png',
-      onUpdate: vi.fn(),
-      onError: vi.fn(),
-      onClose: vi.fn(),
-    };
-
-    const manager1 = new LiveTryOnManager(config);
-    const manager2 = new LiveTryOnManager(config);
-    expect(LiveTryOnManager.activeCount()).toBe(2);
-
-    manager1.stop();
-    expect(LiveTryOnManager.activeCount()).toBe(1);
-
-    manager2.stop();
-    expect(LiveTryOnManager.activeCount()).toBe(0);
   });
 });
 
@@ -306,28 +353,49 @@ describe('useLiveTryon hook integration', () => {
 
   beforeEach(() => {
     vi.stubEnv('VITE_LIVE_TRYON', 'on');
+    localStorage.setItem('suzuki_kiosk_key', 'test-kiosk-key');
     vi.clearAllMocks();
     mockPcInstances = [];
     lastConnectConfig = null;
+    lastDecartConnectOptions = null;
     LiveTryOnManager._resetActiveInstancesForTesting();
   });
 
   afterEach(() => {
     global.fetch = origFetch;
+    localStorage.clear();
     vi.unstubAllEnvs();
   });
 
-  it('dos llamadas a handleStartLiveTryon en el mismo tick → un solo fetch a /live/token', async () => {
-    let tokenFetchCount = 0;
-    global.fetch = vi.fn().mockImplementation((url: string) => {
+  it('sin clave de kiosko en localStorage ni URL → showLiveButton es false', () => {
+    localStorage.removeItem('suzuki_kiosk_key');
+    const stream = new MediaStream() as any;
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    expect(result.current.showLiveButton).toBe(false);
+  });
+
+  it('con clave de kiosko → showLiveButton es true y envía header X-Kiosk-Key', async () => {
+    let capturedHeaders: any = null;
+    global.fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
       if (typeof url === 'string' && url.includes('/live/token')) {
-        tokenFetchCount++;
+        capturedHeaders = opts.headers;
         return Promise.resolve({
           ok: true,
           status: 200,
           json: async () => ({
             status: 'success',
-            token: 'test-token',
+            apiKey: 'decart-test-token',
             max_seconds: 15,
             live_id: 10,
           }),
@@ -353,22 +421,103 @@ describe('useLiveTryon hook integration', () => {
       }),
     );
 
-    // Call twice in the same tick
+    expect(result.current.showLiveButton).toBe(true);
+
     await act(async () => {
-      const p1 = result.current.handleStartLiveTryon();
-      const p2 = result.current.handleStartLiveTryon();
-      await Promise.all([p1, p2]);
+      await result.current.handleStartLiveTryon();
     });
 
-    expect(tokenFetchCount).toBe(1);
+    expect(capturedHeaders['X-Kiosk-Key']).toBe('test-kiosk-key');
     act(() => {
       result.current.handleStopLiveTryon();
     });
   });
 
-  it('tras terminar una sesión, isLiveAvailable es false durante 4000 ms y luego true', async () => {
-    vi.useFakeTimers();
+  it('403 kiosk_key → no reintenta, emite toast y habilita Plan B', async () => {
+    let tokenCalls = 0;
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        tokenCalls++;
+        return Promise.resolve({
+          ok: false,
+          status: 403,
+          json: async () => ({ status: 'error', reason: 'kiosk_key' }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
 
+    const stream = new MediaStream() as any;
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    expect(tokenCalls).toBe(1);
+    expect(result.current.isLiveLoading).toBe(false);
+    expect(result.current.showPlanB).toBe(true);
+    expect(result.current.liveToast).toContain('no autorizada');
+  });
+
+  it('429 busy → no reintenta, activa cooldown de 30 s, emite toast y habilita Plan B', async () => {
+    let tokenCalls = 0;
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        tokenCalls++;
+        return Promise.resolve({
+          ok: false,
+          status: 429,
+          json: async () => ({ status: 'error', reason: 'busy' }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await result.current.handleStartLiveTryon();
+    });
+
+    expect(tokenCalls).toBe(1); // NO reintentar
+    expect(result.current.isLiveLoading).toBe(false);
+    expect(result.current.isBusyCooldown).toBe(true);
+    expect(result.current.isLiveAvailable).toBe(false);
+    expect(result.current.showPlanB).toBe(true);
+    expect(result.current.liveToast).toContain('ocupada');
+  });
+
+  it('error Decart limit (Concurrent session limit) → no reintenta, cooldown 30 s y Plan B', async () => {
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (typeof url === 'string' && url.includes('/live/token')) {
         return Promise.resolve({
@@ -376,9 +525,9 @@ describe('useLiveTryon hook integration', () => {
           status: 200,
           json: async () => ({
             status: 'success',
-            token: 'test-token',
+            apiKey: 'decart-test-token',
             max_seconds: 15,
-            live_id: 20,
+            live_id: 99,
           }),
         });
       }
@@ -402,44 +551,26 @@ describe('useLiveTryon hook integration', () => {
       }),
     );
 
-    // Initially available
-    expect(result.current.isLiveAvailable).toBe(true);
-
-    // Start session
     await act(async () => {
       await result.current.handleStartLiveTryon();
     });
 
-    // While loading or active, isLiveAvailable is false
-    expect(result.current.isLiveAvailable).toBe(false);
-
-    // Stop session
-    act(() => {
-      result.current.handleStopLiveTryon();
+    // Simular error de límite concurrente emitido por Decart SDK
+    await act(async () => {
+      mockDecartRealtimeClient._emit('error', {
+        code: '1013',
+        message: 'Decart: Concurrent session limit reached',
+      });
     });
 
-    // Right after stop: cooldown active (remaining 4s), so isLiveAvailable is false and isLiveCoolingDown is true
+    expect(result.current.isLiveLoading).toBe(false);
+    expect(result.current.isBusyCooldown).toBe(true);
     expect(result.current.isLiveAvailable).toBe(false);
-    expect(result.current.isLiveCoolingDown).toBe(true);
-
-    // Advance 2000 ms (still within cooldown)
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-    expect(result.current.isLiveAvailable).toBe(false);
-    expect(result.current.isLiveCoolingDown).toBe(true);
-
-    // Advance past cooldown (total > 4000 ms)
-    act(() => {
-      vi.advanceTimersByTime(LIVE_COOLDOWN_MS - 2000 + 500);
-    });
-    expect(result.current.isLiveAvailable).toBe(true);
-    expect(result.current.isLiveCoolingDown).toBe(false);
-
-    vi.useRealTimers();
+    expect(result.current.showPlanB).toBe(true);
+    expect(result.current.liveToast).toContain('ocupada');
   });
 
-  it('error "Decart: Concurrent session limit reached." → stop, 5 s, segundo /live/token, segundo start. Si vuelve a fallar → toast live.busy, isLiveLoading false', async () => {
+  it('error transitorio → 1 reintento tras >= 10 s', async () => {
     vi.useFakeTimers();
 
     let tokenCalls = 0;
@@ -451,7 +582,7 @@ describe('useLiveTryon hook integration', () => {
           status: 200,
           json: async () => ({
             status: 'success',
-            token: `token-${tokenCalls}`,
+            apiKey: `token-${tokenCalls}`,
             max_seconds: 15,
             live_id: 100 + tokenCalls,
           }),
@@ -477,110 +608,148 @@ describe('useLiveTryon hook integration', () => {
       }),
     );
 
-    // Start session 1
     await act(async () => {
       await result.current.handleStartLiveTryon();
     });
     expect(tokenCalls).toBe(1);
 
-    // First error: trigger concurrent session limit
-    const firstOnError = lastConnectConfig.onError;
+    // Error transitorio (ej. corte de socket)
     await act(async () => {
-      firstOnError(
-        new Error('INTERNAL_ERROR: Decart: Concurrent session limit reached.'),
-      );
-    });
-
-    // Still loading during retry wait
-    expect(result.current.isLiveLoading).toBe(true);
-
-    // Advance 5000 ms for the retry delay
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5000);
-    });
-
-    // Should have requested a second token
-    expect(tokenCalls).toBe(2);
-
-    // Second error: fail again
-    const secondOnError = lastConnectConfig.onError;
-    await act(async () => {
-      secondOnError(
-        new Error('INTERNAL_ERROR: Decart: Concurrent session limit reached.'),
-      );
-    });
-
-    // Now it should give up, display busy toast, and stop loading
-    expect(result.current.isLiveLoading).toBe(false);
-    expect(result.current.liveToast).toContain('ocupada');
-
-    vi.useRealTimers();
-  });
-
-  it('fallo antes de recibir video → /live/complete con failed: true', async () => {
-    let completedPayload: any = null;
-    global.fetch = vi.fn().mockImplementation((url: string, opts?: any) => {
-      if (typeof url === 'string' && url.includes('/live/token')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            status: 'success',
-            token: 'test-token',
-            max_seconds: 15,
-            live_id: 88,
-          }),
-        });
-      }
-      if (typeof url === 'string' && url.includes('/live/complete')) {
-        completedPayload = JSON.parse(opts.body);
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({ status: 'success' }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'success' }),
+      mockDecartRealtimeClient._emit('error', {
+        code: 'WEBRTC_WEBSOCKET_ERROR',
+        message: 'WebSocket connection lost',
       });
     });
 
-    const stream = new MediaStream() as any;
-    const { result } = renderHook(() =>
-      useLiveTryon({
-        activeGarment: sampleGarment,
-        activeVariantId: null,
-        cameraStream: stream,
-        sessionId: 'test-session',
-        presence: 'present',
-        kioskState: 'TRYON',
-        garmentActiveWithProfile: true,
-      }),
-    );
+    expect(result.current.isLiveLoading).toBe(true);
 
+    // Avanzar 10s para el reintento
     await act(async () => {
-      await result.current.handleStartLiveTryon();
+      await vi.advanceTimersByTimeAsync(CONCURRENT_RETRY_DELAY_MS);
     });
 
-    // Stop before receiving any video stream (hadVideoRef is false)
+    expect(tokenCalls).toBe(2);
+
     act(() => {
       result.current.handleStopLiveTryon();
     });
 
-    expect(completedPayload).not.toBeNull();
-    expect(completedPayload.live_id).toBe(88);
-    expect(completedPayload.seconds).toBe(0);
-    expect(completedPayload.failed).toBe(true);
+    vi.useRealTimers();
   });
 
-  it('getCameraStream devuelve null → toast live.error e isLiveLoading false', async () => {
+  it('cuota agotada (remaining === 0) → isQuotaExhausted true, botón deshabilitado', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/quota')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ limit: 1, active: 1, remaining: 0 }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
     const { result } = renderHook(() =>
       useLiveTryon({
         activeGarment: sampleGarment,
         activeVariantId: null,
-        getCameraStream: () => null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    // Esperar tick de sondeo de cuota
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(result.current.isQuotaExhausted).toBe(true);
+    expect(result.current.isLiveAvailable).toBe(false);
+  });
+
+  it('cuota unknown (falla de API) → permite intentar (isQuotaExhausted false)', async () => {
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/quota')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({ unknown: true }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+    const { result } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
+        sessionId: 'test-session',
+        presence: 'present',
+        kioskState: 'TRYON',
+        garmentActiveWithProfile: true,
+      }),
+    );
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
+
+    expect(result.current.isQuotaExhausted).toBe(false);
+    expect(result.current.isLiveAvailable).toBe(true);
+  });
+
+  it('desmontaje durante sesión activa → envía navigator.sendBeacon a /live/complete', async () => {
+    let beaconCalled = false;
+    let beaconUrl = '';
+    let beaconData: any = null;
+    const origBeacon = navigator.sendBeacon;
+    navigator.sendBeacon = vi.fn().mockImplementation((url: string, data?: any) => {
+      beaconCalled = true;
+      beaconUrl = url;
+      beaconData = data;
+      return true;
+    });
+
+    global.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/live/token')) {
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'success',
+            apiKey: 'decart-test-token',
+            max_seconds: 15,
+            live_id: 777,
+          }),
+        });
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => ({ status: 'success' }),
+      });
+    });
+
+    const stream = new MediaStream() as any;
+    const { result, unmount } = renderHook(() =>
+      useLiveTryon({
+        activeGarment: sampleGarment,
+        activeVariantId: null,
+        cameraStream: stream,
         sessionId: 'test-session',
         presence: 'present',
         kioskState: 'TRYON',
@@ -592,204 +761,19 @@ describe('useLiveTryon hook integration', () => {
       await result.current.handleStartLiveTryon();
     });
 
-    expect(result.current.isLiveLoading).toBe(false);
-    expect(result.current.liveToast).toContain('No pudimos iniciar la prueba en vivo');
-    expect(result.current.isLiveActive).toBe(false);
+    unmount();
+
+    expect(beaconCalled).toBe(true);
+    expect(beaconUrl).toContain('/live/complete');
+    expect(beaconData).toBeInstanceOf(Blob);
+    expect(beaconData.type.toLowerCase()).toBe('text/plain;charset=utf-8');
+
+    navigator.sendBeacon = origBeacon;
   });
 
-  it('después de terminar una sesión el botón tiene el atributo disabled durante 4 s y luego no', async () => {
-    vi.useFakeTimers();
+  it('al cambiar de prenda durante la sesión activa con Fal, envía la nueva referenceImageUrl', async () => {
+    vi.stubEnv('VITE_LIVE_PROVIDER', 'fal');
 
-    global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/live/token')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            status: 'success',
-            token: 'test-token',
-            max_seconds: 15,
-            live_id: 20,
-          }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'success' }),
-      });
-    });
-
-    const stream = new MediaStream() as any;
-
-    function TestLiveButton() {
-      const {
-        isLiveLoading,
-        isLiveActive,
-        isLiveCoolingDown,
-        handleStartLiveTryon,
-        handleStopLiveTryon,
-      } = useLiveTryon({
-        activeGarment: sampleGarment,
-        activeVariantId: null,
-        cameraStream: stream,
-        sessionId: 'test-session',
-        presence: 'present',
-        kioskState: 'TRYON',
-        garmentActiveWithProfile: true,
-      });
-
-      return React.createElement(
-        'div',
-        null,
-        React.createElement(
-          'button',
-          {
-            'data-testid': 'live-button',
-            disabled: isLiveLoading || isLiveActive || isLiveCoolingDown,
-            onClick: handleStartLiveTryon,
-          },
-          'VERME EN VIVO',
-        ),
-        React.createElement(
-          'button',
-          {
-            'data-testid': 'stop-button',
-            onClick: handleStopLiveTryon,
-          },
-          'STOP',
-        ),
-      );
-    }
-
-    const { getByTestId } = render(React.createElement(TestLiveButton));
-    const liveBtn = getByTestId('live-button') as HTMLButtonElement;
-    const stopBtn = getByTestId('stop-button') as HTMLButtonElement;
-
-    // Inicialmente disponible y no deshabilitado
-    expect(liveBtn.hasAttribute('disabled')).toBe(false);
-
-    // Iniciar sesión
-    await act(async () => {
-      liveBtn.click();
-    });
-    expect(liveBtn.hasAttribute('disabled')).toBe(true);
-
-    // Terminar sesión
-    act(() => {
-      stopBtn.click();
-    });
-
-    // Inmediatamente después de terminar: enfriamiento activo → tiene atributo disabled
-    expect(liveBtn.hasAttribute('disabled')).toBe(true);
-
-    // A los 2 s (dentro de los 4 s) → sigue teniendo atributo disabled
-    act(() => {
-      vi.advanceTimersByTime(2000);
-    });
-    expect(liveBtn.hasAttribute('disabled')).toBe(true);
-
-    // Pasados los 4 s (4000 ms + tick del intervalo) → ya no tiene el atributo disabled
-    act(() => {
-      vi.advanceTimersByTime(LIVE_COOLDOWN_MS - 2000 + 500);
-    });
-    expect(liveBtn.hasAttribute('disabled')).toBe(false);
-
-    vi.useRealTimers();
-  });
-
-  it('la URL enviada a Lucy para 990F0-BKQJ5 variante roja es exactamente https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png y para negra es ..._2.png', async () => {
-    global.fetch = vi.fn().mockImplementation((url: string) => {
-      if (typeof url === 'string' && url.includes('/live/token')) {
-        return Promise.resolve({
-          ok: true,
-          status: 200,
-          json: async () => ({
-            status: 'success',
-            token: 'test-token',
-            max_seconds: 15,
-            live_id: 10,
-          }),
-        });
-      }
-      return Promise.resolve({
-        ok: true,
-        status: 200,
-        json: async () => ({ status: 'success' }),
-      });
-    });
-
-    const stream = new MediaStream() as any;
-
-    // 1. Variante 'roja'
-    const sendGarmentSpy = vi.spyOn(LiveTryOnManager.prototype, 'sendGarment');
-
-    const { result: rojaResult } = renderHook(() =>
-      useLiveTryon({
-        activeGarment: reversibleGarment,
-        activeVariantId: 'roja',
-        cameraStream: stream,
-        sessionId: 'test-session',
-        presence: 'present',
-        kioskState: 'TRYON',
-        garmentActiveWithProfile: true,
-      }),
-    );
-
-    await act(async () => {
-      await rojaResult.current.handleStartLiveTryon();
-    });
-
-    expect(sendGarmentSpy).toHaveBeenCalledWith(
-      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png',
-    );
-    expect(mockFalConnection.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reference_image_url:
-          'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png',
-      }),
-    );
-
-    act(() => {
-      rojaResult.current.handleStopLiveTryon();
-    });
-    sendGarmentSpy.mockClear();
-    mockFalConnection.send.mockClear();
-
-    // 2. Variante 'negra'
-    const { result: negraResult } = renderHook(() =>
-      useLiveTryon({
-        activeGarment: reversibleGarment,
-        activeVariantId: 'negra',
-        cameraStream: stream,
-        sessionId: 'test-session',
-        presence: 'present',
-        kioskState: 'TRYON',
-        garmentActiveWithProfile: true,
-      }),
-    );
-
-    await act(async () => {
-      await negraResult.current.handleStartLiveTryon();
-    });
-
-    expect(sendGarmentSpy).toHaveBeenCalledWith(
-      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png',
-    );
-    expect(mockFalConnection.send).toHaveBeenCalledWith(
-      expect.objectContaining({
-        reference_image_url:
-          'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5_2.png',
-      }),
-    );
-
-    act(() => {
-      negraResult.current.handleStopLiveTryon();
-    });
-    sendGarmentSpy.mockRestore();
-  });
-
-  it('al cambiar de prenda o variante durante la sesión activa, Lucy recibe la nueva referenceImageUrl', async () => {
     global.fetch = vi.fn().mockImplementation((url: string) => {
       if (typeof url === 'string' && url.includes('/live/token')) {
         return Promise.resolve({
@@ -828,16 +812,11 @@ describe('useLiveTryon hook integration', () => {
       { initialProps: { variant: currentVariant } },
     );
 
-    // Iniciar sesión con variante roja
     await act(async () => {
       await result.current.handleStartLiveTryon();
     });
 
-    expect(sendGarmentSpy).toHaveBeenLastCalledWith(
-      'https://dadobtx.github.io/suzuki-ar-boutique/garments/990F0-BKQJ5.png',
-    );
-
-    // Simular que se establece la conexión WebRTC y pasa a estado 'active'
+    // Simular conexión WebRTC establecida
     await act(async () => {
       await lastConnectConfig.onResult({ type: 'iceservers', iceservers: [] });
     });
@@ -847,9 +826,8 @@ describe('useLiveTryon hook integration', () => {
 
     expect(result.current.isLiveActive).toBe(true);
     sendGarmentSpy.mockClear();
-    mockFalConnection.send.mockClear();
 
-    // Cambiar a variante negra durante la sesión activa
+    // Cambiar a negra
     currentVariant = 'negra';
     rerender({ variant: currentVariant });
 

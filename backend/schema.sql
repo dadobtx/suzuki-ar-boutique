@@ -35,7 +35,6 @@ CREATE TABLE IF NOT EXISTS sesiones (
 );
 
 -- Interacciones del usuario con prendas
-DROP TABLE IF EXISTS interacciones;
 CREATE TABLE IF NOT EXISTS interacciones (
   interaccion_id TEXT PRIMARY KEY,
   session_id TEXT NOT NULL,
@@ -82,8 +81,26 @@ CREATE TABLE IF NOT EXISTS live_sesiones (
   sku TEXT NOT NULL,
   event TEXT NOT NULL,
   started_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-  seconds INTEGER DEFAULT 15 -- Pessimistic default (LIVE_SESSION_SECONDS)
+  seconds INTEGER DEFAULT 15, -- Pessimistic default (LIVE_SESSION_SECONDS)
+  completed_at DATETIME DEFAULT NULL,
+  provider TEXT NOT NULL DEFAULT 'decart'
 );
 
 CREATE INDEX IF NOT EXISTS idx_live_sesiones_session ON live_sesiones(session_id);
 CREATE INDEX IF NOT EXISTS idx_live_sesiones_started_at ON live_sesiones(started_at);
+CREATE INDEX IF NOT EXISTS idx_live_sesiones_completed ON live_sesiones(completed_at);
+
+-- Registro de intentos fallidos
+CREATE TABLE IF NOT EXISTS live_intentos (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  live_session_id INTEGER,
+  session_id TEXT NOT NULL,
+  sku TEXT NOT NULL,
+  provider TEXT NOT NULL,
+  reason TEXT NOT NULL,
+  detail TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_live_intentos_created_at ON live_intentos(created_at);
+CREATE INDEX IF NOT EXISTS idx_live_intentos_reason ON live_intentos(reason);
